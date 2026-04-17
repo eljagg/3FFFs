@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../lib/api.js'
+import { getScenarioArt } from '../components/scenario-art/index.jsx'
 
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }
 
@@ -122,6 +123,9 @@ export default function Scenario() {
           />
         </div>
       </motion.div>
+
+      {/* Scenario illustration — sets the scene before the timeline */}
+      <ScenarioArt scenarioId={scenario.id} />
 
       <div style={{ marginBottom: 32 }}>
         <AttackPath
@@ -555,5 +559,26 @@ function ErrorScreen({ err, onBack }) {
         borderRadius: 'var(--radius)', border: 'none', cursor: 'pointer',
       }}>Back to scenarios</button>
     </div>
+  )
+}
+
+function ScenarioArt({ scenarioId }) {
+  const Art = getScenarioArt(scenarioId)
+  if (!Art) return null
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: 0.15 }}
+      style={{
+        marginBottom: 36,
+        padding: '20px 24px',
+        background: 'var(--paper-hi)',
+        border: '1px solid var(--rule)',
+        borderRadius: 'var(--radius-lg)',
+      }}
+    >
+      <Art />
+    </motion.div>
   )
 }
