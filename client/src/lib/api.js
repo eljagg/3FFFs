@@ -45,6 +45,8 @@ export const api = {
   tutorChat:       (b)       => request('/api/tutor', { method: 'POST', body: JSON.stringify(b) }),
 
   getTeamProgress: ()        => request('/api/team/progress'),
+  getTeamCoverage: ()        => request('/api/team/coverage'),
+  getTeamSkills:   ()        => request('/api/team/skills'),
 
   // Games
   getSignalPool:       () => request('/api/games/signals'),

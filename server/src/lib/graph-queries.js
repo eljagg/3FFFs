@@ -203,3 +203,67 @@ export const RECORD_SIGNAL_SCORE = `
       u.signalSortPlayCount = coalesce(u.signalSortPlayCount, 0) + 1
   RETURN u.signalSortBest AS best, u.signalSortPlayCount AS plays
 `
+
+
+/**
+ * Team coverage query — for the Manager Team Skills Graph.
+ *
+ * Returns, for each F3 technique, how many team members have mastered it
+ * (via a completed scenario that uses it) and the list of each member's
+ * status for that technique. Admins see all users; managers see their
+ * managed users only (MANAGES relationship).
+ *
+ * If no MANAGES edges exist yet (early days), managers see an empty team
+ * and admins see everyone. This lets the feature work immediately.
+ */
+export const TEAM_COVERAGE = `
+  MATCH (me:User {id: $myId})
+  WITH me, CASE WHEN $isAdmin THEN true ELSE false END AS isAdmin
+  CALL {
+    WITH me, isAdmin
+    MATCH (u:User)
+    WHERE (isAdmin OR (me)-[:MANAGES]->(u)) AND u.id <> me.id
+    RETURN collect(u) AS team
+  }
+  MATCH (tech:Technique)-[:PART_OF]->(tac:Tactic)
+  // For each technique, compute: how many team members mastered it
+  WITH tech, tac, team,
+       [u IN team WHERE EXISTS {
+         MATCH (u)-[:COMPLETED]->(:Scenario)-[:HAS_STAGE]->(:Stage)-[:USES_TECHNIQUE]->(tech)
+       } | { id: u.id, name: coalesce(u.name, u.email), email: u.email }] AS mastered
+  RETURN tech.id        AS techniqueId,
+         tech.name      AS techniqueName,
+         tac.id         AS tacticId,
+         tac.name       AS tacticName,
+         tac.order      AS tacticOrder,
+         tac.uniqueToF3 AS uniqueToF3,
+         size(team)     AS teamSize,
+         size(mastered) AS masteredCount,
+         [m IN mastered | m] AS masteredBy
+  ORDER BY tac.order, tech.id
+`
+
+/**
+ * Per-member skills matrix — rows = users, cols = tactics, cell = mastery %.
+ */
+export const TEAM_SKILLS_MATRIX = `
+  MATCH (me:User {id: $myId})
+  WITH me, CASE WHEN $isAdmin THEN true ELSE false END AS isAdmin
+  MATCH (u:User)
+  WHERE (isAdmin OR (me)-[:MANAGES]->(u)) AND u.id <> me.id
+  MATCH (tac:Tactic)
+  OPTIONAL MATCH (tech:Technique)-[:PART_OF]->(tac)
+  WITH u, tac, count(DISTINCT tech) AS totalTechs
+  OPTIONAL MATCH (u)-[:COMPLETED]->(:Scenario)-[:HAS_STAGE]->(:Stage)-[:USES_TECHNIQUE]->(ct:Technique)-[:PART_OF]->(tac)
+  WITH u, tac, totalTechs, count(DISTINCT ct) AS mastered
+  RETURN u.id AS userId, coalesce(u.name, u.email) AS userName, u.email AS email,
+         collect({
+           tacticId: tac.id,
+           tacticName: tac.name,
+           order: tac.order,
+           total: totalTechs,
+           mastered: mastered,
+           pct: CASE WHEN totalTechs > 0 THEN toFloat(mastered)/totalTechs ELSE 0 END
+         }) AS skills
+  ORDER BY u.lastSeenAt DESC
+`

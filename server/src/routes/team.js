@@ -1,19 +1,18 @@
 import { Router } from 'express'
 import { runQuery } from '../lib/neo4j.js'
 import { requireRole, getUser } from '../lib/auth.js'
+import { TEAM_COVERAGE, TEAM_SKILLS_MATRIX } from '../lib/graph-queries.js'
 
 const router = Router()
 
-/**
- * GET /api/team/progress
- * Managers: see their team's progress
- * Admins: see everyone's progress
- */
-router.get('/progress', requireRole('manager', 'admin'), async (req, res, next) => {
+// Everyone in this router must be manager or admin
+router.use(requireRole('manager', 'admin'))
+
+// Existing endpoint — list of team members with their individual stats
+router.get('/progress', async (req, res, next) => {
   try {
     const u = getUser(req)
     const isAdmin = u.roles.includes('admin')
-
     const rows = await runQuery(
       isAdmin
         ? `
@@ -43,6 +42,26 @@ router.get('/progress', requireRole('manager', 'admin'), async (req, res, next) 
       { managerId: u.id }
     )
     res.json({ team: rows })
+  } catch (e) { next(e) }
+})
+
+// New — team coverage per technique (for the heatmap view)
+router.get('/coverage', async (req, res, next) => {
+  try {
+    const u = getUser(req)
+    const isAdmin = u.roles.includes('admin')
+    const rows = await runQuery(TEAM_COVERAGE, { myId: u.id, isAdmin })
+    res.json({ coverage: rows })
+  } catch (e) { next(e) }
+})
+
+// New — per-member skills matrix (for the rows-by-tactic view)
+router.get('/skills', async (req, res, next) => {
+  try {
+    const u = getUser(req)
+    const isAdmin = u.roles.includes('admin')
+    const rows = await runQuery(TEAM_SKILLS_MATRIX, { myId: u.id, isAdmin })
+    res.json({ members: rows })
   } catch (e) { next(e) }
 })
 
