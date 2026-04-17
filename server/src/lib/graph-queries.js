@@ -170,3 +170,36 @@ export const TUTOR_CONTEXT = `
   RETURN scenariosCompleted, quizzesAnswered, correctAnswers,
          tacticCoverage, availableScenarios
 `
+
+
+/**
+ * Pulls all signals from all scenarios, enriched with their correct tactic.
+ * Used by the Signal Sorting game. Cached at request time because it's the
+ * same for every user and content only changes when we re-seed.
+ *
+ * Note: signals are stored as JSON strings on Stage nodes. We parse them
+ * in the route before returning.
+ */
+export const ALL_SIGNALS = `
+  MATCH (sc:Scenario)-[:HAS_STAGE]->(st:Stage)-[:USES_TECHNIQUE]->(tech:Technique)-[:PART_OF]->(tac:Tactic)
+  RETURN sc.id AS scenarioId, sc.title AS scenarioTitle,
+         st.id AS stageId, st.signals AS signalsJson,
+         tech.id AS techniqueId, tech.name AS techniqueName,
+         tac.id AS tacticId, tac.name AS tacticName,
+         tac.order AS tacticOrder, tac.uniqueToF3 AS uniqueToF3
+  ORDER BY tac.order, sc.id, st.order
+`
+
+/**
+ * Upserts a user's Signal-Sort high-score. Tied to the User node so
+ * leaderboards and progress tracking work naturally in the graph.
+ */
+export const RECORD_SIGNAL_SCORE = `
+  MATCH (u:User {id: $userId})
+  WITH u
+  SET u.signalSortBest      = CASE WHEN coalesce(u.signalSortBest, 0) >= $score THEN u.signalSortBest ELSE $score END,
+      u.signalSortLast      = $score,
+      u.signalSortPlayedAt  = timestamp(),
+      u.signalSortPlayCount = coalesce(u.signalSortPlayCount, 0) + 1
+  RETURN u.signalSortBest AS best, u.signalSortPlayCount AS plays
+`

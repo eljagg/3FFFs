@@ -8,6 +8,7 @@ import quiz from './routes/quiz.js'
 import progress from './routes/progress.js'
 import tutor from './routes/tutor.js'
 import team from './routes/team.js'
+import games from './routes/games.js'
 
 const app = express()
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true, credentials: true }))
@@ -18,19 +19,15 @@ app.get('/health', async (_req, res) => {
   catch { res.status(503).json({ ok: false, neo4j: false }) }
 })
 
-// Public framework data (tactics/techniques) — no auth needed for catalog browse
 app.use('/api/framework', framework)
-
-// Everything else requires a valid Auth0 token + syncs the user into the graph
 app.use('/api', requireAuth, syncUser)
-
 app.get('/api/me', (req, res) => res.json({ user: getUser(req) }))
-
 app.use('/api/scenarios', scenarios)
 app.use('/api/quiz', quiz)
 app.use('/api/progress', progress)
 app.use('/api/tutor', tutor)
 app.use('/api/team', team)
+app.use('/api/games', games)
 
 app.use((err, _req, res, _next) => {
   if (err.name === 'UnauthorizedError' || err.status === 401) {

@@ -12,6 +12,7 @@ const BASE_NAV = [
   { to: '/matrix',    label: 'Matrix' },
   { to: '/explorer',  label: 'Explorer' },
   { to: '/framework', label: 'Framework' },
+  { to: '/play',      label: 'Play' },
   { to: '/quiz',      label: 'Quiz' },
   { to: '/tutor',     label: 'Tutor' },
 ]

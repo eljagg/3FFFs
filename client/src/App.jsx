@@ -11,6 +11,7 @@ import Coverage from './pages/Coverage.jsx'
 import Quiz from './pages/Quiz.jsx'
 import Tutor from './pages/Tutor.jsx'
 import Team from './pages/Team.jsx'
+import SignalSort from './pages/SignalSort.jsx'
 import { useUser } from './lib/user.jsx'
 import { useAuth0 } from '@auth0/auth0-react'
 
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/coverage"               element={<Coverage />} />
           <Route path="/matrix"                 element={<Matrix />} />
           <Route path="/explorer"               element={<Explorer />} />
+          <Route path="/play"                   element={<SignalSort />} />
           <Route path="/framework"              element={<Framework />} />
           <Route path="/quiz"                   element={<Quiz />} />
           <Route path="/tutor"                  element={<Tutor />} />
