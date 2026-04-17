@@ -1,14 +1,65 @@
+/**
+ * Authoritative F3 seed — reads directly from MITRE's published Excel export.
+ *
+ * Source: MITRE CTID Fight Fraud Framework (F3) v1
+ * https://ctid.mitre.org/fraud
+ *
+ * To update when MITRE publishes a new version:
+ *   1. Download the new f3-excel-v1.xlsx from ctid.mitre.org/fraud
+ *   2. Replace server/src/seed/data/f3-excel-v1.xlsx
+ *   3. Run `npm run seed`
+ */
+
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import XLSX from 'xlsx'
 import { runQuery, verifyConnection, closeDriver } from '../lib/neo4j.js'
-import { TACTICS, TECHNIQUES } from './framework.js'
 import { SCENARIOS } from './scenarios.js'
 import { QUIZZES } from './quizzes.js'
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const EXCEL_PATH = join(__dirname, 'data', 'f3-excel-v1.xlsx')
+
+function loadF3FromExcel() {
+  const workbook = XLSX.read(readFileSync(EXCEL_PATH), { type: 'buffer' })
+
+  const tacticsRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Tactics'])
+  const techniquesRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Techniques'])
+
+  const tacticOrder = {
+    'TA0043': 1, 'TA0042': 2, 'TA0001': 3, 'TA0005': 4,
+    'FA0001': 5, 'TA0002': 6, 'FA0002': 7,
+  }
+
+  const tactics = tacticsRaw.map((r) => ({
+    id: r['Tactic ID'],
+    name: r['Tactic Name'],
+    description: (r['Tactic Description'] || '').trim(),
+    order: tacticOrder[r['Tactic ID']] || 99,
+    uniqueToF3: r['Tactic ID'].startsWith('FA'),
+  })).sort((a, b) => a.order - b.order)
+
+  const techniques = techniquesRaw.map((r) => ({
+    id: r['Technique ID'],
+    name: r['Technique'],
+    description: (r['Description'] || '').trim(),
+    tacticId: r['Tactic ID'],
+    parentId: r['Technique ID'].includes('.') ? r['Technique ID'].split('.')[0] : null,
+  }))
+
+  return { tactics, techniques }
+}
+
 async function main() {
   await verifyConnection()
-  console.log('\n🌱  Seeding F3 knowledge graph into Neo4j Aura...\n')
+  console.log('\n🌱  Seeding authoritative F3 framework into Neo4j Aura...\n')
+
+  const { tactics, techniques } = loadF3FromExcel()
+  console.log(`📂  Loaded from MITRE Excel: ${tactics.length} tactics, ${techniques.length} technique mappings\n`)
 
   await runQuery('MATCH (n) DETACH DELETE n')
-  console.log('🗑   Cleared existing graph\n')
+  console.log('🗑   Cleared existing graph')
 
   await runQuery(`CREATE CONSTRAINT tactic_id    IF NOT EXISTS FOR (t:Tactic)    REQUIRE t.id IS UNIQUE`)
   await runQuery(`CREATE CONSTRAINT technique_id IF NOT EXISTS FOR (t:Technique) REQUIRE t.id IS UNIQUE`)
@@ -18,26 +69,51 @@ async function main() {
   await runQuery(`CREATE CONSTRAINT user_id      IF NOT EXISTS FOR (u:User)      REQUIRE u.id IS UNIQUE`)
   console.log('🔒  Applied uniqueness constraints')
 
-  for (const t of TACTICS) {
+  for (const t of tactics) {
     await runQuery(
       `CREATE (:Tactic {
-        id: $id, name: $name, order: $order, uniqueToF3: $uniqueToF3,
-        summary: $summary, executiveTakeaway: $executiveTakeaway
+        id: $id, name: $name, description: $description,
+        order: $order, uniqueToF3: $uniqueToF3
       })`,
       t
     )
   }
-  console.log(`✅  Created ${TACTICS.length} Tactic nodes`)
+  console.log(`✅  Created ${tactics.length} Tactic nodes`)
 
-  for (const tech of TECHNIQUES) {
-    await runQuery(
-      `MATCH (tac:Tactic {id: $tacticId})
-       CREATE (t:Technique {id: $id, name: $name, description: $description})
-       CREATE (t)-[:PART_OF]->(tac)`,
-      tech
-    )
+  const uniqueTechIds = new Set()
+  for (const tech of techniques) {
+    if (uniqueTechIds.has(tech.id)) {
+      await runQuery(
+        `MATCH (t:Technique {id: $id}), (tac:Tactic {id: $tacticId})
+         MERGE (t)-[:PART_OF]->(tac)`,
+        { id: tech.id, tacticId: tech.tacticId }
+      )
+    } else {
+      await runQuery(
+        `MATCH (tac:Tactic {id: $tacticId})
+         CREATE (t:Technique {id: $id, name: $name, description: $description})
+         CREATE (t)-[:PART_OF]->(tac)`,
+        tech
+      )
+      uniqueTechIds.add(tech.id)
+    }
   }
-  console.log(`✅  Created ${TECHNIQUES.length} Technique nodes`)
+  console.log(`✅  Created ${uniqueTechIds.size} Technique nodes`)
+
+  let subRels = 0
+  for (const tech of techniques) {
+    if (tech.parentId) {
+      const res = await runQuery(
+        `MATCH (sub:Technique {id: $childId})
+         MATCH (parent:Technique {id: $parentId})
+         MERGE (sub)-[r:SUBTECHNIQUE_OF]->(parent)
+         RETURN r`,
+        { childId: tech.id, parentId: tech.parentId }
+      )
+      if (res.length) subRels++
+    }
+  }
+  console.log(`✅  Linked ${subRels} sub-technique relationships`)
 
   for (const sc of SCENARIOS) {
     await runQuery(
@@ -51,16 +127,19 @@ async function main() {
 
     for (const stage of sc.stages) {
       const stageId = `${sc.id}-S${stage.order}`
-      await runQuery(
+      const r = await runQuery(
         `MATCH (sc:Scenario {id: $scenarioId})
-         MATCH (tech:Technique {id: $techniqueId})
+         OPTIONAL MATCH (tech:Technique {id: $techniqueId})
          CREATE (st:Stage {
            id: $stageId, order: $order, heading: $heading,
            narrative: $narrative, question: $question,
            signals: $signals, options: $options
          })
          CREATE (sc)-[:HAS_STAGE {order: $order}]->(st)
-         CREATE (st)-[:USES_TECHNIQUE]->(tech)`,
+         FOREACH (_ IN CASE WHEN tech IS NOT NULL THEN [1] ELSE [] END |
+           CREATE (st)-[:USES_TECHNIQUE]->(tech)
+         )
+         RETURN tech IS NOT NULL AS linked`,
         {
           scenarioId: sc.id,
           techniqueId: stage.techniqueId,
@@ -73,6 +152,9 @@ async function main() {
           options: JSON.stringify(stage.options),
         }
       )
+      if (!r[0]?.linked) {
+        console.warn(`  ⚠   stage ${stageId} references unknown technique ${stage.techniqueId}`)
+      }
     }
     console.log(`✅  Seeded scenario: ${sc.title}`)
   }
@@ -111,7 +193,7 @@ async function main() {
     ORDER BY count DESC
   `)
   console.log('\n    Relationships:')
-  relSummary.forEach((r) => console.log(`    ${r.type.padEnd(16)} ${r.count}`))
+  relSummary.forEach((r) => console.log(`    ${r.type.padEnd(22)} ${r.count}`))
 
   console.log('\n🎉  Seed complete!\n')
   await closeDriver()

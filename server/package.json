@@ -13,6 +13,7 @@
     "@anthropic-ai/sdk": "^0.32.1",
     "cors": "^2.8.5",
     "express": "^4.21.1",
-    "neo4j-driver": "^5.27.0"
+    "neo4j-driver": "^5.27.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }
