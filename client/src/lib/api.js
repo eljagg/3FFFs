@@ -34,6 +34,7 @@ export const api = {
   getScenarioPath: (id)      => request(`/api/scenarios/${id}/path`),
   submitStage:     (id, b)   => request(`/api/scenarios/${id}/submit`, { method: 'POST', body: JSON.stringify(b) }),
   completeScenario:(id)      => request(`/api/scenarios/${id}/complete`, { method: 'POST' }),
+  chooseStageOption:(id, b) => request(`/api/scenarios/${id}/choose`, { method: 'POST', body: JSON.stringify(b) }),
 
   getQuiz:         (role)    => request(`/api/quiz?role=${encodeURIComponent(role || '')}`),
   submitQuiz:      (b)       => request('/api/quiz/answer', { method: 'POST', body: JSON.stringify(b) }),

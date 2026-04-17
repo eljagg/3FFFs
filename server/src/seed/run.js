@@ -1,13 +1,6 @@
 /**
- * Authoritative F3 seed — reads directly from MITRE's published Excel export.
- *
- * Source: MITRE CTID Fight Fraud Framework (F3) v1
- * https://ctid.mitre.org/fraud
- *
- * To update when MITRE publishes a new version:
- *   1. Download the new f3-excel-v1.xlsx from ctid.mitre.org/fraud
- *   2. Replace server/src/seed/data/f3-excel-v1.xlsx
- *   3. Run `npm run seed`
+ * Authoritative F3 seed — reads directly from MITRE's published Excel export
+ * and loads branching-aware scenario trees into Neo4j.
  */
 
 import { readFileSync } from 'node:fs'
@@ -23,7 +16,6 @@ const EXCEL_PATH = join(__dirname, 'data', 'f3-excel-v1.xlsx')
 
 function loadF3FromExcel() {
   const workbook = XLSX.read(readFileSync(EXCEL_PATH), { type: 'buffer' })
-
   const tacticsRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Tactics'])
   const techniquesRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Techniques'])
 
@@ -53,7 +45,7 @@ function loadF3FromExcel() {
 
 async function main() {
   await verifyConnection()
-  console.log('\n🌱  Seeding authoritative F3 framework into Neo4j Aura...\n')
+  console.log('\n🌱  Seeding F3 framework + branching scenarios into Neo4j...\n')
 
   const { tactics, techniques } = loadF3FromExcel()
   console.log(`📂  Loaded from MITRE Excel: ${tactics.length} tactics, ${techniques.length} technique mappings\n`)
@@ -104,10 +96,8 @@ async function main() {
   for (const tech of techniques) {
     if (tech.parentId) {
       const res = await runQuery(
-        `MATCH (sub:Technique {id: $childId})
-         MATCH (parent:Technique {id: $parentId})
-         MERGE (sub)-[r:SUBTECHNIQUE_OF]->(parent)
-         RETURN r`,
+        `MATCH (sub:Technique {id: $childId}), (parent:Technique {id: $parentId})
+         MERGE (sub)-[r:SUBTECHNIQUE_OF]->(parent) RETURN r`,
         { childId: tech.id, parentId: tech.parentId }
       )
       if (res.length) subRels++
@@ -115,36 +105,39 @@ async function main() {
   }
   console.log(`✅  Linked ${subRels} sub-technique relationships`)
 
+  let stageCount = 0
+  let branchCount = 0
   for (const sc of SCENARIOS) {
     await runQuery(
       `CREATE (:Scenario {
         id: $id, title: $title, severity: $severity, summary: $summary,
         estimatedLoss: $estimatedLoss, roles: $roles
       })`,
-      { id: sc.id, title: sc.title, severity: sc.severity, summary: sc.summary,
-        estimatedLoss: sc.estimatedLoss, roles: sc.roles }
+      {
+        id: sc.id, title: sc.title, severity: sc.severity, summary: sc.summary,
+        estimatedLoss: sc.estimatedLoss, roles: sc.roles,
+      }
     )
 
+    // First pass: create all stage nodes (so leadsTo references can resolve)
     for (const stage of sc.stages) {
-      const stageId = `${sc.id}-S${stage.order}`
-      const r = await runQuery(
+      await runQuery(
         `MATCH (sc:Scenario {id: $scenarioId})
          OPTIONAL MATCH (tech:Technique {id: $techniqueId})
          CREATE (st:Stage {
-           id: $stageId, order: $order, heading: $heading,
+           id: $id, order: $order, type: $type, heading: $heading,
            narrative: $narrative, question: $question,
            signals: $signals, options: $options
          })
          CREATE (sc)-[:HAS_STAGE {order: $order}]->(st)
          FOREACH (_ IN CASE WHEN tech IS NOT NULL THEN [1] ELSE [] END |
-           CREATE (st)-[:USES_TECHNIQUE]->(tech)
-         )
-         RETURN tech IS NOT NULL AS linked`,
+           CREATE (st)-[:USES_TECHNIQUE]->(tech))`,
         {
           scenarioId: sc.id,
           techniqueId: stage.techniqueId,
-          stageId,
+          id: stage.id,
           order: stage.order,
+          type: stage.type || 'primary',
           heading: stage.heading,
           narrative: stage.narrative,
           question: stage.question,
@@ -152,12 +145,28 @@ async function main() {
           options: JSON.stringify(stage.options),
         }
       )
-      if (!r[0]?.linked) {
-        console.warn(`  ⚠   stage ${stageId} references unknown technique ${stage.techniqueId}`)
+      stageCount++
+    }
+
+    // Second pass: link branches
+    for (const stage of sc.stages) {
+      const options = stage.options || []
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i]
+        if (opt.leadsTo) {
+          await runQuery(
+            `MATCH (from:Stage {id: $fromId}), (to:Stage {id: $toId})
+             MERGE (from)-[:LEADS_TO {onOption: $onOption, consequence: true}]->(to)`,
+            { fromId: stage.id, toId: opt.leadsTo, onOption: i }
+          )
+          branchCount++
+        }
       }
     }
+
     console.log(`✅  Seeded scenario: ${sc.title}`)
   }
+  console.log(`    Total stages: ${stageCount}, Branch edges: ${branchCount}`)
 
   for (const q of QUIZZES) {
     await runQuery(
@@ -168,11 +177,8 @@ async function main() {
        })
        CREATE (q)-[:TESTS]->(tac)`,
       {
-        id: q.id,
-        tacticId: q.tacticId,
-        question: q.question,
-        difficulty: q.difficulty,
-        roles: q.roles,
+        id: q.id, tacticId: q.tacticId, question: q.question,
+        difficulty: q.difficulty, roles: q.roles,
         options: JSON.stringify(q.options),
       }
     )
@@ -181,15 +187,13 @@ async function main() {
 
   console.log('\n📊  Final graph summary:')
   const summary = await runQuery(`
-    MATCH (n)
-    RETURN labels(n)[0] AS label, count(n) AS count
+    MATCH (n) RETURN labels(n)[0] AS label, count(n) AS count
     ORDER BY count DESC
   `)
   summary.forEach((r) => console.log(`    ${r.label.padEnd(12)} ${r.count} nodes`))
 
   const relSummary = await runQuery(`
-    MATCH ()-[r]->()
-    RETURN type(r) AS type, count(r) AS count
+    MATCH ()-[r]->() RETURN type(r) AS type, count(r) AS count
     ORDER BY count DESC
   `)
   console.log('\n    Relationships:')
