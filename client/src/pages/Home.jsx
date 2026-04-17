@@ -161,7 +161,7 @@ export default function Home() {
             style={styles.card}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--ink)'
-              e.currentTarget.style.background = '#fff'
+              e.currentTarget.style.background = 'var(--paper-dim)'
               e.currentTarget.querySelector('[data-arrow]').style.transform = 'translateX(4px)'
               e.currentTarget.querySelector('[data-arrow]').style.color = 'var(--accent)'
             }}

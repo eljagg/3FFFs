@@ -175,7 +175,7 @@ export default function Framework() {
               <button
                 onClick={() => setExpanded(open ? null : t.id)}
                 style={styles.tacticRow}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#fff' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-dim)' }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
               >
                 <div style={styles.tacticTop}>

@@ -1,7 +1,26 @@
 import { useUser, ROLES } from '../lib/user.jsx'
+import { useTheme } from '../lib/theme.jsx'
+
+function SunIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  )
+}
 
 export default function RolePicker() {
   const { chooseRole } = useUser()
+  const { theme, toggle } = useTheme()
 
   const styles = {
     wrap: {
@@ -12,6 +31,18 @@ export default function RolePicker() {
       justifyContent: 'center',
       padding: '40px 28px',
       background: 'var(--paper)',
+      position: 'relative',
+    },
+    themeBtn: {
+      position: 'absolute',
+      top: 20, right: 20,
+      width: 36, height: 36,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: 6,
+      color: 'var(--ink-soft)',
+      border: '1px solid var(--rule)',
+      background: 'transparent',
+      transition: 'all var(--dur) ease',
     },
     inner: { maxWidth: 640, width: '100%' },
     eyebrow: {
@@ -25,9 +56,7 @@ export default function RolePicker() {
       alignItems: 'center',
       gap: 10,
     },
-    eyebrowBar: {
-      width: 28, height: 1, background: 'var(--ink-faint)',
-    },
+    eyebrowBar: { width: 28, height: 1, background: 'var(--ink-faint)' },
     title: {
       fontFamily: 'var(--font-display)',
       fontSize: 'clamp(34px, 5vw, 52px)',
@@ -87,6 +116,22 @@ export default function RolePicker() {
 
   return (
     <div style={styles.wrap}>
+      <button
+        onClick={toggle}
+        aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        style={styles.themeBtn}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = 'var(--ink)'
+          e.currentTarget.style.color = 'var(--ink)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = 'var(--rule)'
+          e.currentTarget.style.color = 'var(--ink-soft)'
+        }}
+      >
+        {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+      </button>
+
       <div style={styles.inner}>
         <div style={styles.eyebrow}>
           <span style={styles.eyebrowBar} />
@@ -111,7 +156,7 @@ export default function RolePicker() {
               style={styles.card}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = 'var(--ink)'
-                e.currentTarget.style.background = '#fff'
+                e.currentTarget.style.background = 'var(--paper-dim)'
                 e.currentTarget.querySelector('[data-arrow]').style.transform = 'translateX(4px)'
                 e.currentTarget.querySelector('[data-arrow]').style.color = 'var(--accent)'
               }}

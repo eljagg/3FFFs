@@ -134,7 +134,7 @@ export default function Scenarios() {
             style={styles.card}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--ink)'
-              e.currentTarget.style.background = '#fff'
+              e.currentTarget.style.background = 'var(--paper-dim)'
               e.currentTarget.style.transform = 'translateY(-1px)'
             }}
             onMouseLeave={(e) => {

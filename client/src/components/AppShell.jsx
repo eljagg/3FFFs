@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useUser, ROLES } from '../lib/user.jsx'
+import { useTheme } from '../lib/theme.jsx'
 
 const NAV = [
   { to: '/',             label: 'Home',        end: true },
@@ -9,8 +10,26 @@ const NAV = [
   { to: '/tutor',        label: 'Tutor' },
 ]
 
+function SunIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  )
+}
+
 export default function AppShell() {
-  const { role, clearRole, progress } = useUser()
+  const { role, clearRole } = useUser()
+  const { theme, toggle } = useTheme()
   const roleLabel = ROLES.find(r => r.id === role)?.label || 'Trainee'
 
   const styles = {
@@ -63,6 +82,16 @@ export default function AppShell() {
       transition: 'all var(--dur) ease',
       textDecoration: 'none',
     }),
+    themeBtn: {
+      width: 32, height: 32,
+      marginLeft: 4,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: 6,
+      color: 'var(--ink-soft)',
+      border: '1px solid var(--rule)',
+      background: 'transparent',
+      transition: 'all var(--dur) ease',
+    },
     roleChip: {
       fontSize: 11,
       fontFamily: 'var(--font-mono)',
@@ -110,6 +139,24 @@ export default function AppShell() {
                 {item.label}
               </NavLink>
             ))}
+
+            <button
+              onClick={toggle}
+              aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              title={theme === 'light' ? 'Dark mode' : 'Light mode'}
+              style={styles.themeBtn}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--ink)'
+                e.currentTarget.style.color = 'var(--ink)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--rule)'
+                e.currentTarget.style.color = 'var(--ink-soft)'
+              }}
+            >
+              {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+            </button>
+
             {role && (
               <div style={styles.roleChip}>
                 <span>{roleLabel}</span>

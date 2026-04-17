@@ -1,4 +1,5 @@
-:root {
+:root,
+:root[data-theme="light"] {
   --paper: #f4f1e8;
   --paper-dim: #ebe6d7;
   --paper-hi: #faf7ee;
@@ -15,11 +16,35 @@
   --success-bg: #e3e8d8;
   --warning-bg: #f0e1c8;
   --danger-bg: #f0dcd4;
+  --bg-grad-1: rgba(200,66,31,0.03);
+  --bg-grad-2: rgba(26,26,26,0.03);
+}
+
+:root[data-theme="dark"] {
+  --paper: #14130f;
+  --paper-dim: #1c1b17;
+  --paper-hi: #1e1d19;
+  --ink: #e8e4d8;
+  --ink-soft: #c4bfb0;
+  --ink-faint: #908a7b;
+  --rule: rgba(232, 228, 216, 0.10);
+  --rule-strong: rgba(232, 228, 216, 0.22);
+  --accent: #e85d3d;
+  --accent-dim: #8a6a3a;
+  --success: #98b87a;
+  --warning: #e0a85a;
+  --danger: #e08878;
+  --success-bg: rgba(152, 184, 122, 0.14);
+  --warning-bg: rgba(224, 168, 90, 0.14);
+  --danger-bg: rgba(224, 136, 120, 0.14);
+  --bg-grad-1: rgba(232,93,61,0.06);
+  --bg-grad-2: rgba(232,228,216,0.02);
+}
+
+:root {
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Inter', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  --shadow-card: 0 1px 0 rgba(26,26,26,0.04), 0 0 0 0.5px rgba(26,26,26,0.08);
-  --shadow-lift: 0 2px 8px rgba(26,26,26,0.06), 0 0 0 0.5px rgba(26,26,26,0.10);
   --radius: 6px;
   --radius-lg: 10px;
   --dur: 0.18s;
@@ -38,8 +63,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-image:
-    radial-gradient(circle at 20% 10%, rgba(200,66,31,0.03) 0%, transparent 40%),
-    radial-gradient(circle at 80% 80%, rgba(26,26,26,0.03) 0%, transparent 45%);
+    radial-gradient(circle at 20% 10%, var(--bg-grad-1) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, var(--bg-grad-2) 0%, transparent 45%);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 #root { min-height: 100%; display: flex; flex-direction: column; }
@@ -79,13 +105,8 @@ code, .mono {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.fade-up { animation: fadeUp 0.45s ease-out both; }
-.fade-up-1 { animation: fadeUp 0.45s ease-out 0.05s both; }
-.fade-up-2 { animation: fadeUp 0.45s ease-out 0.10s both; }
-.fade-up-3 { animation: fadeUp 0.45s ease-out 0.15s both; }
-.fade-up-4 { animation: fadeUp 0.45s ease-out 0.20s both; }
+.fade-up    { animation: fadeUp 0.45s ease-out both; }
+.fade-up-1  { animation: fadeUp 0.45s ease-out 0.05s both; }
+.fade-up-2  { animation: fadeUp 0.45s ease-out 0.10s both; }
+.fade-up-3  { animation: fadeUp 0.45s ease-out 0.15s both; }
+.fade-up-4  { animation: fadeUp 0.45s ease-out 0.20s both; }
