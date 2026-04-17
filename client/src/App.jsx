@@ -6,6 +6,7 @@ import Scenarios from './pages/Scenarios.jsx'
 import Scenario from './pages/Scenario.jsx'
 import Framework from './pages/Framework.jsx'
 import Matrix from './pages/Matrix.jsx'
+import Coverage from './pages/Coverage.jsx'
 import Quiz from './pages/Quiz.jsx'
 import Tutor from './pages/Tutor.jsx'
 import Team from './pages/Team.jsx'
@@ -17,15 +18,12 @@ const NAMESPACE = 'https://3fffs.app'
 function ManagerRoute({ children }) {
   const { user } = useAuth0()
   const roles = user?.[`${NAMESPACE}/roles`] || []
-  if (!roles.includes('manager') && !roles.includes('admin')) {
-    return <Navigate to="/" replace />
-  }
+  if (!roles.includes('manager') && !roles.includes('admin')) return <Navigate to="/" replace />
   return children
 }
 
 export default function App() {
   const { role } = useUser()
-  // After Auth0 login, if the user hasn't chosen a job function yet, show the picker
   if (!role) return <RolePicker />
 
   return (
@@ -35,6 +33,7 @@ export default function App() {
           <Route path="/"             index     element={<Home />} />
           <Route path="/scenarios"              element={<Scenarios />} />
           <Route path="/scenarios/:id"          element={<Scenario />} />
+          <Route path="/coverage"               element={<Coverage />} />
           <Route path="/matrix"                 element={<Matrix />} />
           <Route path="/framework"              element={<Framework />} />
           <Route path="/quiz"                   element={<Quiz />} />

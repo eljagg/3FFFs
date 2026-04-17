@@ -8,6 +8,7 @@ const NAMESPACE = 'https://3fffs.app'
 const BASE_NAV = [
   { to: '/',          label: 'Home',      end: true },
   { to: '/scenarios', label: 'Scenarios' },
+  { to: '/coverage',  label: 'My Coverage' },
   { to: '/matrix',    label: 'Matrix' },
   { to: '/framework', label: 'Framework' },
   { to: '/quiz',      label: 'Quiz' },
