@@ -1,76 +1,115 @@
 import { Router } from 'express'
 import Anthropic from '@anthropic-ai/sdk'
 import { runQuery } from '../lib/neo4j.js'
+import { getUser } from '../lib/auth.js'
+import { TUTOR_CONTEXT } from '../lib/graph-queries.js'
 
 const router = Router()
 
-const apiKey = process.env.ANTHROPIC_API_KEY
-const anthropic = apiKey ? new Anthropic({ apiKey }) : null
+const anthropic = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null
 
-const BASE_SYSTEM = `You are an expert AI tutor on the MITRE Fight Fraud Framework (F3), helping staff at financial institutions understand and apply F3 to spot and respond to cyber-enabled fraud.
+async function buildSystemPrompt(user, jobFunction) {
+  const base = `You are the AI Tutor for 3fffs, a training platform grounded in the MITRE Fight Fraud Framework™ (F3), released by MITRE CTID in April 2026.
 
-Key facts:
-- F3 was released April 9, 2026 by MITRE's Center for Threat-Informed Defense (CTID).
-- It covers 7 tactics: Reconnaissance, Resource Development, Initial Access, Defense Evasion, Positioning, Execution, Monetization.
-- Positioning and Monetization are unique to F3 and do not appear in MITRE ATT&CK.
-- F3 is a behavior-based model built from real-world fraud incidents.
-- US banking fraud losses reached $13.7B in 2024.
+Your job: help a financial-institution staff member build intuition about cyber-enabled fraud, using the F3 framework as your shared language.
+
+F3 has 7 tactics: Reconnaissance (TA0043), Resource Development (TA0042), Initial Access (TA0001), Defense Evasion (TA0005), Positioning (FA0001, F3-unique), Execution (TA0002), and Monetization (FA0002, F3-unique).
 
 Style:
-- Answer in 3–6 sentences unless the user asks for more depth.
-- Be concrete. Use examples. Avoid unexplained jargon.
-- If the user asks something outside the F3 / fraud / financial crime domain, politely redirect.
-- Never invent F3 content. If asked something specific and you are not sure, say you are not sure and recommend they check the live framework at ctid.mitre.org/fraud.`
+- Warm, expert, direct — not a salesperson, not a textbook
+- Short paragraphs, plain language
+- When citing a technique, use its real ID (e.g., F1081 Phishing, F1047 Cashout: Conversion to Cryptocurrency)
+- When it makes sense, recommend a specific scenario by name (don't just say "take a scenario")
+- Never fabricate technique IDs or names; if unsure, say so
 
-router.get('/status', (req, res) => {
-  res.json({ enabled: !!anthropic })
-})
+You have access to the learner's actual graph state below. USE IT. Reference their progress, gaps, and recommended next steps when helpful. Don't recite the data — weave it naturally into your answer.`
 
-router.post('/', async (req, res) => {
-  if (!anthropic) {
-    return res.status(503).json({
-      error: 'AI tutor is not configured. Add ANTHROPIC_API_KEY to your .env and restart the server.',
-    })
+  if (!user?.id) return base + '\n\nNote: learner context is not available for this session.'
+
+  let graphContext = ''
+  try {
+    const rows = await runQuery(TUTOR_CONTEXT, { userId: user.id })
+    const ctx = rows[0]
+    if (ctx) {
+      const coverage = ctx.tacticCoverage || []
+      const biggestGap = coverage
+        .filter(t => t.totalTechniques > 0)
+        .sort((a, b) => (a.coveredTechniques / a.totalTechniques) - (b.coveredTechniques / b.totalTechniques))[0]
+      const available = ctx.availableScenarios || []
+
+      const quizAccuracy = ctx.quizzesAnswered > 0
+        ? Math.round((ctx.correctAnswers / ctx.quizzesAnswered) * 100)
+        : null
+
+      graphContext = `
+
+## Your learner's current graph state
+
+**Identity:**
+- Name: ${user.name || user.email || 'unknown'}
+- Role: ${(user.roles || []).join(', ') || 'trainee'}
+- Job function: ${jobFunction || 'not yet chosen'}
+
+**Progress:**
+- Scenarios completed: ${ctx.scenariosCompleted}
+- Quiz questions answered: ${ctx.quizzesAnswered}${quizAccuracy !== null ? ` (${quizAccuracy}% correct)` : ''}
+
+**Coverage by tactic:**
+${coverage.map(t => {
+  const pct = t.totalTechniques > 0 ? Math.round((t.coveredTechniques / t.totalTechniques) * 100) : 0
+  return `- ${t.name} (${t.id}${t.uniqueToF3 ? ', F3-unique' : ''}): ${t.coveredTechniques}/${t.totalTechniques} techniques (${pct}%)`
+}).join('\n')}
+
+${biggestGap ? `**Biggest gap:** ${biggestGap.name} (${biggestGap.coveredTechniques}/${biggestGap.totalTechniques} covered). Consider steering the conversation toward this tactic when appropriate.` : ''}
+
+**Scenarios the learner has NOT completed yet:**
+${available.length ? available.map(s => `- "${s.title}" (id: ${s.id}, severity: ${s.severity})`).join('\n') : '- (none — all completed)'}
+
+When recommending a scenario, refer to it by title. Don't overwhelm — suggest one at a time.`
+    }
+  } catch (err) {
+    console.error('Tutor context query failed:', err.message)
+    graphContext = '\n\n(Graph context unavailable — answer generally using F3 knowledge.)'
   }
 
+  return base + graphContext
+}
+
+router.post('/', async (req, res, next) => {
   try {
-    const { messages, role } = req.body
-    if (!Array.isArray(messages) || !messages.length) {
-      return res.status(400).json({ error: 'messages array required' })
+    if (!anthropic) {
+      return res.status(503).json({ error: 'AI Tutor not configured (ANTHROPIC_API_KEY missing)' })
     }
 
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content || ''
-
-    const graphContext = await runQuery(
-      `
-      MATCH (t:Tactic)
-      WHERE toLower($q) CONTAINS toLower(t.name)
-      RETURN t.name AS name, t.summary AS summary, t.executiveTakeaway AS takeaway, t.uniqueToF3 AS uniqueToF3
-      `,
-      { q: lastUser }
-    )
-
-    let grounded = BASE_SYSTEM
-    if (role) grounded += `\n\nThe user's role is: ${role}. Tailor examples and depth accordingly.`
-    if (graphContext.length) {
-      grounded += `\n\nRelevant F3 tactics from the knowledge graph:\n` +
-        graphContext.map((g) =>
-          `- ${g.name}${g.uniqueToF3 ? ' (unique to F3)' : ''}: ${g.summary} Executive takeaway: ${g.takeaway}`
-        ).join('\n')
+    const user = getUser(req)
+    const { message, history = [], role: jobFunction } = req.body || {}
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'message is required' })
     }
+
+    const system = await buildSystemPrompt(user, jobFunction)
+    const messages = [
+      ...history
+        .filter(m => m && typeof m.content === 'string' && (m.role === 'user' || m.role === 'assistant'))
+        .slice(-12)
+        .map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: message },
+    ]
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 1024,
-      system: grounded,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      system,
+      messages,
     })
 
-    const reply = response.content.find((c) => c.type === 'text')?.text || ''
+    const reply = response.content?.[0]?.text || ''
     res.json({ reply })
-  } catch (err) {
-    console.error('Tutor error:', err)
-    res.status(500).json({ error: err.message })
+  } catch (e) {
+    console.error('Tutor error:', e)
+    next(e)
   }
 })
 

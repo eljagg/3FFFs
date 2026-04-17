@@ -78,3 +78,95 @@ export const USER_PROGRESS_SUMMARY = `
          totalTechniques,
          count(DISTINCT coveredTech) AS techniquesEncountered
 `
+
+/**
+ * Gathers all the "graph state" the AI Tutor needs to personalize responses.
+ * Returns one object with progress, gaps, and recommendations — ready to
+ * thread into the system prompt.
+ */
+export const TUTOR_CONTEXT = `
+  MATCH (u:User {id: $userId})
+  OPTIONAL MATCH (u)-[c:COMPLETED]->(sc:Scenario)
+  WITH u, collect(DISTINCT sc.id) AS completedScenarioIds, count(DISTINCT sc) AS scenariosCompleted
+  OPTIONAL MATCH (u)-[a:ANSWERED]->(q:Quiz)
+  WITH u, completedScenarioIds, scenariosCompleted,
+       count(DISTINCT q) AS quizzesAnswered,
+       sum(CASE WHEN a.correct THEN 1 ELSE 0 END) AS correctAnswers
+
+  // Per-tactic gap analysis: for each tactic, count techniques the user has
+  // encountered (via a completed scenario) vs total in the tactic
+  OPTIONAL MATCH (tac:Tactic)
+  OPTIONAL MATCH (tech:Technique)-[:PART_OF]->(tac)
+  WITH u, completedScenarioIds, scenariosCompleted, quizzesAnswered, correctAnswers,
+       tac, collect(DISTINCT tech.id) AS tacticTechIds
+
+  OPTIONAL MATCH (u)-[:COMPLETED]->(scForTac:Scenario)-[:HAS_STAGE]->(:Stage)-[:USES_TECHNIQUE]->(coveredTech:Technique)-[:PART_OF]->(tac)
+  WITH u, completedScenarioIds, scenariosCompleted, quizzesAnswered, correctAnswers,
+       tac, tacticTechIds,
+       count(DISTINCT coveredTech) AS coveredInTactic
+
+  WITH u, completedScenarioIds, scenariosCompleted, quizzesAnswered, correctAnswers,
+       collect({
+         id: tac.id,
+         name: tac.name,
+         uniqueToF3: tac.uniqueToF3,
+         totalTechniques: size(tacticTechIds),
+         coveredTechniques: coveredInTactic
+       }) AS tacticCoverage
+
+  // Available scenarios (excluding completed)
+  MATCH (sc:Scenario)
+  WHERE NOT sc.id IN completedScenarioIds
+  WITH u, scenariosCompleted, quizzesAnswered, correctAnswers, tacticCoverage,
+       collect({ id: sc.id, title: sc.title, severity: sc.severity }) AS availableScenarios
+
+  RETURN scenariosCompleted,
+         quizzesAnswered,
+         correctAnswers,
+         tacticCoverage,
+         availableScenarios
+`
+
+
+/**
+ * Context query for the AI Tutor. Returns everything Claude needs to know
+ * about the learner in a single round trip:
+ *   - scenario and quiz counts
+ *   - per-tactic coverage (how many techniques they've touched per tactic)
+ *   - which scenarios are still available to them
+ *
+ * Why a single query: the Tutor hits this every message, so roundtrips matter.
+ */
+export const TUTOR_CONTEXT = `
+  MATCH (u:User {id: $userId})
+  OPTIONAL MATCH (u)-[:COMPLETED]->(sc:Scenario)
+  WITH u, collect(DISTINCT sc.id) AS completedIds,
+       count(DISTINCT sc) AS scenariosCompleted
+  OPTIONAL MATCH (u)-[a:ANSWERED]->(q:Quiz)
+  WITH u, completedIds, scenariosCompleted,
+       count(DISTINCT q) AS quizzesAnswered,
+       sum(CASE WHEN a.correct THEN 1 ELSE 0 END) AS correctAnswers
+  // Per-tactic coverage: count techniques user touched via completed scenarios
+  CALL {
+    WITH u, completedIds
+    MATCH (t:Tactic)
+    OPTIONAL MATCH (tech:Technique)-[:PART_OF]->(t)
+    WITH t, count(DISTINCT tech) AS totalTechniques
+    OPTIONAL MATCH (sc2:Scenario)-[:HAS_STAGE]->(:Stage)-[:USES_TECHNIQUE]->(covered:Technique)-[:PART_OF]->(t)
+      WHERE sc2.id IN completedIds
+    WITH t, totalTechniques, count(DISTINCT covered) AS coveredTechniques
+    RETURN collect({
+      id: t.id, name: t.name, order: t.order, uniqueToF3: t.uniqueToF3,
+      totalTechniques: totalTechniques, coveredTechniques: coveredTechniques
+    }) AS tacticCoverage
+  }
+  // Scenarios the user has NOT completed yet
+  CALL {
+    WITH u, completedIds
+    MATCH (s:Scenario)
+    WHERE NOT s.id IN completedIds
+    RETURN collect({ id: s.id, title: s.title, severity: s.severity }) AS availableScenarios
+  }
+  RETURN scenariosCompleted, quizzesAnswered, correctAnswers,
+         tacticCoverage, availableScenarios
+`
