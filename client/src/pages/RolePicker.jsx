@@ -1,181 +1,114 @@
 import { useUser, ROLES } from '../lib/user.jsx'
-import { useTheme } from '../lib/theme.jsx'
-
-function SunIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="4"/>
-      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
-    </svg>
-  )
-}
-
-function MoonIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-    </svg>
-  )
-}
+import { useAuth0 } from '@auth0/auth0-react'
+import { motion } from 'framer-motion'
 
 export default function RolePicker() {
   const { chooseRole } = useUser()
-  const { theme, toggle } = useTheme()
+  const { user } = useAuth0()
+  const firstName = (user?.name || user?.email || '').split(/[\s@]/)[0]
 
-  const styles = {
+  const s = {
     wrap: {
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '40px 28px',
-      background: 'var(--paper)',
-      position: 'relative',
-    },
-    themeBtn: {
-      position: 'absolute',
-      top: 20, right: 20,
-      width: 36, height: 36,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      borderRadius: 6,
-      color: 'var(--ink-soft)',
-      border: '1px solid var(--rule)',
-      background: 'transparent',
-      transition: 'all var(--dur) ease',
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '40px 28px', background: 'var(--paper)',
     },
     inner: { maxWidth: 640, width: '100%' },
     eyebrow: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 11,
-      textTransform: 'uppercase',
-      letterSpacing: '0.16em',
-      color: 'var(--ink-faint)',
-      marginBottom: 18,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
+      fontFamily: 'var(--font-mono)', fontSize: 11,
+      textTransform: 'uppercase', letterSpacing: '0.16em',
+      color: 'var(--ink-faint)', marginBottom: 18,
+      display: 'flex', alignItems: 'center', gap: 10,
     },
     eyebrowBar: { width: 28, height: 1, background: 'var(--ink-faint)' },
     title: {
       fontFamily: 'var(--font-display)',
-      fontSize: 'clamp(34px, 5vw, 52px)',
-      fontWeight: 500,
-      lineHeight: 1.05,
-      letterSpacing: '-0.02em',
-      marginBottom: 18,
+      fontSize: 'clamp(30px, 4.5vw, 44px)',
+      fontWeight: 500, lineHeight: 1.1, letterSpacing: '-0.02em',
+      marginBottom: 12,
     },
-    titleAccent: { color: 'var(--accent)', fontStyle: 'italic' },
     sub: {
-      fontSize: 16,
-      color: 'var(--ink-soft)',
-      maxWidth: 500,
-      marginBottom: 40,
-      lineHeight: 1.6,
+      fontSize: 15, color: 'var(--ink-soft)',
+      maxWidth: 520, marginBottom: 36, lineHeight: 1.6,
     },
     question: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 11,
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: 'var(--ink-faint)',
-      marginBottom: 14,
+      fontFamily: 'var(--font-mono)', fontSize: 11,
+      textTransform: 'uppercase', letterSpacing: '0.12em',
+      color: 'var(--ink-faint)', marginBottom: 14,
     },
     grid: { display: 'grid', gap: 10 },
     card: {
-      textAlign: 'left',
-      padding: '18px 22px',
+      textAlign: 'left', padding: '18px 22px',
       background: 'var(--paper-hi)',
       border: '1px solid var(--rule)',
       borderRadius: 'var(--radius-lg)',
       transition: 'all var(--dur) ease',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 16,
-      width: '100%',
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', gap: 16, width: '100%',
+      cursor: 'pointer',
     },
     cardLabel: {
-      fontFamily: 'var(--font-display)',
-      fontSize: 19,
-      fontWeight: 500,
-      letterSpacing: '-0.01em',
+      fontFamily: 'var(--font-display)', fontSize: 19,
+      fontWeight: 500, letterSpacing: '-0.01em',
     },
-    cardBlurb: {
-      fontSize: 13,
-      color: 'var(--ink-faint)',
-      marginTop: 2,
-    },
+    cardBlurb: { fontSize: 13, color: 'var(--ink-faint)', marginTop: 2 },
     arrow: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 18,
+      fontFamily: 'var(--font-mono)', fontSize: 18,
       color: 'var(--ink-faint)',
-      transition: 'transform var(--dur) ease, color var(--dur) ease',
     },
   }
 
   return (
-    <div style={styles.wrap}>
-      <button
-        onClick={toggle}
-        aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-        style={styles.themeBtn}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = 'var(--ink)'
-          e.currentTarget.style.color = 'var(--ink)'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = 'var(--rule)'
-          e.currentTarget.style.color = 'var(--ink-soft)'
-        }}
+    <div style={s.wrap}>
+      <motion.div
+        style={s.inner}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
       >
-        {theme === 'light' ? <MoonIcon /> : <SunIcon />}
-      </button>
-
-      <div style={styles.inner}>
-        <div style={styles.eyebrow}>
-          <span style={styles.eyebrowBar} />
-          <span>3fffs — Training Platform</span>
+        <div style={s.eyebrow}>
+          <span style={s.eyebrowBar} />
+          <span>3fffs — Step 1 of 2</span>
         </div>
-        <h1 style={styles.title} className="fade-up">
-          Fight fraud<br />
-          with a <span style={styles.titleAccent}>shared language</span>.
+        <h1 style={s.title}>
+          {firstName ? <>Let's set up your training, <span style={{ color: 'var(--accent)', fontStyle: 'italic' }}>{firstName}</span>.</> : <>Let's set up your training.</>}
         </h1>
-        <p style={styles.sub} className="fade-up-1">
-          Interactive training for financial institutions, grounded in the MITRE Fight Fraud Framework —
-          the first behavior-based taxonomy of cyber-enabled financial crime, released by MITRE CTID in April 2026.
+        <p style={s.sub}>
+          What role best describes your day-to-day work? We'll tailor scenarios and quizzes
+          to what's most relevant to you.
         </p>
 
-        <div style={styles.question} className="fade-up-2">Choose your role to begin</div>
+        <div style={s.question}>Choose your function</div>
 
-        <div style={styles.grid} className="fade-up-3">
-          {ROLES.map((r) => (
-            <button
+        <div style={s.grid}>
+          {ROLES.map((r, i) => (
+            <motion.button
               key={r.id}
               onClick={() => chooseRole(r.id)}
-              style={styles.card}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--ink)'
-                e.currentTarget.style.background = 'var(--paper-dim)'
-                e.currentTarget.querySelector('[data-arrow]').style.transform = 'translateX(4px)'
-                e.currentTarget.querySelector('[data-arrow]').style.color = 'var(--accent)'
+              style={s.card}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 + i * 0.06 }}
+              whileHover={{
+                borderColor: 'var(--ink)',
+                backgroundColor: 'var(--paper-dim)',
+                y: -1,
               }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--rule)'
-                e.currentTarget.style.background = 'var(--paper-hi)'
-                e.currentTarget.querySelector('[data-arrow]').style.transform = 'translateX(0)'
-                e.currentTarget.querySelector('[data-arrow]').style.color = 'var(--ink-faint)'
-              }}
+              whileTap={{ scale: 0.99 }}
             >
               <div>
-                <div style={styles.cardLabel}>{r.label}</div>
-                <div style={styles.cardBlurb}>{r.blurb}</div>
+                <div style={s.cardLabel}>{r.label}</div>
+                <div style={s.cardBlurb}>{r.blurb}</div>
               </div>
-              <span data-arrow style={styles.arrow}>→</span>
-            </button>
+              <motion.span
+                style={s.arrow}
+                initial={{ x: 0 }}
+                whileHover={{ x: 4, color: 'var(--accent)' }}
+              >→</motion.span>
+            </motion.button>
           ))}
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }

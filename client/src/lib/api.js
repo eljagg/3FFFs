@@ -1,38 +1,37 @@
 const BASE = import.meta.env.VITE_API_URL || ''
 
-async function req(path, opts = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  })
+// Token getter is set by AuthGate once the user is authenticated
+let tokenGetter = null
+export function setTokenGetter(fn) { tokenGetter = fn }
+
+async function request(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  if (tokenGetter) {
+    try {
+      const token = await tokenGetter()
+      if (token) headers.Authorization = `Bearer ${token}`
+    } catch {}
+  }
+  const res = await fetch(BASE + path, { ...opts, headers })
   if (!res.ok) {
-    let msg
-    try { msg = (await res.json()).error } catch { msg = res.statusText }
-    throw new Error(msg || `Request failed: ${res.status}`)
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `HTTP ${res.status}`)
   }
   return res.json()
 }
 
 export const api = {
-  health:            ()                                => req('/health'),
-  tutorStatus:       ()                                => req('/api/tutor/status'),
-  tutorSend:         (messages, role)                  => req('/api/tutor', { method: 'POST', body: JSON.stringify({ messages, role }) }),
-  getTactics:        ()                                => req('/api/framework/tactics'),
-  getTechniques:     ()                                => req('/api/framework/techniques'),
-  search:            (q)                               => req(`/api/framework/search?q=${encodeURIComponent(q)}`),
-  getScenarios:      (role)                            => req(`/api/scenarios${role ? '?role=' + role : ''}`),
-  getScenario:       (id)                              => req(`/api/scenarios/${id}`),
-  getQuizzes:        ({ role, difficulty, tacticId })  => {
-    const p = new URLSearchParams()
-    if (role)       p.set('role', role)
-    if (difficulty) p.set('difficulty', difficulty)
-    if (tacticId)   p.set('tacticId', tacticId)
-    const qs = p.toString()
-    return req(`/api/quiz${qs ? '?' + qs : ''}`)
-  },
-  upsertUser:        (userId, role, displayName)       => req('/api/progress/user', { method: 'POST', body: JSON.stringify({ userId, role, displayName }) }),
-  getProgress:       (userId)                          => req(`/api/progress/${userId}`),
-  scenarioComplete:  (userId, scenarioId)              => req('/api/progress/scenario-complete', { method: 'POST', body: JSON.stringify({ userId, scenarioId }) }),
-  quizAnswer:        (userId, quizId, optionIndex, correct) =>
-    req('/api/progress/quiz-answer', { method: 'POST', body: JSON.stringify({ userId, quizId, optionIndex, correct }) }),
+  me:              ()    => request('/api/me'),
+  getTactics:      ()    => request('/api/framework/tactics'),
+  getTechniques:   ()    => request('/api/framework/techniques'),
+  searchFramework: (q)   => request(`/api/framework/search?q=${encodeURIComponent(q)}`),
+  listScenarios:   ()    => request('/api/scenarios'),
+  getScenario:     (id)  => request(`/api/scenarios/${id}`),
+  submitStage:     (id, b) => request(`/api/scenarios/${id}/submit`, { method: 'POST', body: JSON.stringify(b) }),
+  completeScenario:(id)  => request(`/api/scenarios/${id}/complete`, { method: 'POST' }),
+  getQuiz:         (role)=> request(`/api/quiz?role=${encodeURIComponent(role || '')}`),
+  submitQuiz:      (b)   => request('/api/quiz/answer', { method: 'POST', body: JSON.stringify(b) }),
+  getProgress:     ()    => request('/api/progress'),
+  tutorChat:       (b)   => request('/api/tutor', { method: 'POST', body: JSON.stringify(b) }),
+  getTeamProgress: ()    => request('/api/team/progress'),
 }
