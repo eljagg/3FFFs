@@ -12,7 +12,7 @@ export default function Scenarios() {
 
   useEffect(() => {
     setLoading(true)
-    api.getScenarios(role)
+    api.listScenarios(role)
       .then((d) => setScenarios(d.scenarios))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
