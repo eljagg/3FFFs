@@ -24,6 +24,7 @@ export const api = {
   getTactics:      ()        => request('/api/framework/tactics'),
   getTechniques:   ()        => request('/api/framework/techniques'),
   searchFramework: (q)       => request(`/api/framework/search?q=${encodeURIComponent(q)}`),
+  getFrameworkGraph: ()      => request('/api/framework/graph'),
 
   // Scenarios — unified naming. Both listScenarios and getScenarios work
   // (alias keeps older pages from breaking during iteration).

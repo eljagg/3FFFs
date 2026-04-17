@@ -57,10 +57,10 @@ export default function Home() {
           eyebrow="Measure"
           title="Your coverage map"
           blurb="See which of the 126 F3 techniques you've mastered, and which are still ahead." />
-        <ActionCard to="/matrix"
+        <ActionCard to="/explorer"
           eyebrow="Explore"
-          title="The F3 matrix"
-          blurb="All 126 techniques across 7 tactics. Search, filter, click anything to learn more." />
+          title="The graph"
+          blurb="See the whole F3 framework as a living graph. Tactics, techniques, scenarios — all connected, all interactive." />
       </div>
 
       {/* Secondary */}
