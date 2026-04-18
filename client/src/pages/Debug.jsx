@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { api } from '../lib/api.js'
 
 /**
  * Admin debug page — shows the real state of the graph and the current
@@ -51,7 +52,7 @@ export default function Debug() {
           </h1>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={load} style={btnSecondary}>↻ Refresh</button>
+          <button onClick={load} style={btnSecondary}>Refresh</button>
           <button onClick={resetProgress} style={btnDanger}>Reset my progress</button>
         </div>
       </div>
@@ -67,11 +68,11 @@ export default function Debug() {
         {state.counts.map(c => <KV key={c.label} k={c.label} v={c.count} />)}
       </Section>
 
-      <Section title={`My saved progress ${state.myProgress ? '✓' : '— USER NODE MISSING'}`}>
+      <Section title={'My saved progress ' + (state.myProgress ? '(ok)' : '(USER NODE MISSING)')}>
         {!state.myProgress ? (
           <div style={{ color: 'var(--danger)', fontSize: 13 }}>
-            Your User node doesn't exist in Neo4j. This is the root cause of "progress not saving" —
-            writes target a node that doesn't exist.
+            Your User node does not exist in Neo4j. This is the root cause of "progress not saving" -
+            writes target a node that does not exist.
           </div>
         ) : (
           <>
@@ -84,7 +85,7 @@ export default function Debug() {
                 <div style={smallLabel}>Completed scenarios</div>
                 {state.myProgress.completedScenarios.filter(x => x.scenarioId).map(c => (
                   <div key={c.scenarioId} style={{ fontSize: 12, padding: '4px 0' }}>
-                    • <strong>{c.title}</strong> — {fmtTime(c.completedAt)}
+                    - <strong>{c.title}</strong> - {fmtTime(c.completedAt)}
                   </div>
                 ))}
               </div>
@@ -93,16 +94,16 @@ export default function Debug() {
         )}
       </Section>
 
-      <Section title={`Scenarios in graph (${state.scenarios.length})`}>
+      <Section title={'Scenarios in graph (' + state.scenarios.length + ')'}>
         {state.scenarios.map(s => (
           <details key={s.id} style={{ marginBottom: 10 }}>
             <summary style={{ cursor: 'pointer', padding: '6px 0', fontSize: 13 }}>
-              <strong>{s.id}</strong> — {s.title} · {s.stages.filter(x => x.stageId).length} stages
+              <strong>{s.id}</strong> - {s.title} - {s.stages.filter(x => x.stageId).length} stages
             </summary>
             <div style={{ paddingLeft: 18, fontSize: 12, color: 'var(--ink-soft)' }}>
               {s.stages.filter(x => x.stageId).map((st, i) => (
                 <div key={i} style={{ padding: '3px 0', fontFamily: 'var(--font-mono)' }}>
-                  {st.stageId || '(NO ID!)'} · order={st.order} · type={st.type || '(null)'} · {st.heading}
+                  {st.stageId || '(NO ID!)'} - order={st.order} - type={st.type || '(null)'} - {st.heading}
                 </div>
               ))}
             </div>
@@ -110,24 +111,24 @@ export default function Debug() {
         ))}
       </Section>
 
-      <Section title={`Recent stage attempts by me (${state.myAttempts.length})`}>
+      <Section title={'Recent stage attempts by me (' + state.myAttempts.length + ')'}>
         {state.myAttempts.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--ink-faint)', fontStyle: 'italic' }}>
-            No attempts recorded. This is the problem — clicking options should be writing (User)-[:ATTEMPTED_STAGE]-(Stage) edges.
+            No attempts recorded. Clicking options should be writing (User)-[:ATTEMPTED_STAGE]-(Stage) edges.
           </div>
         ) : (
           state.myAttempts.map((a, i) => (
             <div key={i} style={{ fontSize: 12, padding: '3px 0', fontFamily: 'var(--font-mono)' }}>
-              {fmtTime(a.answeredAt)} · {a.stageId} · opt={a.optionIndex} · {a.correct ? '✓ correct' : '✕ wrong'} · {a.heading}
+              {fmtTime(a.answeredAt)} - {a.stageId} - opt={a.optionIndex} - {a.correct ? 'correct' : 'wrong'} - {a.heading}
             </div>
           ))
         )}
       </Section>
 
-      <Section title={`Users in graph (${state.recentUsers.length})`}>
+      <Section title={'Users in graph (' + state.recentUsers.length + ')'}>
         {state.recentUsers.map(u => (
           <div key={u.id} style={{ fontSize: 12, padding: '4px 0', fontFamily: 'var(--font-mono)' }}>
-            {u.id === state.me.id ? '★ ' : '  '}{u.email || '(no email)'} · {u.name || '(no name)'} · roles={(u.roles || []).join(',')} · seen {fmtTime(u.lastSeenAt)}
+            {u.id === state.me.id ? '> ' : '  '}{u.email || '(no email)'} - {u.name || '(no name)'} - roles={(u.roles || []).join(',')} - seen {fmtTime(u.lastSeenAt)}
           </div>
         ))}
       </Section>
@@ -199,7 +200,7 @@ function fmtTime(ts) {
 }
 
 function Loading() {
-  return <div style={{ padding: 40, color: 'var(--ink-faint)', textAlign: 'center' }}>Loading graph state…</div>
+  return <div style={{ padding: 40, color: 'var(--ink-faint)', textAlign: 'center' }}>Loading graph state...</div>
 }
 
 function Err({ err }) {
