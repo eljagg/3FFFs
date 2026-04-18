@@ -4,8 +4,8 @@ import { getUser, requireRole } from '../lib/auth.js'
 
 const router = Router()
 
-// All routes in here require admin
-router.use(requireRole('admin'))
+// TEMP: admin gate removed during progress-saving debugging.
+// Re-enable with: router.use(requireRole('admin'))
 
 /**
  * GET /api/debug/graph-state

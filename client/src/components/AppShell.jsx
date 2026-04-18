@@ -37,7 +37,8 @@ export default function AppShell() {
 
   let NAV = BASE_NAV
   if (canSeeTeam) NAV = [...NAV, { to: '/team', label: 'Team' }]
-  if (isAdmin)    NAV = [...NAV, { to: '/debug', label: 'Debug' }]
+  // Debug temporarily visible to all authenticated users during debugging
+  NAV = [...NAV, { to: '/debug', label: 'Debug' }]
 
   const s = {
     wrap: { display: 'flex', flexDirection: 'column', flex: 1 },

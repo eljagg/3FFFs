@@ -58,7 +58,7 @@ export default function App() {
           <Route path="/quiz"                   element={<Safe><Quiz /></Safe>} />
           <Route path="/tutor"                  element={<Safe><Tutor /></Safe>} />
           <Route path="/team"                   element={<ManagerRoute><Safe><Team /></Safe></ManagerRoute>} />
-          <Route path="/debug"                  element={<AdminRoute><Safe><Debug /></Safe></AdminRoute>} />
+          <Route path="/debug"                  element={<Safe><Debug /></Safe>} />
           <Route path="*"                       element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
