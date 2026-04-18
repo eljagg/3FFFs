@@ -29,12 +29,16 @@ app.use('/api/tutor', tutor)
 app.use('/api/team', team)
 app.use('/api/games', games)
 
-app.use((err, _req, res, _next) => {
+// Honest error handler — reports the real error so we can debug
+app.use((err, req, res, _next) => {
   if (err.name === 'UnauthorizedError' || err.status === 401) {
     return res.status(401).json({ error: 'Authentication required' })
   }
-  console.error(err)
-  res.status(500).json({ error: err.message || 'Internal error' })
+  console.error(`[${req.method} ${req.path}]`, err)
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV !== 'production' && { path: req.path }),
+  })
 })
 
 const PORT = process.env.PORT || 3001

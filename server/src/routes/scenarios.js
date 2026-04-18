@@ -4,21 +4,28 @@ import { getUser } from '../lib/auth.js'
 
 const router = Router()
 
-// Helper: parse stored JSON strings back to arrays
 function safeParse(v) {
   if (!v) return []
   if (typeof v !== 'string') return v
   try { return JSON.parse(v) } catch { return [] }
 }
 
+// Derives a stable stage ID if the graph was seeded before IDs existed
+function ensureStageId(stage, scenarioId, fallbackIndex) {
+  if (stage?.id) return stage.id
+  return `${scenarioId}-S${stage?.order ?? fallbackIndex}`
+}
+
 // GET /api/scenarios — list, optionally filtered by role
+// Defensive: includes stages with no type field (old-seed) as well as type='primary'
 router.get('/', async (req, res, next) => {
   try {
     const role = (req.query.role || '').toLowerCase()
     const rows = await runQuery(
       `MATCH (s:Scenario)
        ${role ? `WHERE ANY(r IN s.roles WHERE toLower(r) = $role)` : ''}
-       OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage {type: 'primary'})
+       OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage)
+       WHERE st.type IS NULL OR st.type = 'primary'
        WITH s, count(st) AS stageCount
        RETURN s { .*, stageCount: stageCount } AS scenario
        ORDER BY s.severity DESC, s.id`,
@@ -44,8 +51,9 @@ router.get('/:id', async (req, res, next) => {
     const { scenario, stages } = rows[0]
     const parsed = stages
       .filter(s => s.stage)
-      .map(({ stage, technique }) => ({
+      .map(({ stage, technique }, i) => ({
         ...stage,
+        id: ensureStageId(stage, scenario.id, i + 1),
         signals: safeParse(stage.signals),
         options: safeParse(stage.options),
         technique,
@@ -54,8 +62,7 @@ router.get('/:id', async (req, res, next) => {
   } catch (e) { next(e) }
 })
 
-// GET /api/scenarios/:id/path — the FULL branching graph for the visualizer
-// Returns primary stages (linear) plus consequence stages attached to them.
+// GET /api/scenarios/:id/path — FULL branching graph with defensive fallbacks
 router.get('/:id/path', async (req, res, next) => {
   try {
     const rows = await runQuery(
@@ -64,25 +71,33 @@ router.get('/:id/path', async (req, res, next) => {
        OPTIONAL MATCH (st)-[:USES_TECHNIQUE]->(tech:Technique)
        OPTIONAL MATCH (tech)-[:PART_OF]->(tac:Tactic)
        OPTIONAL MATCH (st)-[lt:LEADS_TO]->(branch:Stage)
-       WITH s, st, tech, tac, collect({ onOption: lt.onOption, toStageId: branch.id }) AS branches
+       WITH s, st, tech, tac,
+            collect(CASE WHEN branch IS NOT NULL
+                         THEN { onOption: lt.onOption, toStageId: branch.id }
+                         ELSE null END) AS rawBranches
        ORDER BY st.order
        RETURN s { .* } AS scenario,
               collect({
                 stage: st { .* },
                 technique: tech { .id, .name, .description },
                 tactic: tac { .id, .name, .order, .uniqueToF3 },
-                branches: branches
+                branches: [b IN rawBranches WHERE b IS NOT NULL]
               }) AS path`,
       { id: req.params.id }
     )
-    if (!rows.length || !rows[0].scenario) return res.status(404).json({ error: 'Scenario not found' })
+    if (!rows.length || !rows[0].scenario) {
+      return res.status(404).json({ error: 'Scenario not found' })
+    }
     const { scenario, path } = rows[0]
 
+    // Normalize: ensure every stage has id + type, even on old seed data
     const cleanPath = path
       .filter(p => p.stage)
-      .map(({ stage, technique, tactic, branches }) => ({
+      .map(({ stage, technique, tactic, branches }, i) => ({
         stage: {
           ...stage,
+          id: ensureStageId(stage, scenario.id, i + 1),
+          type: stage.type || 'primary',
           signals: safeParse(stage.signals),
           options: safeParse(stage.options),
         },
@@ -91,27 +106,34 @@ router.get('/:id/path', async (req, res, next) => {
         branches: (branches || []).filter(b => b && b.toStageId),
       }))
 
-    // Split into primary + consequence stages for rendering convenience
-    const primary = cleanPath.filter(p => p.stage.type === 'primary' || !p.stage.type)
+    const primary = cleanPath.filter(p => p.stage.type === 'primary')
     const consequence = cleanPath.filter(p => p.stage.type === 'consequence')
 
+    // Defensive: if no primary stages but stages exist, promote them to primary
+    if (primary.length === 0 && cleanPath.length > 0) {
+      console.warn(`Scenario ${scenario.id}: no 'primary' stages, promoting all ${cleanPath.length} stages`)
+      return res.json({
+        scenario,
+        path: cleanPath.map(p => ({ ...p, stage: { ...p.stage, type: 'primary' } })),
+        consequenceStages: [],
+      })
+    }
+
     res.json({ scenario, path: primary, consequenceStages: consequence })
-  } catch (e) { next(e) }
+  } catch (e) {
+    console.error(`[/scenarios/${req.params.id}/path]`, e)
+    next(e)
+  }
 })
 
-// POST /api/scenarios/:id/choose — navigate the branching tree
-// Given the current stage and chosen option, return the next stage to show
+// POST /api/scenarios/:id/choose — branching navigation
 router.post('/:id/choose', async (req, res, next) => {
   try {
-    const user = getUser(req)
     const { stageId, optionIndex } = req.body || {}
     if (!stageId || typeof optionIndex !== 'number') {
       return res.status(400).json({ error: 'stageId and optionIndex required' })
     }
 
-    // Determine next stage via branching logic
-    // Note: correctness logging lives in /submit — this route focuses on navigation
-    // 1. Is there an explicit LEADS_TO for this option?
     const branchRows = await runQuery(
       `MATCH (from:Stage {id: $stageId})-[r:LEADS_TO {onOption: $optionIndex}]->(to:Stage)
        RETURN to.id AS nextStageId`,
@@ -121,10 +143,9 @@ router.post('/:id/choose', async (req, res, next) => {
       return res.json({ nextStageId: branchRows[0].nextStageId, branch: true })
     }
 
-    // 2. No branch: proceed to next primary stage in order
     const nextRows = await runQuery(
       `MATCH (current:Stage {id: $stageId})<-[:HAS_STAGE]-(sc:Scenario)-[:HAS_STAGE]->(next:Stage)
-       WHERE next.type = 'primary' AND next.order > current.order
+       WHERE (next.type IS NULL OR next.type = 'primary') AND next.order > current.order
        RETURN next.id AS nextStageId
        ORDER BY next.order LIMIT 1`,
       { stageId }
@@ -133,12 +154,10 @@ router.post('/:id/choose', async (req, res, next) => {
       return res.json({ nextStageId: nextRows[0].nextStageId, branch: false })
     }
 
-    // No next stage — scenario complete
     res.json({ nextStageId: null, branch: false, done: true })
   } catch (e) { next(e) }
 })
 
-// POST /api/scenarios/:id/submit — legacy endpoint, still records attempts
 router.post('/:id/submit', async (req, res, next) => {
   try {
     const user = getUser(req)
@@ -153,7 +172,6 @@ router.post('/:id/submit', async (req, res, next) => {
   } catch (e) { next(e) }
 })
 
-// POST /api/scenarios/:id/complete
 router.post('/:id/complete', async (req, res, next) => {
   try {
     const user = getUser(req)
