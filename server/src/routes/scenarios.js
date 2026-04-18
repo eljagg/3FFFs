@@ -65,23 +65,30 @@ router.get('/:id', async (req, res, next) => {
 // GET /api/scenarios/:id/path — FULL branching graph with defensive fallbacks
 router.get('/:id/path', async (req, res, next) => {
   try {
+    // Aggregate per-stage to avoid Cartesian-product duplication when
+    // a stage has multiple relationships. Branches are gathered first,
+    // then stages are joined to their (single) technique and tactic.
     const rows = await runQuery(
       `MATCH (s:Scenario {id: $id})
-       OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage)
-       OPTIONAL MATCH (st)-[:USES_TECHNIQUE]->(tech:Technique)
-       OPTIONAL MATCH (tech)-[:PART_OF]->(tac:Tactic)
+       OPTIONAL MATCH (s)-[hs:HAS_STAGE]->(st:Stage)
+       WITH s, st ORDER BY st.order
+       // One row per stage — gather branches as a list
        OPTIONAL MATCH (st)-[lt:LEADS_TO]->(branch:Stage)
-       WITH s, st, tech, tac,
+       WITH s, st,
             collect(CASE WHEN branch IS NOT NULL
                          THEN { onOption: lt.onOption, toStageId: branch.id }
-                         ELSE null END) AS rawBranches
-       ORDER BY st.order
+                         ELSE null END) AS branchList
+       // Join to the (single) technique and tactic per stage
+       OPTIONAL MATCH (st)-[:USES_TECHNIQUE]->(tech:Technique)
+       OPTIONAL MATCH (tech)-[:PART_OF]->(tac:Tactic)
+       WITH s, st, tech, tac, branchList
+       // Collect stages, preserving order
        RETURN s { .* } AS scenario,
-              collect({
+              collect(DISTINCT {
                 stage: st { .* },
                 technique: tech { .id, .name, .description },
                 tactic: tac { .id, .name, .order, .uniqueToF3 },
-                branches: [b IN rawBranches WHERE b IS NOT NULL]
+                branches: [b IN branchList WHERE b IS NOT NULL]
               }) AS path`,
       { id: req.params.id }
     )
@@ -106,8 +113,16 @@ router.get('/:id/path', async (req, res, next) => {
         branches: (branches || []).filter(b => b && b.toStageId),
       }))
 
-    const primary = cleanPath.filter(p => p.stage.type === 'primary')
-    const consequence = cleanPath.filter(p => p.stage.type === 'consequence')
+    // Dedupe by stage id (in case query still returns duplicates)
+    const seenIds = new Set()
+    const dedupedPath = cleanPath.filter(p => {
+      if (!p.stage?.id || seenIds.has(p.stage.id)) return false
+      seenIds.add(p.stage.id)
+      return true
+    })
+
+    const primary = dedupedPath.filter(p => p.stage.type === 'primary')
+    const consequence = dedupedPath.filter(p => p.stage.type === 'consequence')
 
     // Defensive: if no primary stages but stages exist, promote them to primary
     if (primary.length === 0 && cleanPath.length > 0) {

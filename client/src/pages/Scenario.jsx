@@ -25,6 +25,12 @@ export default function Scenario() {
   const [pathTaken, setPathTaken] = useState([])  // ordered list of stageIds
   const [completed, setCompleted] = useState(false)
   const [navigationError, setNavigationError] = useState(null)
+  const [allScenarios, setAllScenarios] = useState([])
+
+  // Load all scenarios so we can offer prev/next navigation
+  useEffect(() => {
+    api.listScenarios().then(r => setAllScenarios(r.scenarios || [])).catch(() => {})
+  }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -135,10 +141,21 @@ export default function Scenario() {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 28px 80px' }}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <button onClick={() => navigate('/scenarios')} style={{
-          fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em',
-          textTransform: 'uppercase', color: 'var(--ink-faint)', padding: 0, marginBottom: 16,
-        }}>← All scenarios</button>
+        <ScenarioNav
+          scenario={scenario}
+          allScenarios={allScenarios}
+          onRestart={() => {
+            const first = data.path?.[0]?.stage?.id
+            if (first) {
+              setCurrentStageId(first)
+              setPathTaken([first])
+              setAnswers({})
+              setCompleted(false)
+              setNavigationError(null)
+            }
+          }}
+          onExit={() => navigate('/scenarios')}
+        />
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 10, flexWrap: 'wrap' }}>
           <h1 style={{
@@ -230,15 +247,23 @@ export default function Scenario() {
             )}
           </>
         )}
-        {completed && (
-          <CompletionPanel
-            key="done"
-            scenario={scenario}
-            tookConsequencePath={tookConsequencePath}
-            pathTaken={pathTaken}
-            allStages={allStages}
-          />
-        )}
+        {completed && (() => {
+          const idx = allScenarios.findIndex(s => s.id === scenario.id)
+          const nextScenario = idx >= 0 && idx < allScenarios.length - 1 ? allScenarios[idx + 1] : null
+          return (
+            <CompletionPanel
+              key="done"
+              scenario={scenario}
+              tookConsequencePath={tookConsequencePath}
+              pathTaken={pathTaken}
+              allStages={allStages}
+              nextScenario={nextScenario}
+              onNext={() => nextScenario && navigate('/scenarios/' + nextScenario.id)}
+              onExit={() => navigate('/scenarios')}
+              onCoverage={() => navigate('/coverage')}
+            />
+          )
+        })()}
       </AnimatePresence>
     </div>
   )
@@ -559,7 +584,7 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
   )
 }
 
-function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allStages = {} }) {
+function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allStages = {}, nextScenario, onNext, onExit, onCoverage }) {
   const consequencesVisited = pathTaken.filter(id => allStages[id]?.stage?.type === 'consequence').length
 
   return (
@@ -609,9 +634,39 @@ function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allSta
           ? `You navigated ${scenario.title} through ${consequencesVisited} consequence branch${consequencesVisited > 1 ? 'es' : ''}. That's valuable training — every real incident has moments where prevention fails. Notice where and why.`
           : `You navigated ${scenario.title} without hitting any consequence branches. Clean run — you made the prevention call at every stage.`}
       </p>
-      <p style={{ fontSize: 13, color: 'var(--ink-faint)', maxWidth: 500, margin: '0 auto', lineHeight: 1.6 }}>
+      <p style={{ fontSize: 13, color: 'var(--ink-faint)', maxWidth: 500, margin: '0 auto 24px', lineHeight: 1.6 }}>
         Your progress is logged — check your coverage map to see which F3 techniques you've now encountered.
       </p>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {nextScenario && (
+          <button
+            onClick={onNext}
+            style={{
+              padding: '12px 22px', fontSize: 14, fontWeight: 500,
+              background: 'var(--ink)', color: 'var(--paper)',
+              border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+            }}
+          >Next scenario: {nextScenario.title.split(' — ')[0]} →</button>
+        )}
+        <button
+          onClick={onExit}
+          style={{
+            padding: '12px 22px', fontSize: 14, fontWeight: 500,
+            background: 'transparent', color: 'var(--ink)',
+            border: '1px solid var(--rule-strong)',
+            borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+          }}
+        >Back to all scenarios</button>
+        <button
+          onClick={onCoverage}
+          style={{
+            padding: '12px 22px', fontSize: 14, fontWeight: 500,
+            background: 'transparent', color: 'var(--ink-soft)',
+            border: '1px solid var(--rule)',
+            borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+          }}
+        >See my coverage</button>
+      </div>
     </motion.div>
   )
 }
@@ -661,5 +716,78 @@ function ScenarioArt({ scenarioId }) {
     >
       <Art />
     </motion.div>
+  )
+}
+
+function ScenarioNav({ scenario, allScenarios, onRestart, onExit }) {
+  const navigate = useNavigate()
+  if (!scenario) return null
+
+  const idx = allScenarios.findIndex(s => s.id === scenario.id)
+  const prev = idx > 0 ? allScenarios[idx - 1] : null
+  const next = idx >= 0 && idx < allScenarios.length - 1 ? allScenarios[idx + 1] : null
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      marginBottom: 20, gap: 12, flexWrap: 'wrap',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          onClick={onExit}
+          style={{
+            padding: '7px 14px', fontSize: 11, fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            background: 'transparent', border: '1px solid var(--rule-strong)',
+            borderRadius: 'var(--radius)', cursor: 'pointer',
+            color: 'var(--ink-soft)',
+          }}
+        >← All scenarios</button>
+        <button
+          onClick={onRestart}
+          style={{
+            padding: '7px 14px', fontSize: 11, fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            background: 'transparent', border: '1px solid var(--rule)',
+            borderRadius: 'var(--radius)', cursor: 'pointer',
+            color: 'var(--ink-faint)',
+          }}
+        >↻ Restart</button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {allScenarios.length > 1 && (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-faint)',
+            letterSpacing: '0.08em', marginRight: 6,
+          }}>{idx + 1} of {allScenarios.length}</span>
+        )}
+        {prev && (
+          <button
+            onClick={() => navigate('/scenarios/' + prev.id)}
+            title={prev.title}
+            style={{
+              padding: '7px 12px', fontSize: 11, fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              background: 'transparent', border: '1px solid var(--rule)',
+              borderRadius: 'var(--radius)', cursor: 'pointer',
+              color: 'var(--ink-soft)',
+            }}
+          >← Prev</button>
+        )}
+        {next && (
+          <button
+            onClick={() => navigate('/scenarios/' + next.id)}
+            title={next.title}
+            style={{
+              padding: '7px 14px', fontSize: 11, fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              background: 'var(--accent)', color: '#fff', border: 'none',
+              borderRadius: 'var(--radius)', cursor: 'pointer',
+            }}
+          >Next →</button>
+        )}
+      </div>
+    </div>
   )
 }
