@@ -24,6 +24,7 @@ export default function Scenario() {
   const [answers, setAnswers] = useState({})
   const [pathTaken, setPathTaken] = useState([])  // ordered list of stageIds
   const [completed, setCompleted] = useState(false)
+  const [navigationError, setNavigationError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -80,23 +81,55 @@ export default function Scenario() {
     const correct = !!option.correct
 
     setAnswers(a => ({ ...a, [stage.id]: { optionIndex, correct } }))
+    setNavigationError(null)
 
-    try { await api.submitStage(scenario.id, { stageId: stage.id, optionIndex, correct }) } catch {}
+    // Fire submit but don't block navigation on it
+    api.submitStage(scenario.id, { stageId: stage.id, optionIndex, correct })
+      .catch(err => console.warn('submitStage failed (non-blocking):', err.message))
 
+    // Wait briefly so user can see feedback, then navigate
     setTimeout(async () => {
       try {
         const { nextStageId, done } = await api.chooseStageOption(scenario.id, {
           stageId: stage.id, optionIndex,
         })
         if (done || !nextStageId) {
-          try { await api.completeScenario(scenario.id) } catch {}
+          try { await api.completeScenario(scenario.id) } catch (err) {
+            console.warn('completeScenario failed:', err.message)
+          }
           setCompleted(true)
           return
         }
         setCurrentStageId(nextStageId)
         setPathTaken(p => [...p, nextStageId])
-      } catch {}
+      } catch (err) {
+        // Don't swallow silently — surface to user AND fall back to client-side navigation
+        console.error('chooseStageOption failed:', err)
+        setNavigationError(err.message || 'Navigation failed')
+        // Fallback: find next primary stage in path by order
+        const currentOrder = stage.order ?? path.findIndex(p => p.stage.id === stage.id) + 1
+        const nextEntry = path.find(p => (p.stage.order ?? 0) > currentOrder)
+        if (nextEntry?.stage?.id) {
+          setCurrentStageId(nextEntry.stage.id)
+          setPathTaken(p => [...p, nextEntry.stage.id])
+        } else {
+          setCompleted(true)
+        }
+      }
     }, 1000)
+  }
+
+  function handleManualAdvance() {
+    if (!currentEntry) return
+    const currentOrder = currentEntry.stage.order ?? 0
+    const nextEntry = path.find(p => (p.stage.order ?? 0) > currentOrder)
+    if (nextEntry?.stage?.id) {
+      setCurrentStageId(nextEntry.stage.id)
+      setPathTaken(p => [...p, nextEntry.stage.id])
+      setNavigationError(null)
+    } else {
+      setCompleted(true)
+    }
   }
 
   return (
@@ -153,14 +186,49 @@ export default function Scenario() {
 
       <AnimatePresence mode="wait">
         {!completed && currentEntry && (
-          <StagePanel
-            key={currentStageId}
-            entry={currentEntry}
-            answer={answers[currentStageId]}
-            onAnswer={handleAnswer}
-            totalPrimary={path.length}
-            currentIdx={path.findIndex(p => p.stage.id === currentStageId)}
-          />
+          <>
+            <StagePanel
+              key={currentStageId}
+              entry={currentEntry}
+              answer={answers[currentStageId]}
+              onAnswer={handleAnswer}
+              totalPrimary={path.length}
+              currentIdx={path.findIndex(p => p.stage.id === currentStageId)}
+            />
+            {answers[currentStageId] && (
+              <div style={{
+                marginTop: 18, padding: '16px 20px',
+                background: navigationError ? 'var(--danger-bg)' : 'var(--paper-hi)',
+                border: `1px solid ${navigationError ? 'var(--danger)' : 'var(--rule)'}`,
+                borderRadius: 'var(--radius-lg)',
+                display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+              }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  {navigationError ? (
+                    <>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--danger)', marginBottom: 4 }}>
+                        Could not advance automatically
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{navigationError}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                      Advancing to next stage…
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleManualAdvance}
+                  style={{
+                    padding: '10px 18px', fontSize: 13, fontWeight: 500,
+                    background: 'var(--ink)', color: 'var(--paper)',
+                    border: 'none', borderRadius: 'var(--radius-lg)',
+                    cursor: 'pointer',
+                  }}
+                >Continue →</button>
+              </div>
+            )}
+          </>
         )}
         {completed && (
           <CompletionPanel
