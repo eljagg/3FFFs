@@ -176,14 +176,16 @@ export default function Scenario() {
   )
 }
 
-function AttackPath({ path, consequenceStages, answers, currentStageId, pathTaken, onStageClick }) {
+function AttackPath({ path = [], consequenceStages = [], answers = {}, currentStageId, pathTaken = [], onStageClick }) {
   // Build a map: primary stage id -> [consequence stages that branch from it]
   const consequencesByParent = useMemo(() => {
     const map = {}
+    const safeConsequences = Array.isArray(consequenceStages) ? consequenceStages : []
     for (const primary of path) {
+      if (!primary?.stage?.id) continue
       const parentId = primary.stage.id
-      const consequences = consequenceStages.filter(c =>
-        primary.branches?.some(b => b.toStageId === c.stage.id)
+      const consequences = safeConsequences.filter(c =>
+        c?.stage?.id && primary.branches?.some(b => b.toStageId === c.stage.id)
       )
       if (consequences.length) map[parentId] = consequences
     }
@@ -489,7 +491,7 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
   )
 }
 
-function CompletionPanel({ scenario, tookConsequencePath, pathTaken, allStages }) {
+function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allStages = {} }) {
   const consequencesVisited = pathTaken.filter(id => allStages[id]?.stage?.type === 'consequence').length
 
   return (
