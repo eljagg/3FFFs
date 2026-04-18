@@ -48,9 +48,10 @@ export const api = {
   getTeamCoverage: ()        => request('/api/team/coverage'),
   getTeamSkills:   ()        => request('/api/team/skills'),
 
-  // Admin-only diagnostics
-  debugGraphState:       ()   => request('/api/debug/graph-state'),
-  debugResetMyProgress:  ()   => request('/api/debug/reset-my-progress', { method: 'POST' }),
+  // Admin-only diagnostics (endpoints moved under /api/progress/* because
+  // /api/debug/* was returning HTTP 404 on Railway for reasons we could not isolate)
+  debugGraphState:       ()   => request('/api/progress/debug-state'),
+  debugResetMyProgress:  ()   => request('/api/progress/reset-my-progress', { method: 'POST' }),
 
   // Games
   getSignalPool:       () => request('/api/games/signals'),
