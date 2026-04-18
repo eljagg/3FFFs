@@ -13,10 +13,18 @@ import Quiz from './pages/Quiz.jsx'
 import Tutor from './pages/Tutor.jsx'
 import Team from './pages/Team.jsx'
 import SignalSort from './pages/SignalSort.jsx'
+import Debug from './pages/Debug.jsx'
 import { useUser } from './lib/user.jsx'
 import { useAuth0 } from '@auth0/auth0-react'
 
 const NAMESPACE = 'https://3fffs.app'
+
+function AdminRoute({ children }) {
+  const { user } = useAuth0()
+  const roles = user?.[`${NAMESPACE}/roles`] || []
+  if (!roles.includes('admin')) return <Navigate to="/" replace />
+  return children
+}
 
 function ManagerRoute({ children }) {
   const { user } = useAuth0()
@@ -50,6 +58,7 @@ export default function App() {
           <Route path="/quiz"                   element={<Safe><Quiz /></Safe>} />
           <Route path="/tutor"                  element={<Safe><Tutor /></Safe>} />
           <Route path="/team"                   element={<ManagerRoute><Safe><Team /></Safe></ManagerRoute>} />
+          <Route path="/debug"                  element={<AdminRoute><Safe><Debug /></Safe></AdminRoute>} />
           <Route path="*"                       element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

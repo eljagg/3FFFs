@@ -33,8 +33,11 @@ export default function AppShell() {
   const { user } = useAuth0()
   const roles = user?.[`${NAMESPACE}/roles`] || []
   const canSeeTeam = roles.includes('manager') || roles.includes('admin')
+  const isAdmin = roles.includes('admin')
 
-  const NAV = canSeeTeam ? [...BASE_NAV, { to: '/team', label: 'Team' }] : BASE_NAV
+  let NAV = BASE_NAV
+  if (canSeeTeam) NAV = [...NAV, { to: '/team', label: 'Team' }]
+  if (isAdmin)    NAV = [...NAV, { to: '/debug', label: 'Debug' }]
 
   const s = {
     wrap: { display: 'flex', flexDirection: 'column', flex: 1 },

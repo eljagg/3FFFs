@@ -9,6 +9,7 @@ import progress from './routes/progress.js'
 import tutor from './routes/tutor.js'
 import team from './routes/team.js'
 import games from './routes/games.js'
+import debug from './routes/debug.js'
 
 const app = express()
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true, credentials: true }))
@@ -28,6 +29,7 @@ app.use('/api/progress', progress)
 app.use('/api/tutor', tutor)
 app.use('/api/team', team)
 app.use('/api/games', games)
+app.use('/api/debug', debug)
 
 // Honest error handler — reports the real error so we can debug
 app.use((err, req, res, _next) => {

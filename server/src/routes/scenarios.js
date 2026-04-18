@@ -70,19 +70,19 @@ router.get('/:id/path', async (req, res, next) => {
     // then stages are joined to their (single) technique and tactic.
     const rows = await runQuery(
       `MATCH (s:Scenario {id: $id})
-       OPTIONAL MATCH (s)-[hs:HAS_STAGE]->(st:Stage)
+       // DISTINCT here collapses duplicate HAS_STAGE edges if any exist
+       OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage)
+       WITH s, collect(DISTINCT st) AS stages
+       UNWIND (CASE WHEN size(stages) = 0 THEN [null] ELSE stages END) AS st
        WITH s, st ORDER BY st.order
-       // One row per stage — gather branches as a list
        OPTIONAL MATCH (st)-[lt:LEADS_TO]->(branch:Stage)
        WITH s, st,
-            collect(CASE WHEN branch IS NOT NULL
+            collect(DISTINCT CASE WHEN branch IS NOT NULL
                          THEN { onOption: lt.onOption, toStageId: branch.id }
                          ELSE null END) AS branchList
-       // Join to the (single) technique and tactic per stage
        OPTIONAL MATCH (st)-[:USES_TECHNIQUE]->(tech:Technique)
        OPTIONAL MATCH (tech)-[:PART_OF]->(tac:Tactic)
        WITH s, st, tech, tac, branchList
-       // Collect stages, preserving order
        RETURN s { .* } AS scenario,
               collect(DISTINCT {
                 stage: st { .* },

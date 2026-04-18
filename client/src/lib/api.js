@@ -48,6 +48,10 @@ export const api = {
   getTeamCoverage: ()        => request('/api/team/coverage'),
   getTeamSkills:   ()        => request('/api/team/skills'),
 
+  // Admin-only diagnostics
+  debugGraphState:       ()   => request('/api/debug/graph-state'),
+  debugResetMyProgress:  ()   => request('/api/debug/reset-my-progress', { method: 'POST' }),
+
   // Games
   getSignalPool:       () => request('/api/games/signals'),
   submitSignalScore:   (score) => request('/api/games/signals/score', { method: 'POST', body: JSON.stringify({ score }) }),
