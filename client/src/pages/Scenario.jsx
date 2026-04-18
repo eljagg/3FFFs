@@ -26,6 +26,7 @@ export default function Scenario() {
   const [completed, setCompleted] = useState(false)
   const [navigationError, setNavigationError] = useState(null)
   const [allScenarios, setAllScenarios] = useState([])
+  const [saveStatus, setSaveStatus] = useState(null) // 'saving' | 'saved' | 'error' | null
 
   // Load all scenarios so we can offer prev/next navigation
   useEffect(() => {
@@ -88,10 +89,18 @@ export default function Scenario() {
 
     setAnswers(a => ({ ...a, [stage.id]: { optionIndex, correct } }))
     setNavigationError(null)
+    setSaveStatus('saving')
 
     // Fire submit but don't block navigation on it
     api.submitStage(scenario.id, { stageId: stage.id, optionIndex, correct })
-      .catch(err => console.warn('submitStage failed (non-blocking):', err.message))
+      .then(() => {
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus(null), 2000)
+      })
+      .catch(err => {
+        console.warn('submitStage failed:', err.message)
+        setSaveStatus('error')
+      })
 
     // Wait briefly so user can see feedback, then navigate
     setTimeout(async () => {
@@ -100,8 +109,12 @@ export default function Scenario() {
           stageId: stage.id, optionIndex,
         })
         if (done || !nextStageId) {
-          try { await api.completeScenario(scenario.id) } catch (err) {
+          try {
+            await api.completeScenario(scenario.id)
+            setSaveStatus('saved')
+          } catch (err) {
             console.warn('completeScenario failed:', err.message)
+            setSaveStatus('error')
           }
           setCompleted(true)
           return
@@ -152,9 +165,11 @@ export default function Scenario() {
               setAnswers({})
               setCompleted(false)
               setNavigationError(null)
+              setSaveStatus(null)
             }
           }}
           onExit={() => navigate('/scenarios')}
+          saveStatus={saveStatus}
         />
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -719,13 +734,20 @@ function ScenarioArt({ scenarioId }) {
   )
 }
 
-function ScenarioNav({ scenario, allScenarios, onRestart, onExit }) {
+function ScenarioNav({ scenario, allScenarios, onRestart, onExit, saveStatus }) {
   const navigate = useNavigate()
   if (!scenario) return null
 
   const idx = allScenarios.findIndex(s => s.id === scenario.id)
   const prev = idx > 0 ? allScenarios[idx - 1] : null
   const next = idx >= 0 && idx < allScenarios.length - 1 ? allScenarios[idx + 1] : null
+
+  const saveColor = saveStatus === 'saved' ? 'var(--success)'
+                  : saveStatus === 'saving' ? 'var(--ink-faint)'
+                  : saveStatus === 'error' ? 'var(--danger)' : null
+  const saveLabel = saveStatus === 'saved' ? 'Progress saved'
+                  : saveStatus === 'saving' ? 'Saving…'
+                  : saveStatus === 'error' ? 'Save failed — your progress may not be recorded' : null
 
   return (
     <div style={{
@@ -756,6 +778,19 @@ function ScenarioNav({ scenario, allScenarios, onRestart, onExit }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {saveStatus && (
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontFamily: 'var(--font-mono)', fontSize: 10, color: saveColor,
+            letterSpacing: '0.08em', marginRight: 10,
+          }}>
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%', background: saveColor,
+              animation: saveStatus === 'saving' ? 'pulse 1s ease-in-out infinite' : 'none',
+            }} />
+            {saveLabel}
+          </span>
+        )}
         {allScenarios.length > 1 && (
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-faint)',

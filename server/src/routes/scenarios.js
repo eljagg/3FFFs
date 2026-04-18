@@ -177,28 +177,53 @@ router.post('/:id/submit', async (req, res, next) => {
   try {
     const user = getUser(req)
     const { stageId, optionIndex, correct } = req.body || {}
+    // MERGE user node to guarantee it exists even if syncUser race-condition'd
     await runQuery(
-      `MATCH (u:User {id: $userId}), (st:Stage {id: $stageId})
+      `MERGE (u:User {id: $userId})
+       ON CREATE SET u.email = $email, u.name = $name, u.createdAt = timestamp()
+       SET u.lastSeenAt = timestamp()
+       WITH u
+       MATCH (st:Stage {id: $stageId})
        MERGE (u)-[r:ATTEMPTED_STAGE]->(st)
        SET r.optionIndex = $optionIndex, r.correct = $correct, r.answeredAt = timestamp()`,
-      { userId: user.id, stageId, optionIndex, correct: !!correct }
+      {
+        userId: user.id,
+        email: user.email || null,
+        name: user.name || null,
+        stageId, optionIndex, correct: !!correct,
+      }
     )
-    res.json({ ok: true })
-  } catch (e) { next(e) }
+    res.json({ ok: true, saved: true })
+  } catch (e) {
+    console.error('[/submit]', e.message)
+    next(e)
+  }
 })
 
 router.post('/:id/complete', async (req, res, next) => {
   try {
     const user = getUser(req)
     await runQuery(
-      `MATCH (u:User {id: $userId}), (sc:Scenario {id: $id})
+      `MERGE (u:User {id: $userId})
+       ON CREATE SET u.email = $email, u.name = $name, u.createdAt = timestamp()
+       SET u.lastSeenAt = timestamp()
+       WITH u
+       MATCH (sc:Scenario {id: $id})
        MERGE (u)-[c:COMPLETED]->(sc)
        ON CREATE SET c.completedAt = timestamp()
        SET c.lastAt = timestamp()`,
-      { userId: user.id, id: req.params.id }
+      {
+        userId: user.id,
+        email: user.email || null,
+        name: user.name || null,
+        id: req.params.id,
+      }
     )
-    res.json({ ok: true })
-  } catch (e) { next(e) }
+    res.json({ ok: true, saved: true })
+  } catch (e) {
+    console.error('[/complete]', e.message)
+    next(e)
+  }
 })
 
 export default router

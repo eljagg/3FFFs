@@ -110,3 +110,8 @@ code, .mono {
 .fade-up-2  { animation: fadeUp 0.45s ease-out 0.10s both; }
 .fade-up-3  { animation: fadeUp 0.45s ease-out 0.15s both; }
 .fade-up-4  { animation: fadeUp 0.45s ease-out 0.20s both; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

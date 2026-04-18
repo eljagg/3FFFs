@@ -61,20 +61,21 @@ export const USER_COVERAGE = `
  * A user's total progress summary — for the Home page stat cards.
  */
 export const USER_PROGRESS_SUMMARY = `
-  MATCH (u:User {id: $userId})
+  // OPTIONAL MATCH so we still get a row back even if User doesn't exist yet
+  OPTIONAL MATCH (u:User {id: $userId})
   OPTIONAL MATCH (u)-[:COMPLETED]->(sc:Scenario)
   OPTIONAL MATCH (u)-[a:ANSWERED]->(q:Quiz)
   WITH u,
        count(DISTINCT sc) AS scenariosCompleted,
        count(DISTINCT q)  AS quizzesAnswered,
        sum(CASE WHEN a.correct THEN 1 ELSE 0 END) AS correctAnswers
-  MATCH (t:Technique)-[:PART_OF]->(:Tactic)
+  OPTIONAL MATCH (t:Technique)-[:PART_OF]->(:Tactic)
   WITH u, scenariosCompleted, quizzesAnswered, correctAnswers,
        count(DISTINCT t) AS totalTechniques
   OPTIONAL MATCH (u)-[:COMPLETED]->(sc2:Scenario)-[:HAS_STAGE]->(:Stage)-[:USES_TECHNIQUE]->(coveredTech:Technique)
   RETURN scenariosCompleted,
          quizzesAnswered,
-         correctAnswers,
+         coalesce(correctAnswers, 0) AS correctAnswers,
          totalTechniques,
          count(DISTINCT coveredTech) AS techniquesEncountered
 `
