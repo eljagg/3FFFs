@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/AppShell.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import RolePicker from './pages/RolePicker.jsx'
 import Home from './pages/Home.jsx'
 import Scenarios from './pages/Scenarios.jsx'
@@ -24,6 +25,12 @@ function ManagerRoute({ children }) {
   return children
 }
 
+// Wraps a page with an error boundary so crashes show a readable error
+// instead of a blank screen.
+function Safe({ children }) {
+  return <ErrorBoundary>{children}</ErrorBoundary>
+}
+
 export default function App() {
   const { role } = useUser()
   if (!role) return <RolePicker />
@@ -32,17 +39,17 @@ export default function App() {
     <HashRouter>
       <Routes>
         <Route element={<AppShell />}>
-          <Route path="/"             index     element={<Home />} />
-          <Route path="/scenarios"              element={<Scenarios />} />
-          <Route path="/scenarios/:id"          element={<Scenario />} />
-          <Route path="/coverage"               element={<Coverage />} />
-          <Route path="/matrix"                 element={<Matrix />} />
-          <Route path="/explorer"               element={<Explorer />} />
-          <Route path="/play"                   element={<SignalSort />} />
-          <Route path="/framework"              element={<Framework />} />
-          <Route path="/quiz"                   element={<Quiz />} />
-          <Route path="/tutor"                  element={<Tutor />} />
-          <Route path="/team"                   element={<ManagerRoute><Team /></ManagerRoute>} />
+          <Route path="/"             index     element={<Safe><Home /></Safe>} />
+          <Route path="/scenarios"              element={<Safe><Scenarios /></Safe>} />
+          <Route path="/scenarios/:id"          element={<Safe><Scenario /></Safe>} />
+          <Route path="/coverage"               element={<Safe><Coverage /></Safe>} />
+          <Route path="/matrix"                 element={<Safe><Matrix /></Safe>} />
+          <Route path="/explorer"               element={<Safe><Explorer /></Safe>} />
+          <Route path="/play"                   element={<Safe><SignalSort /></Safe>} />
+          <Route path="/framework"              element={<Safe><Framework /></Safe>} />
+          <Route path="/quiz"                   element={<Safe><Quiz /></Safe>} />
+          <Route path="/tutor"                  element={<Safe><Tutor /></Safe>} />
+          <Route path="/team"                   element={<ManagerRoute><Safe><Team /></Safe></ManagerRoute>} />
           <Route path="*"                       element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

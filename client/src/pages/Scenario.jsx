@@ -29,14 +29,25 @@ export default function Scenario() {
     setLoading(true)
     api.getScenarioPath(id)
       .then(d => {
-        setData(d)
-        const first = d.path?.[0]?.stage?.id
-        if (first) {
-          setCurrentStageId(first)
-          setPathTaken([first])
+        // Defensive: filter out any malformed path entries to prevent silent crashes
+        const cleanData = {
+          ...d,
+          path: (d.path || []).filter(p => p && p.stage && p.stage.id),
+          consequenceStages: (d.consequenceStages || []).filter(p => p && p.stage && p.stage.id),
         }
+        if (cleanData.path.length === 0) {
+          setError('Scenario has no stages. Try re-running the seed.')
+          return
+        }
+        setData(cleanData)
+        const first = cleanData.path[0].stage.id
+        setCurrentStageId(first)
+        setPathTaken([first])
       })
-      .catch(e => setError(e.message))
+      .catch(e => {
+        console.error('Failed to load scenario:', e)
+        setError(e.message || 'Unknown error loading scenario')
+      })
       .finally(() => setLoading(false))
   }, [id])
 
@@ -58,7 +69,7 @@ export default function Scenario() {
   const severityColor = SEVERITY_COLORS[scenario.severity] || 'var(--ink)'
 
   // Progress = how many primary stages we've answered correctly
-  const correctPrimaryCount = path.filter(p => answers[p.stage.id]?.correct).length
+  const correctPrimaryCount = path.filter(p => p?.stage?.id && answers[p.stage.id]?.correct).length
   const progressPct = path.length ? (correctPrimaryCount / path.length) * 100 : 0
   const tookConsequencePath = pathTaken.some(id => allStages[id]?.stage?.type === 'consequence')
 
