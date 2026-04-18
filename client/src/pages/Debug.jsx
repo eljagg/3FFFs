@@ -61,8 +61,8 @@ export default function Debug() {
       const token = await getAccessTokenSilently()
       logs.push({ path: '(auth)', status: 'ok', body: 'token acquired: ' + token.slice(0, 20) + '…' })
 
-      // Attempt 1: where the client currently expects
-      const primary = await tryEndpoint('/api/progress/debug-state', token)
+      // Attempt 1: the new inlined-in-index.js route (v14)
+      const primary = await tryEndpoint('/api/debug-state', token)
       logs.push(primary)
       if (primary.ok && primary.isJson) {
         setState(primary.body)
@@ -70,8 +70,8 @@ export default function Debug() {
         return
       }
 
-      // Attempt 2: fallback to the original debug route
-      const fallback = await tryEndpoint('/api/debug/graph-state', token)
+      // Attempt 2: fallback to the v12 progress sub-route
+      const fallback = await tryEndpoint('/api/progress/debug-state', token)
       logs.push(fallback)
       if (fallback.ok && fallback.isJson) {
         setState(fallback.body)
@@ -79,7 +79,16 @@ export default function Debug() {
         return
       }
 
-      // Attempt 3: plain /api/me as a sanity check that ANY authed request works
+      // Attempt 3: fallback to the v8 original debug route
+      const fallback2 = await tryEndpoint('/api/debug/graph-state', token)
+      logs.push(fallback2)
+      if (fallback2.ok && fallback2.isJson) {
+        setState(fallback2.body)
+        setAttemptLog(logs)
+        return
+      }
+
+      // Attempt 4: plain /api/me as a sanity check that ANY authed request works
       const me = await tryEndpoint('/api/me', token)
       logs.push(me)
 
@@ -99,7 +108,7 @@ export default function Debug() {
     try {
       const token = await getAccessTokenSilently()
       const base = import.meta.env.VITE_API_URL || ''
-      const paths = ['/api/progress/reset-my-progress', '/api/debug/reset-my-progress']
+      const paths = ['/api/debug-reset', '/api/progress/reset-my-progress', '/api/debug/reset-my-progress']
       let ok = false
       for (const p of paths) {
         try {
