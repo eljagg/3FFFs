@@ -4,9 +4,19 @@
  * Each stage has a stable `id`. Options may carry `leadsTo` pointing to a
  * consequence stage within the same scenario. If absent, the player advances
  * to the next primary stage in order.
+ *
+ * The SCENARIOS export combines:
+ *   - Core/generic scenarios defined inline below (SC001-SC003)
+ *   - Caribbean-specific scenarios imported from caribbean-scenarios.js
+ *     (SC004-SC009) — grounded in real Jamaica/regional fraud cases
+ *
+ * To add more scenarios: either inline them here, or create a new module
+ * and spread it in at the bottom the same way caribbean-scenarios is.
  */
 
-export const SCENARIOS = [
+import { CARIBBEAN_SCENARIOS } from './caribbean-scenarios.js'
+
+const CORE_SCENARIOS = [
   {
     id: 'SC001',
     title: 'Business Email Compromise — CFO impersonation',
@@ -309,3 +319,8 @@ export const SCENARIOS = [
     ],
   },
 ]
+
+/**
+ * Full scenario set — core + Caribbean-specific. Used by the seed loader.
+ */
+export const SCENARIOS = [...CORE_SCENARIOS, ...CARIBBEAN_SCENARIOS]
