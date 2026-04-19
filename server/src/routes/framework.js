@@ -3,14 +3,25 @@ import { runQuery } from '../lib/neo4j.js'
 
 const router = Router()
 
-// GET /api/framework/tactics — list of 7 tactics with technique counts
+// GET /api/framework/tactics — tactics with their techniques nested, for the
+// Framework encyclopedia page. Each tactic carries its description (from the
+// MITRE F3 Excel) and the full list of techniques that sit under it.
 router.get('/tactics', async (_req, res, next) => {
   try {
     const rows = await runQuery(`
       MATCH (t:Tactic)
       OPTIONAL MATCH (tech:Technique)-[:PART_OF]->(t)
-      WITH t, count(tech) AS techCount
-      RETURN t { .*, techCount: techCount } AS tactic
+      WITH t, collect(
+        CASE WHEN tech IS NOT NULL
+             THEN tech { .id, .name, .description }
+             ELSE null END
+      ) AS rawTechniques
+      WITH t, [x IN rawTechniques WHERE x IS NOT NULL] AS techniques
+      RETURN t {
+        .*,
+        techCount: size(techniques),
+        techniques: techniques
+      } AS tactic
       ORDER BY t.order
     `)
     res.json({ tactics: rows.map(r => r.tactic) })
