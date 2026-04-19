@@ -34,15 +34,35 @@ router.get('/', async (req, res, next) => {
     const role = (req.query.role || '').toLowerCase()
     const applyFilter = !!role && !isAdmin
 
+    // Two fixes here vs the v16 version:
+    //   1. Severity sort uses a CASE-mapped integer — the previous
+    //      `ORDER BY severity DESC` sorted alphabetically so "medium"
+    //      ranked above "high", which was the wrong way round.
+    //   2. OPTIONAL MATCH joins the current user's COMPLETED edges so
+    //      the client can render a "✓ completed" indicator per card
+    //      without needing a second request.
     const rows = await runQuery(
       `MATCH (s:Scenario)
        ${applyFilter ? `WHERE ANY(r IN s.roles WHERE toLower(r) = $role)` : ''}
        OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage)
        WHERE st.type IS NULL OR st.type = 'primary'
        WITH s, count(st) AS stageCount
-       RETURN s { .*, stageCount: stageCount } AS scenario
-       ORDER BY s.severity DESC, s.id`,
-      { role }
+       OPTIONAL MATCH (u:User {id: $userId})-[c:COMPLETED]->(s)
+       RETURN s {
+         .*,
+         stageCount: stageCount,
+         completed: c IS NOT NULL,
+         completedAt: c.completedAt
+       } AS scenario
+       ORDER BY
+         CASE s.severity
+           WHEN 'high'   THEN 1
+           WHEN 'medium' THEN 2
+           WHEN 'low'    THEN 3
+           ELSE 99
+         END,
+         s.id`,
+      { role, userId: user.id }
     )
     res.json({
       scenarios: rows.map(r => r.scenario),
