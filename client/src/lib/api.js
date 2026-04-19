@@ -36,8 +36,14 @@ export const api = {
   completeScenario:(id)      => request(`/api/scenarios/${id}/complete`, { method: 'POST' }),
   chooseStageOption:(id, b) => request(`/api/scenarios/${id}/choose`, { method: 'POST', body: JSON.stringify(b) }),
 
-  getQuiz:         (role)    => request(`/api/quiz?role=${encodeURIComponent(role || '')}`),
-  submitQuiz:      (b)       => request('/api/quiz/answer', { method: 'POST', body: JSON.stringify(b) }),
+  // Quiz — Quiz.jsx calls getQuizzes({role}) on load and quizAnswer(userId, quizId, optionIndex, correct) per answer.
+  // (userId parameter is for compatibility — the server derives the user from the auth token.)
+  getQuizzes:      ({ role } = {}) => request(`/api/quiz?role=${encodeURIComponent(role || '')}`),
+  quizAnswer:      (_userId, quizId, optionIndex, correct) =>
+    request('/api/quiz/answer', {
+      method: 'POST',
+      body: JSON.stringify({ quizId, optionIndex, correct: !!correct }),
+    }),
 
   getProgress:     ()        => request('/api/progress'),
   getCoverage:     ()        => request('/api/progress/coverage'),
