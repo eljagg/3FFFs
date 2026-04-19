@@ -544,9 +544,40 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {stage.options.map((opt, i) => {
               const picked = answer?.optionIndex === i
-              const showCorrect = !!answer && opt.correct
+              const isAnswered = !!answer
+              const showCorrect = isAnswered && opt.correct
               const showWrong = picked && !opt.correct
+              const showOtherWrong = isAnswered && !picked && !opt.correct
               const leadsToConsequence = !!opt.leadsTo
+
+              // Rationale styling differs by role:
+              //   • correct option — green, emphasised ("This was the right call.")
+              //   • your wrong pick — red, explains what went wrong
+              //   • other wrong options — muted, for completeness without noise
+              let rationaleStyle = null
+              let rationaleLabel = null
+              if (showCorrect) {
+                rationaleStyle = {
+                  borderColor: 'var(--success)',
+                  background: 'var(--success-bg)',
+                  color: 'var(--ink)',
+                }
+                rationaleLabel = picked ? 'Why this was right' : 'Why this is the right call'
+              } else if (showWrong) {
+                rationaleStyle = {
+                  borderColor: 'var(--danger)',
+                  background: 'var(--danger-bg)',
+                  color: 'var(--ink)',
+                }
+                rationaleLabel = 'Why this was off'
+              } else if (showOtherWrong) {
+                rationaleStyle = {
+                  borderColor: 'var(--rule)',
+                  background: 'var(--paper-dim)',
+                  color: 'var(--ink-soft)',
+                }
+                rationaleLabel = 'Why this would have fallen short'
+              }
 
               return (
                 <motion.button
@@ -555,7 +586,8 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
                   whileTap={!answer ? { scale: 0.99 } : {}}
                   animate={
                     showCorrect ? { backgroundColor: 'var(--success-bg)', borderColor: 'var(--success)' } :
-                    showWrong ? { backgroundColor: 'var(--danger-bg)', borderColor: 'var(--danger)', x: [0, -4, 4, -4, 4, 0] } : {}
+                    showWrong ? { backgroundColor: 'var(--danger-bg)', borderColor: 'var(--danger)', x: [0, -4, 4, -4, 4, 0] } :
+                    showOtherWrong ? { opacity: 0.75 } : {}
                   }
                   transition={{ duration: showWrong ? 0.4 : 0.3 }}
                   style={{
@@ -579,15 +611,27 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
                       <span style={{ color: 'var(--danger)', fontSize: 18, lineHeight: 1 }}>✕</span>
                     )}
                   </div>
-                  {(picked || (answer && opt.correct)) && opt.rationale && (
+                  {isAnswered && opt.rationale && rationaleStyle && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                      transition={{ duration: 0.3 }}
+                      transition={{ duration: 0.3, delay: showCorrect ? 0 : 0.1 }}
                       style={{
-                        marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--rule)',
-                        fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.55,
+                        marginTop: 10, padding: '10px 12px',
+                        border: '1px solid', borderRadius: 'var(--radius)',
+                        fontSize: 13, lineHeight: 1.55,
+                        ...rationaleStyle,
                       }}
-                    >{opt.rationale}</motion.div>
+                    >
+                      {rationaleLabel && (
+                        <div style={{
+                          fontFamily: 'var(--font-mono)', fontSize: 9,
+                          letterSpacing: '0.12em', textTransform: 'uppercase',
+                          color: showCorrect ? 'var(--success)' : showWrong ? 'var(--danger)' : 'var(--ink-faint)',
+                          marginBottom: 4, fontWeight: 600,
+                        }}>{rationaleLabel}</div>
+                      )}
+                      {opt.rationale}
+                    </motion.div>
                   )}
                 </motion.button>
               )

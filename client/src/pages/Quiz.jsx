@@ -201,11 +201,39 @@ export default function Quiz() {
         })}
       </div>
 
-      {isAnswered && (
-        <div style={styles.rationale(picked.correct)}>
-          {q.options[picked.i].rationale}
-        </div>
-      )}
+      {isAnswered && (() => {
+        const pickedOpt = q.options[picked.i]
+        const correctOpt = q.options.find(o => o.correct)
+        const pickedWasCorrect = picked.correct
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+            {/* Your pick — shown first, framed by whether it was right */}
+            {pickedOpt?.rationale && (
+              <div style={styles.rationale(pickedWasCorrect)}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 9,
+                  letterSpacing: '0.12em', textTransform: 'uppercase',
+                  fontWeight: 600, marginBottom: 4, opacity: 0.85,
+                }}>{pickedWasCorrect ? 'Why this was right' : 'Why this was off'}</div>
+                {pickedOpt.rationale}
+              </div>
+            )}
+            {/* If they got it wrong, follow with the correct answer's rationale
+                so they actually learn what the right call looks like */}
+            {!pickedWasCorrect && correctOpt?.rationale && (
+              <div style={styles.rationale(true)}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 9,
+                  letterSpacing: '0.12em', textTransform: 'uppercase',
+                  fontWeight: 600, marginBottom: 4, opacity: 0.85,
+                }}>Why this is the right call</div>
+                {correctOpt.rationale}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <button onClick={next} disabled={!isAnswered} style={styles.nextBtn}>
         {idx < total - 1 ? 'Next question →' : 'See results →'}

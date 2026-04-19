@@ -57,4 +57,7 @@ export const api = {
   getSignalPool:       () => request('/api/games/signals'),
   submitSignalScore:   (score) => request('/api/games/signals/score', { method: 'POST', body: JSON.stringify({ score }) }),
   getSignalLeaderboard:() => request('/api/games/signals/leaderboard'),
+
+  // Achievements
+  getBadges:       ()        => request('/api/badges'),
 }
