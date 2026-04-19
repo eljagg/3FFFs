@@ -16,14 +16,27 @@ function ensureStageId(stage, scenarioId, fallbackIndex) {
   return `${scenarioId}-S${stage?.order ?? fallbackIndex}`
 }
 
-// GET /api/scenarios — list, optionally filtered by role
+// GET /api/scenarios — list, optionally filtered by job-function role
+//
+// Role dimensions:
+//   - Auth0 role (admin | manager | trainee) = permissions
+//   - ?role=<job>  (teller | analyst | soc | executive) = curriculum targeting
+//
+// Auth0 admins bypass the curriculum filter entirely so they can see every
+// scenario for testing, demoing, and progress-QA, regardless of which
+// job function they picked in the RolePicker.
+//
 // Defensive: includes stages with no type field (old-seed) as well as type='primary'
 router.get('/', async (req, res, next) => {
   try {
+    const user = getUser(req)
+    const isAdmin = (user.roles || []).includes('admin')
     const role = (req.query.role || '').toLowerCase()
+    const applyFilter = !!role && !isAdmin
+
     const rows = await runQuery(
       `MATCH (s:Scenario)
-       ${role ? `WHERE ANY(r IN s.roles WHERE toLower(r) = $role)` : ''}
+       ${applyFilter ? `WHERE ANY(r IN s.roles WHERE toLower(r) = $role)` : ''}
        OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage)
        WHERE st.type IS NULL OR st.type = 'primary'
        WITH s, count(st) AS stageCount
@@ -31,7 +44,11 @@ router.get('/', async (req, res, next) => {
        ORDER BY s.severity DESC, s.id`,
       { role }
     )
-    res.json({ scenarios: rows.map(r => r.scenario) })
+    res.json({
+      scenarios: rows.map(r => r.scenario),
+      filteredByRole: applyFilter ? role : null,
+      adminOverride: isAdmin && !!role,
+    })
   } catch (e) { next(e) }
 })
 
