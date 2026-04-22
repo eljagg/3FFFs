@@ -37,6 +37,7 @@ export default function AppShell() {
 
   let NAV = BASE_NAV
   if (canSeeTeam) NAV = [...NAV, { to: '/team', label: 'Team' }]
+  if (isAdmin)    NAV = [...NAV, { to: '/admin/users', label: 'Admin' }]
   // Debug temporarily visible to all authenticated users during debugging
   NAV = [...NAV, { to: '/debug', label: 'Debug' }]
 

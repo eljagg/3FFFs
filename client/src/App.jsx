@@ -14,6 +14,7 @@ import Tutor from './pages/Tutor.jsx'
 import Team from './pages/Team.jsx'
 import SignalSort from './pages/SignalSort.jsx'
 import Debug from './pages/Debug.jsx'
+import AdminUsers from './pages/AdminUsers.jsx'
 import { useUser } from './lib/user.jsx'
 import { useAuth0 } from '@auth0/auth0-react'
 
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="/quiz"                   element={<Safe><Quiz /></Safe>} />
           <Route path="/tutor"                  element={<Safe><Tutor /></Safe>} />
           <Route path="/team"                   element={<ManagerRoute><Safe><Team /></Safe></ManagerRoute>} />
+          <Route path="/admin/users"            element={<AdminRoute><Safe><AdminUsers /></Safe></AdminRoute>} />
           <Route path="/debug"                  element={<Safe><Debug /></Safe>} />
           <Route path="*"                       element={<Navigate to="/" replace />} />
         </Route>

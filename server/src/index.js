@@ -10,6 +10,8 @@ import tutor from './routes/tutor.js'
 import team from './routes/team.js'
 import games from './routes/games.js'
 import badges from './routes/badges.js'
+import admin from './routes/admin.js'
+import authCheck from './routes/auth-check.js'
 
 const app = express()
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true, credentials: true }))
@@ -21,6 +23,15 @@ app.get('/health', async (_req, res) => {
 })
 
 app.use('/api/framework', framework)
+
+// ============================================================================
+// PUBLIC invite-check endpoint — MUST be mounted BEFORE the requireAuth wall.
+// It authenticates via a shared secret (X-Invite-Secret) because the caller
+// is the Auth0 Post-Login Action, which runs server-side and doesn't carry
+// a user JWT. See server/src/routes/auth-check.js.
+// ============================================================================
+app.use('/api/auth', authCheck)
+
 app.use('/api', requireAuth, syncUser)
 app.get('/api/me', (req, res) => res.json({ user: getUser(req) }))
 app.use('/api/scenarios', scenarios)
@@ -30,6 +41,7 @@ app.use('/api/tutor', tutor)
 app.use('/api/team', team)
 app.use('/api/games', games)
 app.use('/api/badges', badges)
+app.use('/api/admin', admin)
 
 // ============================================================================
 // DEBUG ROUTES — INLINED to bypass any build caching issues that were keeping
