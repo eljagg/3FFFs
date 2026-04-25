@@ -225,24 +225,56 @@ router.post('/:id/choose', async (req, res, next) => {
 router.post('/:id/submit', async (req, res, next) => {
   try {
     const user = getUser(req)
-    const { stageId, optionIndex, correct } = req.body || {}
-    // MERGE user node to guarantee it exists even if syncUser race-condition'd
+    const { stageId, optionIndex, correct, confidence } = req.body || {}
+
+    // v25.2: track attempt history. Each call records a NEW edge with
+    // attempt = (current max + 1). This preserves the full trail when a
+    // user clicks "Try again" on a wrong answer or replays a stage on a
+    // completed scenario. First-attempt-only stats stay queryable via
+    // WHERE r.attempt = 1.
+    //
+    // Backwards compatibility: pre-v25.2 edges have no `attempt` property.
+    // coalesce(max(r.attempt), 0) treats absent as 0 so the first new edge
+    // post-deploy is recorded as attempt 1. If a stage already had a
+    // pre-v25.2 attempt edge (no .attempt property), the new code starts
+    // counting from 1 — old edges remain in the graph as historical noise
+    // but don't interfere with new attempt counts.
+    const priorAttemptRows = await runQuery(
+      `MATCH (u:User {id: $userId})-[r:ATTEMPTED_STAGE]->(st:Stage {id: $stageId})
+       RETURN coalesce(max(r.attempt), 0) AS maxAttempt`,
+      { userId: user.id, stageId }
+    )
+    const nextAttempt = (priorAttemptRows[0]?.maxAttempt || 0) + 1
+
     await runQuery(
       `MERGE (u:User {id: $userId})
        ON CREATE SET u.email = $email, u.name = $name, u.createdAt = timestamp()
        SET u.lastSeenAt = timestamp()
        WITH u
        MATCH (st:Stage {id: $stageId})
-       MERGE (u)-[r:ATTEMPTED_STAGE]->(st)
-       SET r.optionIndex = $optionIndex, r.correct = $correct, r.answeredAt = timestamp()`,
+       // CREATE not MERGE — every attempt is a fresh edge. The (user, stage,
+       // attempt) tuple is implicitly unique because attempt is computed
+       // server-side as max+1, so two simultaneous submits would collide on
+       // the same attempt number; in practice the client rate-limits this.
+       CREATE (u)-[r:ATTEMPTED_STAGE {
+         optionIndex: $optionIndex,
+         correct: $correct,
+         confidence: $confidence,
+         attempt: $attempt,
+         answeredAt: timestamp()
+       }]->(st)`,
       {
         userId: user.id,
         email: user.email || null,
         name: user.name || null,
-        stageId, optionIndex, correct: !!correct,
+        stageId,
+        optionIndex,
+        correct: !!correct,
+        confidence: typeof confidence === 'number' ? confidence : null,
+        attempt: nextAttempt,
       }
     )
-    res.json({ ok: true, saved: true })
+    res.json({ ok: true, saved: true, attempt: nextAttempt })
   } catch (e) {
     console.error('[/submit]', e.message)
     next(e)

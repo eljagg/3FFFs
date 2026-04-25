@@ -49,6 +49,18 @@ export default function Scenario() {
   // v25.1: AASE concept sidebar — opens when the analyst clicks the "Look up"
   // affordance on a stage that has a TESTS_CONCEPT edge to a Concept node.
   const [conceptSidebar, setConceptSidebar] = useState({ open: false, conceptId: null })
+  // v25.2: collapse the scenario header (title, summary, progress bar) once
+  // the learner is committed to engaging — frees vertical space so the
+  // AttackPath stays visible alongside the active stage. Click the collapsed
+  // bar to re-expand.
+  const [headerCollapsed, setHeaderCollapsed] = useState(false)
+  // v25.2: tracks which stages have a wrong-answer try-again offer pending.
+  // When a learner gets a stage wrong, auto-advance is suppressed and a
+  // "Try again" button appears alongside NEXT. Picking try-again resets the
+  // local answer state for that stage so they can re-attempt; the original
+  // attempt stays in the graph (server records each attempt as a separate
+  // edge with attempt:N).
+  const [tryAgainOffered, setTryAgainOffered] = useState({})
 
   useEffect(() => {
     api.listScenarios().then(r => setAllScenarios(r.scenarios || [])).catch(() => {})
@@ -78,6 +90,16 @@ export default function Scenario() {
       })
       .finally(() => setLoading(false))
   }, [id])
+
+  // v25.2: collapse the header when the learner moves past Stage 1, in
+  // addition to the on-answer trigger in handleAnswer. Covers the case where
+  // they navigate via prev/next or click an AttackPath circle without having
+  // submitted on the current stage. Idempotent — only flips false→true.
+  useEffect(() => {
+    if (!data || !currentStageId || headerCollapsed) return
+    const idx = data.path.findIndex(p => p.stage.id === currentStageId)
+    if (idx > 0) setHeaderCollapsed(true)
+  }, [currentStageId, data, headerCollapsed])
 
   const allStages = useMemo(() => {
     if (!data) return {}
@@ -111,6 +133,10 @@ export default function Scenario() {
     setNavigationError(null)
     setSaveStatus('saving')
 
+    // v25.2: collapse the header on first answer so the AttackPath becomes
+    // the dominant scroll anchor for subsequent stages. Idempotent.
+    if (!headerCollapsed) setHeaderCollapsed(true)
+
     api.submitStage(scenario.id, { stageId: stage.id, optionIndex, correct, confidence: stageConfidence })
       .then(() => {
         setSaveStatus('saved')
@@ -120,6 +146,18 @@ export default function Scenario() {
         console.warn('submitStage failed:', err.message)
         setSaveStatus('error')
       })
+
+    // v25.2: on a WRONG answer, suppress auto-advance and offer Try-again.
+    // The learner stays on the stage with the rationale visible, can choose
+    // to retry the question (resets the local answer state, keeps confidence
+    // locked at the original value) or click NEXT to advance manually.
+    //
+    // On a CORRECT answer, behavior is unchanged from v25.1: auto-advance
+    // after 1s. There's nothing to consolidate by retrying a right answer.
+    if (!correct) {
+      setTryAgainOffered(t => ({ ...t, [stage.id]: true }))
+      return
+    }
 
     setTimeout(async () => {
       try {
@@ -152,6 +190,29 @@ export default function Scenario() {
         }
       }
     }, 1000)
+  }
+
+  // v25.2: reset local state for a stage so the learner can re-attempt.
+  // The original answer stays on the graph (each attempt is a separate
+  // ATTEMPTED_STAGE edge server-side); this only clears the in-memory state
+  // that controls the panel's visual lock and the rationale display.
+  //
+  // Confidence is preserved by design — the calibration record is set on
+  // first attempt only. If the learner could re-rate confidence on retry,
+  // the metric becomes meaningless ("I was always confident in my final
+  // answer" — sure, but that's not what calibration is measuring).
+  function handleTryAgain(stageId) {
+    setAnswers(a => {
+      const next = { ...a }
+      delete next[stageId]
+      return next
+    })
+    setTryAgainOffered(t => {
+      const next = { ...t }
+      delete next[stageId]
+      return next
+    })
+    setNavigationError(null)
   }
 
   function handleManualAdvance() {
@@ -193,34 +254,126 @@ export default function Scenario() {
           saveStatus={saveStatus}
         />
 
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 10, flexWrap: 'wrap' }}>
-          <h1 style={{
-            fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 500,
-            lineHeight: 1.1, letterSpacing: '-0.02em',
-          }}>{scenario.title}</h1>
-          <span style={{
-            fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em',
-            textTransform: 'uppercase', padding: '3px 8px', border: '1px solid',
-            borderColor: severityColor, color: severityColor, borderRadius: 4,
-          }}>{scenario.severity} severity</span>
-          {scenario.estimatedLoss && (
-            // v24.1: was --ink-faint, now --ink-soft for stronger contrast
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
-              ~${(scenario.estimatedLoss / 1_000_000).toFixed(2)}M estimated loss
+        {/* v25.2: collapsible header. Default expanded on first load (so the
+            learner reads the framing); auto-collapses once they answer the
+            first stage or navigate to Stage 2+. Click anywhere on the
+            collapsed bar to re-expand. */}
+        {headerCollapsed ? (
+          <motion.button
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
+            onClick={() => setHeaderCollapsed(false)}
+            aria-label="Expand scenario summary"
+            aria-expanded="false"
+            style={{
+              width: '100%',
+              display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+              padding: '12px 16px',
+              marginBottom: 24,
+              background: 'var(--paper-hi)',
+              border: '1px solid var(--rule)',
+              borderRadius: 'var(--radius-lg)',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'border-color var(--dur) ease, background var(--dur) ease',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--rule-strong)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--rule)' }}
+          >
+            <div style={{
+              fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 500,
+              color: 'var(--ink)', flex: 1, minWidth: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {scenario.title}
+            </div>
+            <span style={{
+              fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em',
+              textTransform: 'uppercase', padding: '2px 6px', border: '1px solid',
+              borderColor: severityColor, color: severityColor, borderRadius: 3,
+              flexShrink: 0,
+            }}>{scenario.severity}</span>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-soft)',
+              flexShrink: 0,
+            }}>
+              {Math.round(progressPct)}% complete
             </span>
-          )}
-        </div>
-        {/* v24.1: scenario summary uses --ink (was --ink-soft) — this is body copy, not annotation */}
-        <p style={{ fontSize: 15, color: 'var(--ink)', lineHeight: 1.6, maxWidth: 760, marginBottom: 28, opacity: 0.92 }}>
-          {scenario.summary}
-        </p>
-        <div style={{ height: 3, background: 'var(--rule)', borderRadius: 2, overflow: 'hidden', marginBottom: 32 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="var(--ink-soft)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              style={{ flexShrink: 0 }} aria-hidden="true">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </motion.button>
+        ) : (
           <motion.div
-            animate={{ width: `${progressPct}%` }}
-            transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
-            style={{ height: '100%', background: 'var(--accent)' }}
-          />
-        </div>
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.28 }}
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 10, flexWrap: 'wrap' }}>
+              <h1 style={{
+                fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 500,
+                lineHeight: 1.1, letterSpacing: '-0.02em',
+              }}>{scenario.title}</h1>
+              <span style={{
+                fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em',
+                textTransform: 'uppercase', padding: '3px 8px', border: '1px solid',
+                borderColor: severityColor, color: severityColor, borderRadius: 4,
+              }}>{scenario.severity} severity</span>
+              {scenario.estimatedLoss && (
+                // v24.1: was --ink-faint, now --ink-soft for stronger contrast
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
+                  ~${(scenario.estimatedLoss / 1_000_000).toFixed(2)}M estimated loss
+                </span>
+              )}
+              {/* v25.2: explicit collapse affordance, mirrors the chevron on
+                  the collapsed bar so users know expansion is reversible */}
+              <button
+                onClick={() => setHeaderCollapsed(true)}
+                aria-label="Collapse scenario summary"
+                aria-expanded="true"
+                style={{
+                  marginLeft: 'auto',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: 'transparent', border: '1px solid var(--rule)',
+                  borderRadius: 4, padding: '4px 10px',
+                  fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
+                  color: 'var(--ink-soft)', textTransform: 'uppercase', cursor: 'pointer',
+                  fontWeight: 500,
+                  transition: 'border-color var(--dur) ease, color var(--dur) ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--rule-strong)'
+                  e.currentTarget.style.color = 'var(--ink)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--rule)'
+                  e.currentTarget.style.color = 'var(--ink-soft)'
+                }}
+              >
+                <span>Collapse</span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="18 15 12 9 6 15" />
+                </svg>
+              </button>
+            </div>
+            {/* v24.1: scenario summary uses --ink (was --ink-soft) — this is body copy, not annotation */}
+            <p style={{ fontSize: 15, color: 'var(--ink)', lineHeight: 1.6, maxWidth: 760, marginBottom: 28, opacity: 0.92 }}>
+              {scenario.summary}
+            </p>
+            <div style={{ height: 3, background: 'var(--rule)', borderRadius: 2, overflow: 'hidden', marginBottom: 32 }}>
+              <motion.div
+                animate={{ width: `${progressPct}%` }}
+                transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+                style={{ height: '100%', background: 'var(--accent)' }}
+              />
+            </div>
+          </motion.div>
+        )}
       </motion.div>
 
       <ScenarioArt scenarioId={scenario.id} />
@@ -233,8 +386,39 @@ export default function Scenario() {
           currentStageId={currentStageId}
           pathTaken={pathTaken}
           onStageClick={(sid) => {
+            // v25.2: when scenario is completed, ALL stages become clickable —
+            // the AttackPath becomes a stage selector for replay. Clicking
+            // resets local answer/confidence for that stage AND re-opens the
+            // play surface (sets completed=false). The original answers
+            // remain in the graph as historical record.
+            //
+            // When NOT completed, only visited stages are clickable (existing
+            // v25.1 behaviour).
+            if (completed) {
+              setAnswers(a => {
+                const next = { ...a }
+                delete next[sid]
+                return next
+              })
+              setConfidence(c => {
+                const next = { ...c }
+                delete next[sid]
+                return next
+              })
+              setTryAgainOffered(t => {
+                const next = { ...t }
+                delete next[sid]
+                return next
+              })
+              setCurrentStageId(sid)
+              setCompleted(false)
+              setNavigationError(null)
+              return
+            }
             if (pathTaken.includes(sid)) setCurrentStageId(sid)
           }}
+          // v25.2: tells AttackPath whether to make all circles clickable
+          allClickable={completed}
         />
       </div>
 
@@ -254,7 +438,15 @@ export default function Scenario() {
               totalPrimary={path.length}
               currentIdx={path.findIndex(p => p.stage.id === currentStageId)}
             />
-            {answers[currentStageId] && (
+            {answers[currentStageId] && (() => {
+              // v25.2: three banner variants
+              //   1. navigationError → red banner, error message + Continue
+              //   2. wrong answer + tryAgain offered → neutral banner with
+              //      "Take a moment with the rationale" + Try again + Continue
+              //   3. right answer → existing "Advancing…" + Continue (auto-advance fires)
+              const ans = answers[currentStageId]
+              const showTryAgain = ans && !ans.correct && tryAgainOffered[currentStageId]
+              return (
               <div style={{
                 marginTop: 18, padding: '16px 20px',
                 background: navigationError ? 'var(--danger-bg)' : 'var(--paper-hi)',
@@ -271,6 +463,15 @@ export default function Scenario() {
                       {/* v24.1: was --ink-soft, now --ink */}
                       <div style={{ fontSize: 13, color: 'var(--ink)' }}>{navigationError}</div>
                     </>
+                  ) : showTryAgain ? (
+                    <>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 4, fontWeight: 600 }}>
+                        Take a moment with the rationale
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+                        Try again to consolidate the lesson, or continue to the next stage. Your original answer is on the record either way.
+                      </div>
+                    </>
                   ) : (
                     /* v24.1: was --ink-soft, now --ink */
                     <div style={{ fontSize: 13, color: 'var(--ink)' }}>
@@ -278,6 +479,38 @@ export default function Scenario() {
                     </div>
                   )}
                 </div>
+                {/* v25.2: secondary "Try again" button on wrong answers — opt-in
+                    consolidation. Original confidence remains locked; the
+                    server records this as attempt:2+ with the new option. */}
+                {showTryAgain && (
+                  <button
+                    onClick={() => handleTryAgain(currentStageId)}
+                    style={{
+                      padding: '9px 16px', fontSize: 13, fontWeight: 500,
+                      background: 'transparent', color: 'var(--ink)',
+                      border: '1px solid var(--rule-strong)',
+                      borderRadius: 'var(--radius-lg)',
+                      cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      transition: 'border-color var(--dur) ease, background var(--dur) ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--accent)'
+                      e.currentTarget.style.background = 'var(--paper-dim)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--rule-strong)'
+                      e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="1 4 1 10 7 10" />
+                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                    </svg>
+                    Try again
+                  </button>
+                )}
                 <button
                   onClick={handleManualAdvance}
                   style={{
@@ -288,7 +521,8 @@ export default function Scenario() {
                   }}
                 >Continue →</button>
               </div>
-            )}
+              )
+            })()}
           </>
         )}
         {completed && (() => {
@@ -331,7 +565,7 @@ export default function Scenario() {
   )
 }
 
-function AttackPath({ path = [], consequenceStages = [], answers = {}, currentStageId, pathTaken = [], onStageClick }) {
+function AttackPath({ path = [], consequenceStages = [], answers = {}, currentStageId, pathTaken = [], onStageClick, allClickable = false }) {
   const consequencesByParent = useMemo(() => {
     const map = {}
     const safeConsequences = Array.isArray(consequenceStages) ? consequenceStages : []
@@ -367,6 +601,9 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
           const isCorrect = ans?.correct
           const isUnique = entry.tactic?.uniqueToF3
           const isVisited = pathTaken.includes(stageId)
+          // v25.2: when allClickable (scenario completed), every stage is
+          // clickable for replay. Visual treatment matches a visited stage.
+          const isClickable = isVisited || allClickable
           const consequences = consequencesByParent[stageId] || []
 
           return (
@@ -383,13 +620,19 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                 style={{
                   position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column',
                   alignItems: 'center', gap: 10, padding: '0 6px',
-                  background: 'transparent', cursor: isVisited ? 'pointer' : 'default',
+                  background: 'transparent', cursor: isClickable ? 'pointer' : 'default',
                   border: 'none',
                   // v24.1: lifted from 0.4 to 0.6 so locked stages remain readable
-                  opacity: isVisited ? 1 : 0.6,
+                  opacity: isClickable ? 1 : 0.6,
                 }}
-                disabled={!isVisited}
-                title={!isVisited ? `${entry.tactic?.name || entry.phase?.name || 'Stage ' + (i + 1)} — locked until you reach it` : undefined}
+                disabled={!isClickable}
+                title={
+                  !isClickable
+                    ? `${entry.tactic?.name || entry.phase?.name || 'Stage ' + (i + 1)} — locked until you reach it`
+                    : allClickable
+                      ? `Replay this stage from a clean slate`
+                      : undefined
+                }
               >
                 <motion.div
                   animate={{
@@ -1010,6 +1253,27 @@ function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allSta
       <p style={{ fontSize: 13, color: 'var(--ink-soft)', maxWidth: 500, margin: '0 auto 24px', lineHeight: 1.6 }}>
         Your progress is logged — check your coverage map to see which F3 techniques you've now encountered.
       </p>
+      {/* v25.2: hint pointing at the AttackPath above. Once a scenario is
+          completed, every stage circle becomes clickable for replay — the
+          analyst can revisit just the one stage they want to consolidate
+          without restarting the whole scenario from the top. */}
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '8px 14px', marginBottom: 24,
+        background: 'var(--paper-hi)',
+        border: '1px solid var(--rule)',
+        borderRadius: 'var(--radius)',
+        fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5,
+      }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+          stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="1 4 1 10 7 10" />
+          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+        </svg>
+        <span>
+          Click any stage circle <em>above</em> to replay it from a clean slate. Your original answers stay on the record.
+        </span>
+      </div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
         {nextScenario && (
           <button
