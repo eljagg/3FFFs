@@ -11,24 +11,22 @@ import InlineTutor from '../components/scenario/InlineTutor.jsx'
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }
 
 /**
- * Branching-aware Scenario page (v24).
+ * Branching-aware Scenario page (v24.1).
  *
- * v24 additions:
- *  - Confidence slider — captured BEFORE the user picks an answer; surfaces
- *    metacognitive blind spots when confidence and correctness diverge.
- *  - WhatIf preview — after a correct answer, the user can opt-in to walk
- *    through the consequence stages they would have hit on a wrong pick.
- *    Multiplies the value of consequence content already in the seed data.
- *  - Inline tutor button — a slide-over Claude that knows the current stage
- *    context. Removes the "leave the scenario, type a question, lose your
- *    place" friction of the standalone /tutor page.
- *  - Live stage map hover previews — circles in the timeline now expose the
- *    technique + a one-line teaser on hover, making the F3 framework feel
- *    alive instead of decorative.
+ * v24.1 readability fixes (vs v24):
+ *  - Body narrative + signals use --ink (not --ink-soft) for full contrast.
+ *  - Answer options never dim before confidence is picked. Instead, the
+ *    confidence slider gets a soft pulse and a small affordance line above
+ *    the options says "pick confidence first" until they do.
+ *  - Answered-state styling is louder: thicker borders, more saturated
+ *    backgrounds, a "Your pick" pill on the chosen option, a "Right answer"
+ *    pill on the correct one. The not-picked-not-correct options stay quiet.
  *
- * - Data: /api/scenarios/:id/path returns primary + consequence stages + branch edges
- * - Navigation: /api/scenarios/:id/choose tells us where to go next based on the option
- * - Visualization: primary stages on horizontal timeline; consequence branches drop below
+ * v24 features (preserved):
+ *  - Confidence slider — captured BEFORE the user picks an answer.
+ *  - WhatIf preview — opt-in walk through consequence stages on correct answer.
+ *  - Inline tutor button — slide-over Claude that knows the current stage.
+ *  - Live stage map hover previews on the timeline.
  */
 
 export default function Scenario() {
@@ -40,17 +38,14 @@ export default function Scenario() {
   const [error, setError] = useState(null)
   const [currentStageId, setCurrentStageId] = useState(null)
   const [answers, setAnswers] = useState({})
-  // v24: confidence is captured per-stage (1-5), keyed by stageId
   const [confidence, setConfidence] = useState({})
-  const [pathTaken, setPathTaken] = useState([])  // ordered list of stageIds
+  const [pathTaken, setPathTaken] = useState([])
   const [completed, setCompleted] = useState(false)
   const [navigationError, setNavigationError] = useState(null)
   const [allScenarios, setAllScenarios] = useState([])
-  const [saveStatus, setSaveStatus] = useState(null) // 'saving' | 'saved' | 'error' | null
-  // v24: tutor slide-over open state
+  const [saveStatus, setSaveStatus] = useState(null)
   const [tutorOpen, setTutorOpen] = useState(false)
 
-  // Load all scenarios so we can offer prev/next navigation
   useEffect(() => {
     api.listScenarios().then(r => setAllScenarios(r.scenarios || [])).catch(() => {})
   }, [])
@@ -59,7 +54,6 @@ export default function Scenario() {
     setLoading(true)
     api.getScenarioPath(id)
       .then(d => {
-        // Defensive: filter out any malformed path entries to prevent silent crashes
         const cleanData = {
           ...d,
           path: (d.path || []).filter(p => p && p.stage && p.stage.id),
@@ -98,7 +92,6 @@ export default function Scenario() {
   const currentEntry = allStages[currentStageId]
   const severityColor = SEVERITY_COLORS[scenario.severity] || 'var(--ink)'
 
-  // Progress = how many primary stages we've answered correctly
   const correctPrimaryCount = path.filter(p => p?.stage?.id && answers[p.stage.id]?.correct).length
   const progressPct = path.length ? (correctPrimaryCount / path.length) * 100 : 0
   const tookConsequencePath = pathTaken.some(id => allStages[id]?.stage?.type === 'consequence')
@@ -114,9 +107,6 @@ export default function Scenario() {
     setNavigationError(null)
     setSaveStatus('saving')
 
-    // Fire submit but don't block navigation on it. Confidence is included
-    // as an optional field — the server endpoint accepts arbitrary body keys
-    // and the client uses it for local UX even if the server ignores it.
     api.submitStage(scenario.id, { stageId: stage.id, optionIndex, correct, confidence: stageConfidence })
       .then(() => {
         setSaveStatus('saved')
@@ -127,7 +117,6 @@ export default function Scenario() {
         setSaveStatus('error')
       })
 
-    // Wait briefly so user can see feedback, then navigate
     setTimeout(async () => {
       try {
         const { nextStageId, done } = await api.chooseStageOption(scenario.id, {
@@ -147,10 +136,8 @@ export default function Scenario() {
         setCurrentStageId(nextStageId)
         setPathTaken(p => [...p, nextStageId])
       } catch (err) {
-        // Don't swallow silently — surface to user AND fall back to client-side navigation
         console.error('chooseStageOption failed:', err)
         setNavigationError(err.message || 'Navigation failed')
-        // Fallback: find next primary stage in path by order
         const currentOrder = stage.order ?? path.findIndex(p => p.stage.id === stage.id) + 1
         const nextEntry = path.find(p => (p.stage.order ?? 0) > currentOrder)
         if (nextEntry?.stage?.id) {
@@ -213,12 +200,14 @@ export default function Scenario() {
             borderColor: severityColor, color: severityColor, borderRadius: 4,
           }}>{scenario.severity} severity</span>
           {scenario.estimatedLoss && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-faint)' }}>
+            // v24.1: was --ink-faint, now --ink-soft for stronger contrast
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
               ~${(scenario.estimatedLoss / 1_000_000).toFixed(2)}M estimated loss
             </span>
           )}
         </div>
-        <p style={{ fontSize: 15, color: 'var(--ink-soft)', lineHeight: 1.6, maxWidth: 760, marginBottom: 28 }}>
+        {/* v24.1: scenario summary uses --ink (was --ink-soft) — this is body copy, not annotation */}
+        <p style={{ fontSize: 15, color: 'var(--ink)', lineHeight: 1.6, maxWidth: 760, marginBottom: 28, opacity: 0.92 }}>
           {scenario.summary}
         </p>
         <div style={{ height: 3, background: 'var(--rule)', borderRadius: 2, overflow: 'hidden', marginBottom: 32 }}>
@@ -230,7 +219,6 @@ export default function Scenario() {
         </div>
       </motion.div>
 
-      {/* Scenario illustration — sets the scene before the timeline */}
       <ScenarioArt scenarioId={scenario.id} />
 
       <div style={{ marginBottom: 32 }}>
@@ -275,10 +263,12 @@ export default function Scenario() {
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--danger)', marginBottom: 4 }}>
                         Could not advance automatically
                       </div>
-                      <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{navigationError}</div>
+                      {/* v24.1: was --ink-soft, now --ink */}
+                      <div style={{ fontSize: 13, color: 'var(--ink)' }}>{navigationError}</div>
                     </>
                   ) : (
-                    <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                    /* v24.1: was --ink-soft, now --ink */
+                    <div style={{ fontSize: 13, color: 'var(--ink)' }}>
                       Advancing to next stage…
                     </div>
                   )}
@@ -317,7 +307,6 @@ export default function Scenario() {
         })()}
       </AnimatePresence>
 
-      {/* v24: inline tutor slide-over */}
       <InlineTutor
         open={tutorOpen}
         onClose={() => setTutorOpen(false)}
@@ -329,7 +318,6 @@ export default function Scenario() {
 }
 
 function AttackPath({ path = [], consequenceStages = [], answers = {}, currentStageId, pathTaken = [], onStageClick }) {
-  // Build a map: primary stage id -> [consequence stages that branch from it]
   const consequencesByParent = useMemo(() => {
     const map = {}
     const safeConsequences = Array.isArray(consequenceStages) ? consequenceStages : []
@@ -344,7 +332,6 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
     return map
   }, [path, consequenceStages])
 
-  // v24: hovered stage id, for the live preview tooltip on the timeline
   const [hoverId, setHoverId] = useState(null)
   const hoveredEntry = hoverId ? path.find(p => p.stage.id === hoverId) : null
 
@@ -354,7 +341,6 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
         display: 'grid', gridTemplateColumns: `repeat(${path.length}, minmax(180px, 1fr))`,
         gap: 0, position: 'relative', minWidth: path.length * 180,
       }}>
-        {/* Main horizontal connecting line */}
         <svg style={{ position: 'absolute', top: 36, left: 0, width: '100%', height: 2, pointerEvents: 'none' }}>
           <line x1="0" y1="1" x2="100%" y2="1" stroke="var(--rule-strong)" strokeWidth="1" strokeDasharray="4,4" />
         </svg>
@@ -384,7 +370,9 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                   position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column',
                   alignItems: 'center', gap: 10, padding: '0 6px',
                   background: 'transparent', cursor: isVisited ? 'pointer' : 'default',
-                  border: 'none', opacity: isVisited ? 1 : 0.4,
+                  border: 'none',
+                  // v24.1: lifted from 0.4 to 0.6 so locked stages remain readable
+                  opacity: isVisited ? 1 : 0.6,
                 }}
                 disabled={!isVisited}
                 title={!isVisited ? `${entry.tactic?.name || 'Stage ' + (i + 1)} — locked until you reach it` : undefined}
@@ -424,7 +412,7 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
 
                 <div style={{
                   fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
-                  textTransform: 'uppercase', color: isUnique ? 'var(--accent)' : 'var(--ink-faint)',
+                  textTransform: 'uppercase', color: isUnique ? 'var(--accent)' : 'var(--ink-soft)',
                   textAlign: 'center', fontWeight: 600,
                 }}>
                   {entry.tactic?.name || '—'}
@@ -434,7 +422,8 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                 <div style={{
                   fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 500, lineHeight: 1.2,
                   textAlign: 'center', maxWidth: 180, minHeight: 32,
-                  color: isActive ? 'var(--ink)' : 'var(--ink-soft)',
+                  // v24.1: was --ink-soft when not active; now --ink for both states
+                  color: 'var(--ink)',
                 }}>
                   {entry.technique?.name || entry.stage?.heading}
                 </div>
@@ -442,12 +431,11 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                 {entry.technique?.id && (
                   <div style={{
                     fontFamily: 'var(--font-mono)', fontSize: 10,
-                    color: 'var(--ink-faint)', letterSpacing: '0.04em',
+                    color: 'var(--ink-soft)', letterSpacing: '0.04em',
                   }}>{entry.technique.id}</div>
                 )}
               </motion.button>
 
-              {/* v24: hover preview tooltip on the timeline circle */}
               <AnimatePresence>
                 {hoverId === stageId && hoveredEntry && (
                   <motion.div
@@ -468,7 +456,7 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                     }}>
                     <div style={{
                       fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em',
-                      textTransform: 'uppercase', opacity: 0.6, marginBottom: 4,
+                      textTransform: 'uppercase', opacity: 0.7, marginBottom: 4,
                     }}>
                       Stage {i + 1} · {hoveredEntry.tactic?.name}
                     </div>
@@ -476,7 +464,7 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                       {hoveredEntry.stage?.heading}
                     </div>
                     {!isVisited && (
-                      <div style={{ opacity: 0.7, fontSize: 11, fontStyle: 'italic' }}>
+                      <div style={{ opacity: 0.75, fontSize: 11, fontStyle: 'italic' }}>
                         Locked — reach this stage by working through the scenario
                       </div>
                     )}
@@ -484,7 +472,6 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                 )}
               </AnimatePresence>
 
-              {/* Consequence branch, dropping below this primary stage */}
               {consequences.map(c => {
                 const cAns = answers[c.stage.id]
                 const cActive = c.stage.id === currentStageId
@@ -502,7 +489,6 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                       alignItems: 'center', position: 'relative',
                     }}
                   >
-                    {/* Branch connector */}
                     <svg width="2" height="30" style={{ position: 'absolute', top: -30 }}>
                       <line x1="1" y1="0" x2="1" y2="30" stroke="var(--danger)" strokeWidth="2" strokeDasharray="3,3" />
                     </svg>
@@ -562,12 +548,16 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
         border: '1px solid', borderColor: isConsequence ? 'var(--danger)' : 'var(--rule)',
         borderRadius: 'var(--radius-lg)', padding: '28px 32px',
         position: 'relative',
+        // v24.1: leave bottom room so the floating "Ask the Tutor" button never overlaps content
+        paddingBottom: 72,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
         <div style={{
           fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
           textTransform: 'uppercase',
+          // v24.1: bolder weight for the stage label so it reads as a section header
+          fontWeight: 600,
           color: isConsequence ? 'var(--danger)' : 'var(--accent)',
         }}>
           {isConsequence
@@ -576,8 +566,10 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
         </div>
         {technique && (
           <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-faint)',
-            padding: '3px 8px', border: '1px solid var(--rule)', borderRadius: 4,
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            // v24.1: was --ink-faint, now --ink-soft so the technique chip is legible
+            color: 'var(--ink-soft)',
+            padding: '3px 8px', border: '1px solid var(--rule-strong)', borderRadius: 4,
           }}>{technique.id} · {technique.name}</div>
         )}
       </div>
@@ -585,9 +577,11 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
       <h2 style={{
         fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 500,
         lineHeight: 1.2, letterSpacing: '-0.015em', marginBottom: 14,
+        color: 'var(--ink)',
       }}>{stage.heading}</h2>
 
-      <p style={{ fontSize: 15, color: 'var(--ink-soft)', lineHeight: 1.65, marginBottom: 22, maxWidth: 720 }}>
+      {/* v24.1: narrative now uses --ink (was --ink-soft) */}
+      <p style={{ fontSize: 15, color: 'var(--ink)', lineHeight: 1.65, marginBottom: 22, maxWidth: 720 }}>
         {stage.narrative}
       </p>
 
@@ -595,11 +589,12 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
         <div style={{ marginBottom: 26 }}>
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
-            textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 10,
+            // v24.1: was --ink-faint, now --ink-soft + bolder
+            textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 10, fontWeight: 600,
           }}>Signals observed</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {stage.signals.map((sig, i) => {
-              const color = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }[sig.severity] || 'var(--ink-faint)'
+              const color = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }[sig.severity] || 'var(--ink-soft)'
               return (
                 <motion.div
                   key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
@@ -607,14 +602,15 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
                   style={{
                     padding: '10px 14px', background: 'var(--paper-dim)',
                     borderRadius: 'var(--radius)', borderLeft: `3px solid ${color}`,
-                    fontSize: 13, display: 'flex', gap: 12, alignItems: 'center',
+                    fontSize: 13.5, display: 'flex', gap: 12, alignItems: 'center',
                   }}
                 >
                   <span style={{
                     fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
-                    textTransform: 'uppercase', color, minWidth: 54,
+                    textTransform: 'uppercase', color, minWidth: 54, fontWeight: 700,
                   }}>{sig.severity}</span>
-                  <span style={{ color: 'var(--ink)' }}>{sig.text}</span>
+                  {/* v24.1: signal text was --ink, kept --ink and added line-height for readability */}
+                  <span style={{ color: 'var(--ink)', lineHeight: 1.5 }}>{sig.text}</span>
                 </motion.div>
               )
             })}
@@ -626,11 +622,12 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
         <div>
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
-            textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 10,
+            textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 10, fontWeight: 600,
           }}>Your decision</div>
           <h3 style={{
             fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 500,
             lineHeight: 1.3, letterSpacing: '-0.01em', marginBottom: 16,
+            color: 'var(--ink)',
           }}>{stage.question}</h3>
 
           {/* v24: confidence rating before the decision */}
@@ -638,7 +635,21 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
             value={confidence}
             onChange={onConfidenceChange}
             locked={!!answer}
+            highlightWaitingForChoice={!answer && confidence === 0}
           />
+
+          {/* v24.1: small affordance line above options when confidence not yet picked.
+              Replaces the old "dim the buttons" pattern which made text unreadable. */}
+          {!answer && confidence === 0 && (
+            <div style={{
+              marginBottom: 12, fontSize: 12, color: 'var(--accent)',
+              fontFamily: 'var(--font-mono)', letterSpacing: '0.06em',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <span style={{ display: 'inline-block', width: 6, height: 6, background: 'var(--accent)', borderRadius: '50%' }} />
+              Pick a confidence level above before choosing an option.
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {stage.options.map((opt, i) => {
@@ -650,10 +661,55 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
               const leadsToConsequence = !!opt.leadsTo
               const canAnswer = !answer && confidence > 0
 
-              // Rationale styling differs by role:
-              //   • correct option — green, emphasised ("This was the right call.")
-              //   • your wrong pick — red, explains what went wrong
-              //   • other wrong options — muted, for completeness without noise
+              // v24.1: louder answered-state styling.
+              // Pre-answer: all options at full opacity, full-contrast text.
+              // Post-answer:
+              //   - the picked option (right or wrong): thick border, saturated bg, "YOUR PICK" pill
+              //   - the correct option (if not the picked one): green border, "RIGHT ANSWER" pill
+              //   - other wrong options: muted (opacity 0.5), so they don't compete for attention
+              let buttonStyle = {
+                padding: '14px 18px',
+                background: 'var(--paper-dim)',
+                border: '1px solid var(--rule-strong)',
+                borderRadius: 'var(--radius-lg)',
+                fontSize: 14,
+                textAlign: 'left',
+                cursor: canAnswer ? 'pointer' : 'default',
+                color: 'var(--ink)',
+                lineHeight: 1.5,
+                width: '100%',
+                fontWeight: 400,
+              }
+              if (showCorrect && picked) {
+                buttonStyle = {
+                  ...buttonStyle,
+                  background: 'var(--success-bg)',
+                  borderColor: 'var(--success)',
+                  borderWidth: 2,
+                  fontWeight: 500,
+                }
+              } else if (showCorrect && !picked) {
+                buttonStyle = {
+                  ...buttonStyle,
+                  background: 'var(--success-bg)',
+                  borderColor: 'var(--success)',
+                  borderWidth: 2,
+                }
+              } else if (showWrong) {
+                buttonStyle = {
+                  ...buttonStyle,
+                  background: 'var(--danger-bg)',
+                  borderColor: 'var(--danger)',
+                  borderWidth: 2,
+                  fontWeight: 500,
+                }
+              } else if (showOtherWrong) {
+                buttonStyle = {
+                  ...buttonStyle,
+                  opacity: 0.55,
+                }
+              }
+
               let rationaleStyle = null
               let rationaleLabel = null
               if (showCorrect) {
@@ -672,7 +728,7 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
                 rationaleLabel = 'Why this was off'
               } else if (showOtherWrong) {
                 rationaleStyle = {
-                  borderColor: 'var(--rule)',
+                  borderColor: 'var(--rule-strong)',
                   background: 'var(--paper-dim)',
                   color: 'var(--ink-soft)',
                 }
@@ -685,34 +741,40 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
                   whileHover={canAnswer ? { x: 2, borderColor: 'var(--ink)' } : {}}
                   whileTap={canAnswer ? { scale: 0.99 } : {}}
                   animate={
-                    showCorrect ? { backgroundColor: 'var(--success-bg)', borderColor: 'var(--success)' } :
-                    showWrong ? { backgroundColor: 'var(--danger-bg)', borderColor: 'var(--danger)', x: [0, -4, 4, -4, 4, 0] } :
-                    showOtherWrong ? { opacity: 0.75 } : {}
+                    showWrong ? { x: [0, -4, 4, -4, 4, 0] } : {}
                   }
                   transition={{ duration: showWrong ? 0.4 : 0.3 }}
-                  style={{
-                    padding: '14px 18px', background: 'var(--paper-dim)',
-                    border: '1px solid var(--rule)', borderRadius: 'var(--radius-lg)',
-                    fontSize: 14, textAlign: 'left',
-                    cursor: canAnswer ? 'pointer' : 'default',
-                    color: 'var(--ink)', lineHeight: 1.5, width: '100%',
-                    opacity: !answer && confidence === 0 ? 0.6 : 1,
-                  }}
-                  title={!answer && confidence === 0 ? 'Pick a confidence level above first' : undefined}
+                  style={buttonStyle}
                 >
+                  {/* v24.1: status pills at top right of the option */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <span>{opt.text}</span>
-                    {showCorrect && <span style={{ color: 'var(--success)', fontSize: 18, lineHeight: 1 }}>✓</span>}
-                    {showWrong && leadsToConsequence && (
-                      <span style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 9,
-                        color: 'var(--danger)', letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                      }}>Branches →</span>
-                    )}
-                    {showWrong && !leadsToConsequence && (
-                      <span style={{ color: 'var(--danger)', fontSize: 18, lineHeight: 1 }}>✕</span>
-                    )}
+                    <span style={{ flex: 1 }}>{opt.text}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                      {picked && (
+                        <span style={{
+                          fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em',
+                          textTransform: 'uppercase', fontWeight: 700,
+                          padding: '2px 7px', borderRadius: 3,
+                          background: showWrong ? 'var(--danger)' : 'var(--success)',
+                          color: '#fff',
+                        }}>Your pick</span>
+                      )}
+                      {showCorrect && !picked && (
+                        <span style={{
+                          fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em',
+                          textTransform: 'uppercase', fontWeight: 700,
+                          padding: '2px 7px', borderRadius: 3,
+                          background: 'var(--success)', color: '#fff',
+                        }}>Right answer</span>
+                      )}
+                      {showWrong && leadsToConsequence && (
+                        <span style={{
+                          fontFamily: 'var(--font-mono)', fontSize: 9,
+                          color: 'var(--danger)', letterSpacing: '0.08em',
+                          textTransform: 'uppercase', fontWeight: 700,
+                        }}>Branches →</span>
+                      )}
+                    </div>
                   </div>
                   {isAnswered && opt.rationale && rationaleStyle && (
                     <motion.div
@@ -721,7 +783,7 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
                       style={{
                         marginTop: 10, padding: '10px 12px',
                         border: '1px solid', borderRadius: 'var(--radius)',
-                        fontSize: 13, lineHeight: 1.55,
+                        fontSize: 13.5, lineHeight: 1.55,
                         ...rationaleStyle,
                       }}
                     >
@@ -729,8 +791,8 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
                         <div style={{
                           fontFamily: 'var(--font-mono)', fontSize: 9,
                           letterSpacing: '0.12em', textTransform: 'uppercase',
-                          color: showCorrect ? 'var(--success)' : showWrong ? 'var(--danger)' : 'var(--ink-faint)',
-                          marginBottom: 4, fontWeight: 600,
+                          color: showCorrect ? 'var(--success)' : showWrong ? 'var(--danger)' : 'var(--ink-soft)',
+                          marginBottom: 4, fontWeight: 700,
                         }}>{rationaleLabel}</div>
                       )}
                       {opt.rationale}
@@ -741,7 +803,6 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
             })}
           </div>
 
-          {/* v24: confidence calibration feedback after answering */}
           {answer && (
             <ConfidenceFeedback
               confidence={answer.confidence ?? confidence}
@@ -749,14 +810,12 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
             />
           )}
 
-          {/* v24: what-if preview after correct answer, when alternative options branch to consequences */}
           {answer?.correct && (
             <WhatIfPreview stage={stage} allStages={allStages} />
           )}
         </div>
       )}
 
-      {/* v24: floating "Ask the Tutor" button — pinned in the bottom-right of the panel */}
       <button
         onClick={onAskTutor}
         aria-label="Ask the Tutor about this stage"
@@ -785,13 +844,6 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
 function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allStages = {}, answers = {}, confidence = {}, nextScenario, onNext, onExit, onCoverage }) {
   const consequencesVisited = pathTaken.filter(id => allStages[id]?.stage?.type === 'consequence').length
 
-  // v24: compute calibration score across this scenario.
-  // Calibration score = average of how well confidence matched correctness:
-  //   - confident (4-5) + correct = 1.0
-  //   - confident (4-5) + wrong   = 0.0  (the most-instructive miss)
-  //   - uncertain (1-2) + correct = 0.6  (lucky)
-  //   - uncertain (1-2) + wrong   = 0.5  (honest)
-  //   - mid (3) anything           = 0.7
   const stageAnswers = Object.entries(answers)
     .map(([sid, ans]) => ({ sid, ...ans, confidence: ans.confidence ?? confidence[sid] ?? 0 }))
     .filter(a => a.confidence > 0)
@@ -849,42 +901,42 @@ function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allSta
       <h2 style={{
         fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 500,
         lineHeight: 1.15, marginBottom: 10, letterSpacing: '-0.02em',
+        color: 'var(--ink)',
       }}>
         {tookConsequencePath
           ? 'Scenario complete — you took a recovery path'
           : 'Scenario complete — clean prevention path'}
       </h2>
-      <p style={{ fontSize: 15, color: 'var(--ink-soft)', maxWidth: 560, margin: '0 auto 16px', lineHeight: 1.65 }}>
+      <p style={{ fontSize: 15, color: 'var(--ink)', maxWidth: 560, margin: '0 auto 16px', lineHeight: 1.65 }}>
         {tookConsequencePath
           ? `You navigated ${scenario.title} through ${consequencesVisited} consequence branch${consequencesVisited > 1 ? 'es' : ''}. That's valuable training — every real incident has moments where prevention fails. Notice where and why.`
           : `You navigated ${scenario.title} without hitting any consequence branches. Clean run — you made the prevention call at every stage.`}
       </p>
 
-      {/* v24: calibration recap */}
       {calibrationScore !== null && (
         <motion.div
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           style={{
             margin: '0 auto 18px', padding: '14px 18px', maxWidth: 460,
-            background: 'var(--paper-hi)', border: '1px solid var(--rule)',
+            background: 'var(--paper-hi)', border: '1px solid var(--rule-strong)',
             borderRadius: 'var(--radius-lg)',
           }}>
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
-            textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4,
+            textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 4, fontWeight: 600,
           }}>Calibration this scenario</div>
           <div style={{
             fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 500,
             lineHeight: 1.1, marginBottom: 4,
             color: calibrationScore >= 85 ? 'var(--success)'
                  : calibrationScore >= 65 ? 'var(--warning)' : 'var(--danger)',
-          }}>{calibrationScore}<span style={{ fontSize: 16, color: 'var(--ink-faint)' }}> / 100</span></div>
-          <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{calibrationLabel}</div>
+          }}>{calibrationScore}<span style={{ fontSize: 16, color: 'var(--ink-soft)' }}> / 100</span></div>
+          <div style={{ fontSize: 13, color: 'var(--ink)' }}>{calibrationLabel}</div>
         </motion.div>
       )}
 
-      <p style={{ fontSize: 13, color: 'var(--ink-faint)', maxWidth: 500, margin: '0 auto 24px', lineHeight: 1.6 }}>
+      <p style={{ fontSize: 13, color: 'var(--ink-soft)', maxWidth: 500, margin: '0 auto 24px', lineHeight: 1.6 }}>
         Your progress is logged — check your coverage map to see which F3 techniques you've now encountered.
       </p>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -923,7 +975,7 @@ function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allSta
 
 function FullLoading() {
   return (
-    <div style={{ padding: 80, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 14, fontFamily: 'var(--font-mono)' }}>
+    <div style={{ padding: 80, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 14, fontFamily: 'var(--font-mono)' }}>
       <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
       <div style={{
         display: 'inline-block', width: 20, height: 20,
@@ -978,7 +1030,7 @@ function ScenarioNav({ scenario, allScenarios, onRestart, onExit, saveStatus }) 
   const next = idx >= 0 && idx < allScenarios.length - 1 ? allScenarios[idx + 1] : null
 
   const saveColor = saveStatus === 'saved' ? 'var(--success)'
-                  : saveStatus === 'saving' ? 'var(--ink-faint)'
+                  : saveStatus === 'saving' ? 'var(--ink-soft)'
                   : saveStatus === 'error' ? 'var(--danger)' : null
   const saveLabel = saveStatus === 'saved' ? 'Progress saved'
                   : saveStatus === 'saving' ? 'Saving…'
@@ -997,7 +1049,7 @@ function ScenarioNav({ scenario, allScenarios, onRestart, onExit, saveStatus }) 
             letterSpacing: '0.1em', textTransform: 'uppercase',
             background: 'transparent', border: '1px solid var(--rule-strong)',
             borderRadius: 'var(--radius)', cursor: 'pointer',
-            color: 'var(--ink-soft)',
+            color: 'var(--ink)',
           }}
         >← All scenarios</button>
         <button
@@ -1007,7 +1059,7 @@ function ScenarioNav({ scenario, allScenarios, onRestart, onExit, saveStatus }) 
             letterSpacing: '0.1em', textTransform: 'uppercase',
             background: 'transparent', border: '1px solid var(--rule)',
             borderRadius: 'var(--radius)', cursor: 'pointer',
-            color: 'var(--ink-faint)',
+            color: 'var(--ink-soft)',
           }}
         >↻ Restart</button>
       </div>
@@ -1028,7 +1080,7 @@ function ScenarioNav({ scenario, allScenarios, onRestart, onExit, saveStatus }) 
         )}
         {allScenarios.length > 1 && (
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-faint)',
+            fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-soft)',
             letterSpacing: '0.08em', marginRight: 6,
           }}>{idx + 1} of {allScenarios.length}</span>
         )}
@@ -1041,7 +1093,7 @@ function ScenarioNav({ scenario, allScenarios, onRestart, onExit, saveStatus }) 
               letterSpacing: '0.1em', textTransform: 'uppercase',
               background: 'transparent', border: '1px solid var(--rule)',
               borderRadius: 'var(--radius)', cursor: 'pointer',
-              color: 'var(--ink-soft)',
+              color: 'var(--ink)',
             }}
           >← Prev</button>
         )}
