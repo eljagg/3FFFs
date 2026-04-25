@@ -12,7 +12,8 @@
     "migrate:admin": "node --env-file-if-exists=../.env src/seed/add-admin-schema.js",
     "migrate:quizzes": "node --env-file-if-exists=../.env src/seed/add-quizzes.js",
     "migrate:frameworks": "node --env-file-if-exists=../.env src/seed/add-frameworks.js",
-    "migrate:aase-scenario": "node --env-file-if-exists=../.env src/seed/add-aase-scenario.js"
+    "migrate:aase-scenario": "node --env-file-if-exists=../.env src/seed/add-aase-scenario.js",
+    "migrate:aase-execution-scenarios": "node --env-file-if-exists=../.env src/seed/add-aase-execution-scenarios.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
