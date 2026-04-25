@@ -1,12 +1,17 @@
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 
 /* -------------------------------------------------------------------------
    ConfidenceSlider — collects a 1-5 confidence rating BEFORE the user
    commits to an answer.
 
-   v24.1: gains a `highlightWaitingForChoice` prop that paints a soft pulse
-   on the dots when no choice has been made yet. Replaces the v24 pattern of
-   dimming the option buttons (which made dark-mode text hard to read).
+   v24.2: restrained "discovery" treatment so a first-time user notices the
+   feature without it being obnoxious for returning users.
+     - Accent-colored 3px left stripe (familiar pattern from signal items).
+     - Lighter background (--paper-hi) so it sits above surrounding cards.
+     - Tiny "NEW" pill next to the prompt label.
+     - One-time soft accent glow on first mount per session.
+     - The pulse-when-waiting border treatment from v24.1 is preserved.
 
    Pedagogical purpose: forcing users to commit to a confidence level surfaces
    metacognitive blind spots ("I was certain and I was wrong"), which research
@@ -26,33 +31,91 @@ const LABELS = [
   'Certain',
 ]
 
+// Module-level flag so the "NEW" pill and mount glow only show on the first
+// confidence slider a user encounters in this browser session. Subsequent
+// scenarios in the same session do not repeat the discovery treatment.
+let SEEN_THIS_SESSION = false
+
 export default function ConfidenceSlider({ value, onChange, locked, highlightWaitingForChoice }) {
   const dots = [1, 2, 3, 4, 5]
 
+  // Decide once-per-mount whether THIS instance gets the discovery flourish.
+  // If the user has already seen it this session, no NEW pill, no glow.
+  const [showDiscovery] = useState(() => {
+    if (SEEN_THIS_SESSION) return false
+    SEEN_THIS_SESSION = true
+    return true
+  })
+
+  // Once the user picks a value, drop the NEW pill — they have engaged with it.
+  const showNewPill = showDiscovery && value === 0 && !locked
+
   return (
     <motion.div
-      animate={highlightWaitingForChoice ? {
-        borderColor: ['var(--rule-strong)', 'var(--accent)', 'var(--rule-strong)'],
-      } : {}}
-      transition={highlightWaitingForChoice ? {
-        duration: 2.4, repeat: Infinity, ease: 'easeInOut',
-      } : {}}
+      initial={showDiscovery ? {
+        boxShadow: '0 0 0 0 rgba(244, 115, 83, 0)',
+      } : false}
+      animate={{
+        ...(highlightWaitingForChoice ? {
+          borderColor: ['var(--rule-strong)', 'var(--accent)', 'var(--rule-strong)'],
+        } : {}),
+        // Discovery glow fades in on mount, then fades out after ~1.4s.
+        // Returning users (showDiscovery === false) skip this entirely.
+        ...(showDiscovery ? {
+          boxShadow: [
+            '0 0 0 0 rgba(244, 115, 83, 0)',
+            '0 0 0 6px rgba(244, 115, 83, 0.18)',
+            '0 0 0 0 rgba(244, 115, 83, 0)',
+          ],
+        } : {}),
+      }}
+      transition={{
+        ...(highlightWaitingForChoice ? {
+          borderColor: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+        } : {}),
+        ...(showDiscovery ? {
+          boxShadow: { duration: 1.6, ease: 'easeOut', delay: 0.2 },
+        } : {}),
+      }}
       style={{
         marginBottom: 18,
-        padding: '14px 16px',
-        background: 'var(--paper-dim)',
+        padding: '14px 16px 14px 18px',
+        // v24.2: lifted background tone so the card reads as "elevated"
+        background: 'var(--paper-hi)',
         borderRadius: 'var(--radius)',
         border: '1px solid var(--rule-strong)',
+        // v24.2: accent left-stripe — same visual pattern as signal items, in accent colour.
+        // 3px is enough to read as a "this matters" mark without looking like a warning.
+        borderLeft: '3px solid var(--accent)',
       }}>
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         marginBottom: 10, flexWrap: 'wrap', gap: 8,
       }}>
         <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
-          textTransform: 'uppercase', color: 'var(--ink-soft)', fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
         }}>
-          How confident are you, before you answer?
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: 'var(--ink-soft)', fontWeight: 600,
+          }}>
+            How confident are you, before you answer?
+          </div>
+          {showNewPill && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.4, duration: 0.3 }}
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em',
+                textTransform: 'uppercase', fontWeight: 700,
+                padding: '2px 7px', borderRadius: 3,
+                background: 'var(--accent)', color: '#fff',
+                lineHeight: 1.2,
+              }}
+              aria-hidden="true"
+            >New</motion.span>
+          )}
         </div>
         {value > 0 && (
           <motion.div
@@ -79,7 +142,7 @@ export default function ConfidenceSlider({ value, onChange, locked, highlightWai
               whileHover={!locked ? { scale: 1.15 } : {}}
               whileTap={!locked ? { scale: 0.92 } : {}}
               animate={{
-                backgroundColor: active ? 'var(--accent)' : 'var(--paper-hi)',
+                backgroundColor: active ? 'var(--accent)' : 'var(--paper-dim)',
                 borderColor: active ? 'var(--accent)' : 'var(--rule-strong)',
                 scale: isCurrentMax ? 1.1 : 1,
               }}
