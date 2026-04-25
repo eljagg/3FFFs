@@ -10,7 +10,7 @@ const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null
 
-async function buildSystemPrompt(user, jobFunction) {
+async function buildSystemPrompt(user, jobFunction, stageContext) {
   const base = `You are the AI Tutor for 3fffs, a training platform grounded in the MITRE Fight Fraud Framework™ (F3), released by MITRE CTID in April 2026.
 
 Your job: help a financial-institution staff member build intuition about cyber-enabled fraud, using the F3 framework as your shared language.
@@ -26,7 +26,32 @@ Style:
 
 You have access to the learner's actual graph state below. USE IT. Reference their progress, gaps, and recommended next steps when helpful. Don't recite the data — weave it naturally into your answer.`
 
-  if (!user?.id) return base + '\n\nNote: learner context is not available for this session.'
+  // Stage context, when the user is asking from inside a scenario
+  let stageBlock = ''
+  if (stageContext) {
+    stageBlock = `
+
+## The user is asking from INSIDE a scenario stage
+
+They are mid-scenario right now. Their question is about THIS specific stage. Ground every answer in this context — do not redirect them to a different scenario unless asked.
+
+**Scenario:** ${stageContext.scenarioTitle || '(unknown)'}
+${stageContext.scenarioSummary ? `**Summary:** ${stageContext.scenarioSummary}` : ''}
+
+**Current stage:** ${stageContext.stageHeading || '(unknown)'}
+${stageContext.tacticName ? `**Tactic:** ${stageContext.tacticName}` : ''}
+${stageContext.techniqueId ? `**Technique:** ${stageContext.techniqueId} — ${stageContext.techniqueName || ''}` : ''}
+
+${stageContext.stageNarrative ? `**What is happening:**
+${stageContext.stageNarrative}` : ''}
+
+${stageContext.stageQuestion ? `**The question they were asked:**
+${stageContext.stageQuestion}` : ''}
+
+When you answer, refer to the scenario specifics ("this Lottery Scam case", "the SIM Swap with Telco Insider you are working through") rather than abstract terms. The user is engaged with a concrete situation; meet them there.`
+  }
+
+  if (!user?.id) return base + stageBlock + '\n\nNote: learner context is not available for this session.'
 
   let graphContext = ''
   try {
@@ -74,7 +99,7 @@ When recommending a scenario, refer to it by title. Don't overwhelm — suggest 
     graphContext = '\n\n(Graph context unavailable — answer generally using F3 knowledge.)'
   }
 
-  return base + graphContext
+  return base + stageBlock + graphContext
 }
 
 router.post('/', async (req, res, next) => {
@@ -84,12 +109,12 @@ router.post('/', async (req, res, next) => {
     }
 
     const user = getUser(req)
-    const { message, history = [], role: jobFunction } = req.body || {}
+    const { message, history = [], role: jobFunction, stageContext } = req.body || {}
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required' })
     }
 
-    const system = await buildSystemPrompt(user, jobFunction)
+    const system = await buildSystemPrompt(user, jobFunction, stageContext)
     const messages = [
       ...history
         .filter(m => m && typeof m.content === 'string' && (m.role === 'user' || m.role === 'assistant'))

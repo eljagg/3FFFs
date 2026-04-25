@@ -48,6 +48,7 @@ export const api = {
   getProgress:     ()        => request('/api/progress'),
   getCoverage:     ()        => request('/api/progress/coverage'),
 
+  // Tutor — accepts optional stageContext for inline-from-scenario asks
   tutorChat:       (b)       => request('/api/tutor', { method: 'POST', body: JSON.stringify(b) }),
 
   getTeamProgress: ()        => request('/api/team/progress'),

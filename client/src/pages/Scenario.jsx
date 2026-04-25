@@ -2,12 +2,29 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../lib/api.js'
+import { useUser } from '../lib/user.jsx'
 import { getScenarioArt } from '../components/scenario-art/index.jsx'
+import ConfidenceSlider, { ConfidenceFeedback } from '../components/scenario/ConfidenceSlider.jsx'
+import WhatIfPreview from '../components/scenario/WhatIfPreview.jsx'
+import InlineTutor from '../components/scenario/InlineTutor.jsx'
 
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }
 
 /**
- * Branching-aware Scenario page.
+ * Branching-aware Scenario page (v24).
+ *
+ * v24 additions:
+ *  - Confidence slider — captured BEFORE the user picks an answer; surfaces
+ *    metacognitive blind spots when confidence and correctness diverge.
+ *  - WhatIf preview — after a correct answer, the user can opt-in to walk
+ *    through the consequence stages they would have hit on a wrong pick.
+ *    Multiplies the value of consequence content already in the seed data.
+ *  - Inline tutor button — a slide-over Claude that knows the current stage
+ *    context. Removes the "leave the scenario, type a question, lose your
+ *    place" friction of the standalone /tutor page.
+ *  - Live stage map hover previews — circles in the timeline now expose the
+ *    technique + a one-line teaser on hover, making the F3 framework feel
+ *    alive instead of decorative.
  *
  * - Data: /api/scenarios/:id/path returns primary + consequence stages + branch edges
  * - Navigation: /api/scenarios/:id/choose tells us where to go next based on the option
@@ -17,16 +34,21 @@ const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 
 export default function Scenario() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { role } = useUser()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [currentStageId, setCurrentStageId] = useState(null)
   const [answers, setAnswers] = useState({})
+  // v24: confidence is captured per-stage (1-5), keyed by stageId
+  const [confidence, setConfidence] = useState({})
   const [pathTaken, setPathTaken] = useState([])  // ordered list of stageIds
   const [completed, setCompleted] = useState(false)
   const [navigationError, setNavigationError] = useState(null)
   const [allScenarios, setAllScenarios] = useState([])
   const [saveStatus, setSaveStatus] = useState(null) // 'saving' | 'saved' | 'error' | null
+  // v24: tutor slide-over open state
+  const [tutorOpen, setTutorOpen] = useState(false)
 
   // Load all scenarios so we can offer prev/next navigation
   useEffect(() => {
@@ -86,13 +108,16 @@ export default function Scenario() {
     const stage = currentEntry.stage
     const option = stage.options[optionIndex]
     const correct = !!option.correct
+    const stageConfidence = confidence[stage.id] || 0
 
-    setAnswers(a => ({ ...a, [stage.id]: { optionIndex, correct } }))
+    setAnswers(a => ({ ...a, [stage.id]: { optionIndex, correct, confidence: stageConfidence } }))
     setNavigationError(null)
     setSaveStatus('saving')
 
-    // Fire submit but don't block navigation on it
-    api.submitStage(scenario.id, { stageId: stage.id, optionIndex, correct })
+    // Fire submit but don't block navigation on it. Confidence is included
+    // as an optional field — the server endpoint accepts arbitrary body keys
+    // and the client uses it for local UX even if the server ignores it.
+    api.submitStage(scenario.id, { stageId: stage.id, optionIndex, correct, confidence: stageConfidence })
       .then(() => {
         setSaveStatus('saved')
         setTimeout(() => setSaveStatus(null), 2000)
@@ -151,6 +176,10 @@ export default function Scenario() {
     }
   }
 
+  function setStageConfidence(stageId, value) {
+    setConfidence(c => ({ ...c, [stageId]: value }))
+  }
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 28px 80px' }}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
@@ -163,6 +192,7 @@ export default function Scenario() {
               setCurrentStageId(first)
               setPathTaken([first])
               setAnswers({})
+              setConfidence({})
               setCompleted(false)
               setNavigationError(null)
               setSaveStatus(null)
@@ -223,7 +253,11 @@ export default function Scenario() {
               key={currentStageId}
               entry={currentEntry}
               answer={answers[currentStageId]}
+              confidence={confidence[currentStageId] || 0}
+              onConfidenceChange={(v) => setStageConfidence(currentStageId, v)}
               onAnswer={handleAnswer}
+              onAskTutor={() => setTutorOpen(true)}
+              allStages={allStages}
               totalPrimary={path.length}
               currentIdx={path.findIndex(p => p.stage.id === currentStageId)}
             />
@@ -272,6 +306,8 @@ export default function Scenario() {
               tookConsequencePath={tookConsequencePath}
               pathTaken={pathTaken}
               allStages={allStages}
+              answers={answers}
+              confidence={confidence}
               nextScenario={nextScenario}
               onNext={() => nextScenario && navigate('/scenarios/' + nextScenario.id)}
               onExit={() => navigate('/scenarios')}
@@ -280,6 +316,14 @@ export default function Scenario() {
           )
         })()}
       </AnimatePresence>
+
+      {/* v24: inline tutor slide-over */}
+      <InlineTutor
+        open={tutorOpen}
+        onClose={() => setTutorOpen(false)}
+        stageContext={currentEntry ? { ...currentEntry, scenario } : null}
+        role={role}
+      />
     </div>
   )
 }
@@ -300,6 +344,10 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
     return map
   }, [path, consequenceStages])
 
+  // v24: hovered stage id, for the live preview tooltip on the timeline
+  const [hoverId, setHoverId] = useState(null)
+  const hoveredEntry = hoverId ? path.find(p => p.stage.id === hoverId) : null
+
   return (
     <div style={{ position: 'relative', overflowX: 'auto', paddingBottom: 12 }}>
       <div style={{
@@ -318,22 +366,28 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
           const isAnswered = !!ans
           const isCorrect = ans?.correct
           const isUnique = entry.tactic?.uniqueToF3
+          const isVisited = pathTaken.includes(stageId)
           const consequences = consequencesByParent[stageId] || []
 
           return (
-            <div key={stageId} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div key={stageId} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
               <motion.button
                 onClick={() => onStageClick(stageId)}
+                onMouseEnter={() => setHoverId(stageId)}
+                onMouseLeave={() => setHoverId(h => (h === stageId ? null : h))}
+                onFocus={() => setHoverId(stageId)}
+                onBlur={() => setHoverId(h => (h === stageId ? null : h))}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1, duration: 0.4 }}
                 style={{
                   position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column',
                   alignItems: 'center', gap: 10, padding: '0 6px',
-                  background: 'transparent', cursor: pathTaken.includes(stageId) ? 'pointer' : 'default',
-                  border: 'none', opacity: pathTaken.includes(stageId) ? 1 : 0.4,
+                  background: 'transparent', cursor: isVisited ? 'pointer' : 'default',
+                  border: 'none', opacity: isVisited ? 1 : 0.4,
                 }}
-                disabled={!pathTaken.includes(stageId)}
+                disabled={!isVisited}
+                title={!isVisited ? `${entry.tactic?.name || 'Stage ' + (i + 1)} — locked until you reach it` : undefined}
               >
                 <motion.div
                   animate={{
@@ -392,6 +446,43 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                   }}>{entry.technique.id}</div>
                 )}
               </motion.button>
+
+              {/* v24: hover preview tooltip on the timeline circle */}
+              <AnimatePresence>
+                {hoverId === stageId && hoveredEntry && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    style={{
+                      position: 'absolute', top: 'calc(100% + 12px)',
+                      left: '50%', transform: 'translateX(-50%)',
+                      zIndex: 10, pointerEvents: 'none',
+                      width: 220,
+                      padding: '10px 12px',
+                      background: 'var(--ink)', color: 'var(--paper)',
+                      borderRadius: 'var(--radius-lg)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                      fontSize: 12, lineHeight: 1.45,
+                    }}>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em',
+                      textTransform: 'uppercase', opacity: 0.6, marginBottom: 4,
+                    }}>
+                      Stage {i + 1} · {hoveredEntry.tactic?.name}
+                    </div>
+                    <div style={{ fontWeight: 500, marginBottom: 4 }}>
+                      {hoveredEntry.stage?.heading}
+                    </div>
+                    {!isVisited && (
+                      <div style={{ opacity: 0.7, fontSize: 11, fontStyle: 'italic' }}>
+                        Locked — reach this stage by working through the scenario
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Consequence branch, dropping below this primary stage */}
               {consequences.map(c => {
@@ -458,7 +549,7 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
   )
 }
 
-function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
+function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, onAskTutor, allStages, totalPrimary, currentIdx }) {
   const { stage, technique, tactic } = entry
   const isConsequence = stage.type === 'consequence'
 
@@ -470,6 +561,7 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
         background: isConsequence ? 'var(--danger-bg)' : 'var(--paper-hi)',
         border: '1px solid', borderColor: isConsequence ? 'var(--danger)' : 'var(--rule)',
         borderRadius: 'var(--radius-lg)', padding: '28px 32px',
+        position: 'relative',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
@@ -541,6 +633,13 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
             lineHeight: 1.3, letterSpacing: '-0.01em', marginBottom: 16,
           }}>{stage.question}</h3>
 
+          {/* v24: confidence rating before the decision */}
+          <ConfidenceSlider
+            value={confidence}
+            onChange={onConfidenceChange}
+            locked={!!answer}
+          />
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {stage.options.map((opt, i) => {
               const picked = answer?.optionIndex === i
@@ -549,6 +648,7 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
               const showWrong = picked && !opt.correct
               const showOtherWrong = isAnswered && !picked && !opt.correct
               const leadsToConsequence = !!opt.leadsTo
+              const canAnswer = !answer && confidence > 0
 
               // Rationale styling differs by role:
               //   • correct option — green, emphasised ("This was the right call.")
@@ -581,9 +681,9 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
 
               return (
                 <motion.button
-                  key={i} onClick={() => !answer && onAnswer(i)} disabled={!!answer}
-                  whileHover={!answer ? { x: 2, borderColor: 'var(--ink)' } : {}}
-                  whileTap={!answer ? { scale: 0.99 } : {}}
+                  key={i} onClick={() => canAnswer && onAnswer(i)} disabled={!canAnswer}
+                  whileHover={canAnswer ? { x: 2, borderColor: 'var(--ink)' } : {}}
+                  whileTap={canAnswer ? { scale: 0.99 } : {}}
                   animate={
                     showCorrect ? { backgroundColor: 'var(--success-bg)', borderColor: 'var(--success)' } :
                     showWrong ? { backgroundColor: 'var(--danger-bg)', borderColor: 'var(--danger)', x: [0, -4, 4, -4, 4, 0] } :
@@ -593,9 +693,12 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
                   style={{
                     padding: '14px 18px', background: 'var(--paper-dim)',
                     border: '1px solid var(--rule)', borderRadius: 'var(--radius-lg)',
-                    fontSize: 14, textAlign: 'left', cursor: answer ? 'default' : 'pointer',
+                    fontSize: 14, textAlign: 'left',
+                    cursor: canAnswer ? 'pointer' : 'default',
                     color: 'var(--ink)', lineHeight: 1.5, width: '100%',
+                    opacity: !answer && confidence === 0 ? 0.6 : 1,
                   }}
+                  title={!answer && confidence === 0 ? 'Pick a confidence level above first' : undefined}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                     <span>{opt.text}</span>
@@ -637,14 +740,77 @@ function StagePanel({ entry, answer, onAnswer, totalPrimary, currentIdx }) {
               )
             })}
           </div>
+
+          {/* v24: confidence calibration feedback after answering */}
+          {answer && (
+            <ConfidenceFeedback
+              confidence={answer.confidence ?? confidence}
+              correct={answer.correct}
+            />
+          )}
+
+          {/* v24: what-if preview after correct answer, when alternative options branch to consequences */}
+          {answer?.correct && (
+            <WhatIfPreview stage={stage} allStages={allStages} />
+          )}
         </div>
       )}
+
+      {/* v24: floating "Ask the Tutor" button — pinned in the bottom-right of the panel */}
+      <button
+        onClick={onAskTutor}
+        aria-label="Ask the Tutor about this stage"
+        style={{
+          position: 'absolute', bottom: 16, right: 16,
+          padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--ink)', color: 'var(--paper)',
+          border: 'none', borderRadius: 999,
+          fontSize: 12, fontWeight: 500, cursor: 'pointer',
+          fontFamily: 'inherit',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+          transition: 'transform var(--dur) ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        Ask the Tutor
+      </button>
     </motion.div>
   )
 }
 
-function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allStages = {}, nextScenario, onNext, onExit, onCoverage }) {
+function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allStages = {}, answers = {}, confidence = {}, nextScenario, onNext, onExit, onCoverage }) {
   const consequencesVisited = pathTaken.filter(id => allStages[id]?.stage?.type === 'consequence').length
+
+  // v24: compute calibration score across this scenario.
+  // Calibration score = average of how well confidence matched correctness:
+  //   - confident (4-5) + correct = 1.0
+  //   - confident (4-5) + wrong   = 0.0  (the most-instructive miss)
+  //   - uncertain (1-2) + correct = 0.6  (lucky)
+  //   - uncertain (1-2) + wrong   = 0.5  (honest)
+  //   - mid (3) anything           = 0.7
+  const stageAnswers = Object.entries(answers)
+    .map(([sid, ans]) => ({ sid, ...ans, confidence: ans.confidence ?? confidence[sid] ?? 0 }))
+    .filter(a => a.confidence > 0)
+
+  let calibrationScore = null
+  let calibrationLabel = null
+  if (stageAnswers.length > 0) {
+    const scores = stageAnswers.map(a => {
+      if (a.confidence >= 4)  return a.correct ? 1.0 : 0.0
+      if (a.confidence <= 2)  return a.correct ? 0.6 : 0.5
+      return 0.7
+    })
+    const avg = scores.reduce((s, x) => s + x, 0) / scores.length
+    calibrationScore = Math.round(avg * 100)
+    calibrationLabel =
+      calibrationScore >= 85 ? 'Well-calibrated judgment'
+      : calibrationScore >= 65 ? 'Reasonable calibration'
+      : 'Calibration needs work'
+  }
 
   return (
     <motion.div
@@ -693,6 +859,31 @@ function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allSta
           ? `You navigated ${scenario.title} through ${consequencesVisited} consequence branch${consequencesVisited > 1 ? 'es' : ''}. That's valuable training — every real incident has moments where prevention fails. Notice where and why.`
           : `You navigated ${scenario.title} without hitting any consequence branches. Clean run — you made the prevention call at every stage.`}
       </p>
+
+      {/* v24: calibration recap */}
+      {calibrationScore !== null && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          style={{
+            margin: '0 auto 18px', padding: '14px 18px', maxWidth: 460,
+            background: 'var(--paper-hi)', border: '1px solid var(--rule)',
+            borderRadius: 'var(--radius-lg)',
+          }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4,
+          }}>Calibration this scenario</div>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 500,
+            lineHeight: 1.1, marginBottom: 4,
+            color: calibrationScore >= 85 ? 'var(--success)'
+                 : calibrationScore >= 65 ? 'var(--warning)' : 'var(--danger)',
+          }}>{calibrationScore}<span style={{ fontSize: 16, color: 'var(--ink-faint)' }}> / 100</span></div>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{calibrationLabel}</div>
+        </motion.div>
+      )}
+
       <p style={{ fontSize: 13, color: 'var(--ink-faint)', maxWidth: 500, margin: '0 auto 24px', lineHeight: 1.6 }}>
         Your progress is logged — check your coverage map to see which F3 techniques you've now encountered.
       </p>
