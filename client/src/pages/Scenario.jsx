@@ -539,6 +539,12 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
   const { stage, technique, tactic } = entry
   const isConsequence = stage.type === 'consequence'
 
+  // v24.3: detect dark mode by reading the data-theme attribute set in theme.jsx.
+  // The shadow tokens differ between modes: dark needs a deeper shadow because
+  // there is less luminance contrast between page and card.
+  const isDark = typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-theme') === 'dark'
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
@@ -546,10 +552,17 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
       style={{
         background: isConsequence ? 'var(--danger-bg)' : 'var(--paper-hi)',
         border: '1px solid', borderColor: isConsequence ? 'var(--danger)' : 'var(--rule)',
-        borderRadius: 'var(--radius-lg)', padding: '28px 32px',
+        // v24.3: larger radius + shadow so the card reads as a properly elevated
+        // working sheet sitting on the (now darker) page bg. The shadow token
+        // is theme-aware: deeper in dark mode where luminance contrast is tight.
+        borderRadius: 14,
+        padding: '32px 36px',
+        boxShadow: isConsequence
+          ? 'none'
+          : (isDark ? 'var(--shadow-card-dark)' : 'var(--shadow-card)'),
         position: 'relative',
         // v24.1: leave bottom room so the floating "Ask the Tutor" button never overlaps content
-        paddingBottom: 72,
+        paddingBottom: 76,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
@@ -864,18 +877,24 @@ function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allSta
       : 'Calibration needs work'
   }
 
+  // v24.3: theme-aware shadow for the completion panel
+  const isDark = typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-theme') === 'dark'
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
       style={{
-        padding: '40px 32px', textAlign: 'center',
+        padding: '48px 36px', textAlign: 'center',
         background: tookConsequencePath
           ? 'linear-gradient(135deg, var(--warning-bg), var(--paper-hi))'
           : 'linear-gradient(135deg, var(--success-bg), var(--paper-hi))',
         border: '1px solid',
         borderColor: tookConsequencePath ? 'var(--warning)' : 'var(--success)',
-        borderRadius: 'var(--radius-lg)',
+        // v24.3: matched elevation with the stage panel
+        borderRadius: 14,
+        boxShadow: isDark ? 'var(--shadow-card-dark)' : 'var(--shadow-card)',
       }}
     >
       <motion.div

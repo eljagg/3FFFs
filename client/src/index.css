@@ -1,13 +1,26 @@
 :root,
 :root[data-theme="light"] {
-  --paper: #f4f1e8;
-  --paper-dim: #ebe6d7;
-  --paper-hi: #faf7ee;
+  /*
+    v24.3: page background darkened so cards on top can read as "lifted sheets"
+    instead of blending into a single flat field.
+
+    Light mode luminance progression (target):
+      page bg (--paper)     ≈ 80   ← darker than v24.x to make cards pop
+      card secondary (dim)  ≈ 86   ← inside-card panels (signals, options)
+      card primary (hi)     ≈ 93   ← lifted card surface (working content)
+
+    The inversion of dim/hi (dim now lighter than v24.x's --paper-dim by ~7pp)
+    is what lets the inner panel still feel like a panel even though the page
+    is darker — without this the dim panels would read flatter than the page.
+  */
+  --paper: #e8e3d2;
+  --paper-dim: #f0ebda;
+  --paper-hi: #fbf9f0;
   --ink: #1a1a1a;
   --ink-soft: #3d3d3b;
   --ink-faint: #6b6864;
-  --rule: rgba(26, 26, 26, 0.12);
-  --rule-strong: rgba(26, 26, 26, 0.25);
+  --rule: rgba(26, 26, 26, 0.14);
+  --rule-strong: rgba(26, 26, 26, 0.28);
   --accent: #c8421f;
   --accent-dim: #e8d5a3;
   --success: #4a6b3a;
@@ -16,26 +29,29 @@
   --success-bg: #e3e8d8;
   --warning-bg: #f0e1c8;
   --danger-bg: #f0dcd4;
-  --bg-grad-1: rgba(200,66,31,0.03);
-  --bg-grad-2: rgba(26,26,26,0.03);
+  --bg-grad-1: rgba(200,66,31,0.04);
+  --bg-grad-2: rgba(26,26,26,0.04);
 }
 
 /*
-  Dark mode tokens — recalibrated for WCAG-grade contrast on pages with
-  long-form prose, signal lists, and answer options.
+  Dark mode tokens — recalibrated for WCAG-grade contrast PLUS proper page-to-
+  card layering.
 
-  v24.1 contrast lift, against --paper-hi (#1e1d19):
-    --ink         #efece1   ≈ 14.5 : 1  (was #e8e4d8 ≈ 13 : 1)   — body copy
-    --ink-soft    #d8d3c1   ≈ 11.5 : 1  (was #c4bfb0 ≈  8.5: 1)  — secondary copy
-    --ink-faint   #a9a292   ≈  6.0 : 1  (was #908a7b ≈  4.4: 1)  — labels / mono
+  Dark mode luminance progression (target):
+    page bg (--paper)     L ≈ 0.45  ← deeper than v24.x for layering
+    card secondary (dim)  L ≈ 1.10  ← inside-card panels
+    card primary (hi)     L ≈ 1.65  ← lifted card surface
 
-  Accent and status tokens were also lightened so they read as foreground,
-  not as muted decoration, when used on the dark paper.
+  In v24.1 the three tones lived inside a 0.6pp luminance band; the new spread
+  is ~1.2pp, enough to read as distinct surfaces without losing the dark mood.
+
+  Foreground tokens are unchanged from v24.1 (they were already at WCAG ratios
+  we want; a slightly darker page bg only improves their contrast further).
 */
 :root[data-theme="dark"] {
-  --paper: #14130f;
+  --paper: #100f0c;
   --paper-dim: #1c1b17;
-  --paper-hi: #1e1d19;
+  --paper-hi: #232218;
   --ink: #efece1;
   --ink-soft: #d8d3c1;
   --ink-faint: #a9a292;
@@ -60,6 +76,9 @@
   --radius: 6px;
   --radius-lg: 10px;
   --dur: 0.18s;
+  /* v24.3: shared shadow tokens for elevated cards, used across all pages */
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+  --shadow-card-dark: 0 1px 2px rgba(0,0,0,0.5), 0 12px 32px rgba(0,0,0,0.35);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -127,3 +146,24 @@ code, .mono {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/*
+  v24.3: utility class for any card surface that should read as "lifted" off
+  the page. Combines a subtle shadow with a hairline border. Pages opt in by
+  adding className="elevated-card" — currently used by the Scenario page;
+  Home / Coverage / Quiz / Tutor / Framework / Matrix can adopt as we revisit
+  each page. Until they do, they still benefit from the new --paper page
+  background which makes their existing --paper-hi cards stand off the page
+  visually even without the shadow.
+*/
+.elevated-card {
+  background: var(--paper-hi);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="dark"] .elevated-card {
+  box-shadow: var(--shadow-card-dark);
+}
+
