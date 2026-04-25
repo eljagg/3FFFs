@@ -1,25 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 
 /* -------------------------------------------------------------------------
    ConfidenceSlider — collects a 1-5 confidence rating BEFORE the user
    commits to an answer.
 
-   v24.2: restrained "discovery" treatment so a first-time user notices the
-   feature without it being obnoxious for returning users.
-     - Accent-colored 3px left stripe (familiar pattern from signal items).
-     - Lighter background (--paper-hi) so it sits above surrounding cards.
-     - Tiny "NEW" pill next to the prompt label.
-     - One-time soft accent glow on first mount per session.
-     - The pulse-when-waiting border treatment from v24.1 is preserved.
+   v25.1.1 fix: previous versions used --paper-hi for the slider background,
+   which is the same tone the stage panel uses. The slider visually merged
+   into the panel — no perceptible "card on a card" lift. Now the slider
+   uses --paper-dim with a thicker accent left-stripe and a stronger inner
+   shadow so it reads as a clearly distinct, elevated section regardless of
+   what surface it sits on.
+
+   Always-on visual identity (every mount):
+     - 4px accent left-stripe (was 3px)
+     - --paper-dim background (was --paper-hi which merged with the panel)
+     - Bolder "How confident are you?" label
+     - Subtle inset shadow on the inner edge for depth
+
+   First-mount-per-session only (discovery treatment, unchanged from v24.2):
+     - "NEW" pill
+     - Soft accent glow that fades in/out
 
    Pedagogical purpose: forcing users to commit to a confidence level surfaces
    metacognitive blind spots ("I was certain and I was wrong"), which research
    shows is one of the strongest drivers of behavior change in adult learners.
-
-   Visually a row of 5 dots that fill in as the user clicks. Required before
-   the answer buttons become clickable; locked once an answer is chosen so we
-   capture the genuine pre-decision belief, not a post-hoc rationalization.
 ------------------------------------------------------------------------- */
 
 const LABELS = [
@@ -53,7 +58,7 @@ export default function ConfidenceSlider({ value, onChange, locked, highlightWai
   return (
     <motion.div
       initial={showDiscovery ? {
-        boxShadow: '0 0 0 0 rgba(244, 115, 83, 0)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 0 rgba(244, 115, 83, 0)',
       } : false}
       animate={{
         ...(highlightWaitingForChoice ? {
@@ -63,9 +68,9 @@ export default function ConfidenceSlider({ value, onChange, locked, highlightWai
         // Returning users (showDiscovery === false) skip this entirely.
         ...(showDiscovery ? {
           boxShadow: [
-            '0 0 0 0 rgba(244, 115, 83, 0)',
-            '0 0 0 6px rgba(244, 115, 83, 0.18)',
-            '0 0 0 0 rgba(244, 115, 83, 0)',
+            'inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 0 rgba(244, 115, 83, 0)',
+            'inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 6px rgba(244, 115, 83, 0.18)',
+            'inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 0 rgba(244, 115, 83, 0)',
           ],
         } : {}),
       }}
@@ -79,25 +84,34 @@ export default function ConfidenceSlider({ value, onChange, locked, highlightWai
       }}
       style={{
         marginBottom: 18,
-        padding: '14px 16px 14px 18px',
-        // v24.2: lifted background tone so the card reads as "elevated"
-        background: 'var(--paper-hi)',
-        borderRadius: 'var(--radius)',
+        padding: '16px 18px 16px 22px',
+        // v25.1.1: --paper-dim sits BELOW the surrounding panel's --paper-hi,
+        // so the slider reads as recessed (a panel-within-a-panel). Reads
+        // correctly in light AND dark mode without depending on shadow alone.
+        background: 'var(--paper-dim)',
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--rule-strong)',
-        // v24.2: accent left-stripe — same visual pattern as signal items, in accent colour.
-        // 3px is enough to read as a "this matters" mark without looking like a warning.
-        borderLeft: '3px solid var(--accent)',
+        // v25.1.1: 4px stripe (was 3px) so the accent is unmistakable even
+        // when the card sits flush against another --paper-hi surface.
+        borderLeft: '4px solid var(--accent)',
+        // Default inset highlight gives a hint of depth on both modes.
+        // The animated boxShadow above will override during discovery glow.
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
       }}>
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: 10, flexWrap: 'wrap', gap: 8,
+        marginBottom: 12, flexWrap: 'wrap', gap: 8,
       }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
         }}>
           <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
-            textTransform: 'uppercase', color: 'var(--ink-soft)', fontWeight: 600,
+            // v25.1.1: bumped from 10px mono caps to 11px to match the
+            // stage panel's other section labels ("YOUR DECISION",
+            // "SIGNALS OBSERVED"). The slider now reads as a peer section
+            // header, not a sub-label.
+            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.13em',
+            textTransform: 'uppercase', color: 'var(--ink)', fontWeight: 700,
           }}>
             How confident are you, before you answer?
           </div>
@@ -142,13 +156,15 @@ export default function ConfidenceSlider({ value, onChange, locked, highlightWai
               whileHover={!locked ? { scale: 1.15 } : {}}
               whileTap={!locked ? { scale: 0.92 } : {}}
               animate={{
-                backgroundColor: active ? 'var(--accent)' : 'var(--paper-dim)',
+                backgroundColor: active ? 'var(--accent)' : 'var(--paper-hi)',
                 borderColor: active ? 'var(--accent)' : 'var(--rule-strong)',
                 scale: isCurrentMax ? 1.1 : 1,
               }}
               style={{
-                width: 28, height: 28, borderRadius: '50%',
-                border: '1.5px solid', cursor: locked ? 'default' : 'pointer',
+                width: 30, height: 30, borderRadius: '50%',
+                // v25.1.1: dot border 2px (was 1.5px) so unselected dots read
+                // crisply against the now-darker --paper-dim card background.
+                border: '2px solid', cursor: locked ? 'default' : 'pointer',
                 padding: 0, fontFamily: 'var(--font-mono)', fontSize: 12,
                 fontWeight: 600,
                 color: active ? '#fff' : 'var(--ink-soft)',
