@@ -7,6 +7,7 @@ import { getScenarioArt } from '../components/scenario-art/index.jsx'
 import ConfidenceSlider, { ConfidenceFeedback } from '../components/scenario/ConfidenceSlider.jsx'
 import WhatIfPreview from '../components/scenario/WhatIfPreview.jsx'
 import InlineTutor from '../components/scenario/InlineTutor.jsx'
+import ConceptSidebar from '../components/scenario/ConceptSidebar.jsx'
 
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }
 
@@ -45,6 +46,9 @@ export default function Scenario() {
   const [allScenarios, setAllScenarios] = useState([])
   const [saveStatus, setSaveStatus] = useState(null)
   const [tutorOpen, setTutorOpen] = useState(false)
+  // v25.1: AASE concept sidebar — opens when the analyst clicks the "Look up"
+  // affordance on a stage that has a TESTS_CONCEPT edge to a Concept node.
+  const [conceptSidebar, setConceptSidebar] = useState({ open: false, conceptId: null })
 
   useEffect(() => {
     api.listScenarios().then(r => setAllScenarios(r.scenarios || [])).catch(() => {})
@@ -245,6 +249,7 @@ export default function Scenario() {
               onConfidenceChange={(v) => setStageConfidence(currentStageId, v)}
               onAnswer={handleAnswer}
               onAskTutor={() => setTutorOpen(true)}
+              onConceptLookup={(conceptId) => setConceptSidebar({ open: true, conceptId })}
               allStages={allStages}
               totalPrimary={path.length}
               currentIdx={path.findIndex(p => p.stage.id === currentStageId)}
@@ -313,6 +318,15 @@ export default function Scenario() {
         stageContext={currentEntry ? { ...currentEntry, scenario } : null}
         role={role}
       />
+
+      {/* v25.1: AASE concept sidebar — opens via the "Look up" affordance on
+          any stage that has a TESTS_CONCEPT edge. The conceptId comes from
+          the stage payload; the data is fetched live from /api/frameworks. */}
+      <ConceptSidebar
+        open={conceptSidebar.open}
+        conceptId={conceptSidebar.conceptId}
+        onClose={() => setConceptSidebar({ open: false, conceptId: null })}
+      />
     </div>
   )
 }
@@ -375,7 +389,7 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                   opacity: isVisited ? 1 : 0.6,
                 }}
                 disabled={!isVisited}
-                title={!isVisited ? `${entry.tactic?.name || 'Stage ' + (i + 1)} — locked until you reach it` : undefined}
+                title={!isVisited ? `${entry.tactic?.name || entry.phase?.name || 'Stage ' + (i + 1)} — locked until you reach it` : undefined}
               >
                 <motion.div
                   animate={{
@@ -415,7 +429,8 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                   textTransform: 'uppercase', color: isUnique ? 'var(--accent)' : 'var(--ink-soft)',
                   textAlign: 'center', fontWeight: 600,
                 }}>
-                  {entry.tactic?.name || '—'}
+                  {/* v25.1: AASE-tier scenarios use phase name in place of tactic */}
+                  {entry.tactic?.name || entry.phase?.name || '—'}
                   {isUnique && <><br /><span style={{ opacity: 0.7 }}>(F3 only)</span></>}
                 </div>
 
@@ -458,7 +473,7 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
                       fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em',
                       textTransform: 'uppercase', opacity: 0.7, marginBottom: 4,
                     }}>
-                      Stage {i + 1} · {hoveredEntry.tactic?.name}
+                      Stage {i + 1} · {hoveredEntry.tactic?.name || hoveredEntry.phase?.name || 'Working'}
                     </div>
                     <div style={{ fontWeight: 500, marginBottom: 4 }}>
                       {hoveredEntry.stage?.heading}
@@ -535,8 +550,11 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
   )
 }
 
-function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, onAskTutor, allStages, totalPrimary, currentIdx }) {
-  const { stage, technique, tactic } = entry
+function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, onAskTutor, onConceptLookup, allStages, totalPrimary, currentIdx }) {
+  // v25.1: AASE-tier scenarios (SC010+) carry concept and phase instead of
+  // (or alongside) technique and tactic. The destructure tolerates both
+  // shapes; downstream we check for presence per render decision.
+  const { stage, technique, tactic, concept, phase } = entry
   const isConsequence = stage.type === 'consequence'
 
   // v24.3: detect dark mode by reading the data-theme attribute set in theme.jsx.
@@ -575,9 +593,43 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
         }}>
           {isConsequence
             ? 'Consequence branch · what happens when this control fails'
-            : `Stage ${currentIdx + 1} of ${totalPrimary} · ${tactic?.name}`}
+            : phase
+              // v25.1: AASE phase label for analyst-tier scenarios.
+              // Stage numbers stay relative to the scenario; the phase tag
+              // gives the analyst the framework anchor.
+              ? `Stage ${currentIdx + 1} of ${totalPrimary} · ${phase.name}`
+              : tactic?.name
+                ? `Stage ${currentIdx + 1} of ${totalPrimary} · ${tactic.name}`
+                : `Stage ${currentIdx + 1} of ${totalPrimary}`}
         </div>
-        {technique && (
+        {concept ? (
+          // v25.1: AASE concept chip — interactive, opens the ConceptSidebar.
+          // This is the visible "the graph is doing work" cue: tap a concept,
+          // see its formal definition, examples, and which other frameworks
+          // recognise it. Replaces the static technique chip on AASE stages.
+          <button
+            onClick={() => onConceptLookup && onConceptLookup(concept.id)}
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              color: 'var(--ink)', fontWeight: 500,
+              padding: '4px 10px',
+              background: 'var(--paper-dim)',
+              border: '1px solid var(--accent)',
+              borderRadius: 4, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              transition: 'background var(--dur) ease',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--paper-dim)' }}
+            aria-label={`Look up the formal definition of ${concept.name}`}
+            title={`Look up: ${concept.name}`}
+          >
+            <span>Look up: {concept.name}</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
+            </svg>
+          </button>
+        ) : technique && (
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 11,
             // v24.1: was --ink-faint, now --ink-soft so the technique chip is legible

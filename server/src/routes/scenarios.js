@@ -119,12 +119,19 @@ router.get('/:id/path', async (req, res, next) => {
                          ELSE null END) AS branchList
        OPTIONAL MATCH (st)-[:USES_TECHNIQUE]->(tech:Technique)
        OPTIONAL MATCH (tech)-[:PART_OF]->(tac:Tactic)
-       WITH s, st, tech, tac, branchList
+       // v25.1: also join the AASE concept and phase, if the stage links to them.
+       // For F3-mapped scenarios (SC001-SC009), these OPTIONAL MATCHes return null
+       // and the existing client behaviour is unchanged.
+       OPTIONAL MATCH (st)-[:TESTS_CONCEPT]->(concept:Concept)
+       OPTIONAL MATCH (st)-[:IN_AASE_PHASE]->(phase:FrameworkPhase)
+       WITH s, st, tech, tac, branchList, concept, phase
        RETURN s { .* } AS scenario,
               collect(DISTINCT {
                 stage: st { .* },
                 technique: tech { .id, .name, .description },
                 tactic: tac { .id, .name, .order, .uniqueToF3 },
+                concept: concept { .id, .name, .summary, .universal },
+                phase: phase { .id, .name, .order },
                 branches: [b IN branchList WHERE b IS NOT NULL]
               }) AS path`,
       { id: req.params.id }
@@ -137,7 +144,7 @@ router.get('/:id/path', async (req, res, next) => {
     // Normalize: ensure every stage has id + type, even on old seed data
     const cleanPath = path
       .filter(p => p.stage)
-      .map(({ stage, technique, tactic, branches }, i) => ({
+      .map(({ stage, technique, tactic, concept, phase, branches }, i) => ({
         stage: {
           ...stage,
           id: ensureStageId(stage, scenario.id, i + 1),
@@ -147,6 +154,11 @@ router.get('/:id/path', async (req, res, next) => {
         },
         technique,
         tactic,
+        // v25.1: AASE-tier metadata. Null for F3-mapped scenarios — client
+        // checks for presence and renders the AASE chip / concept-lookup
+        // affordance only when these are non-null.
+        concept: concept && concept.id ? concept : null,
+        phase: phase && phase.id ? phase : null,
         branches: (branches || []).filter(b => b && b.toStageId),
       }))
 

@@ -73,4 +73,14 @@ export const api = {
   adminListInvites:    ()        => request('/api/admin/invites'),
   adminCreateInvite:   (body)    => request('/api/admin/invites',        { method: 'POST',   body: JSON.stringify(body) }),
   adminRevokeInvite:   (id)      => request(`/api/admin/invites/${id}`,  { method: 'DELETE' }),
+
+  // Frameworks (v25.0+) — public endpoints, no auth required
+  listFrameworks:      ()        => request('/api/frameworks'),
+  getFramework:        (id)      => request(`/api/frameworks/${id}`),
+  getFrameworkPhases:  (id)      => request(`/api/frameworks/${id}/phases`),
+  getUniversalConcepts:()        => request('/api/frameworks/concepts/universal'),
+  // Concept lookup is the v25.1 wedge — used by ConceptSidebar
+  getConcept:          (id)      => request(`/api/frameworks/concepts/${id}`),
+  getThreatActors:     ()        => request('/api/frameworks/data/threat-actors'),
+  recommendFrameworks: (regulatorId) => request(`/api/frameworks/data/recommend?regulator=${encodeURIComponent(regulatorId)}`),
 }

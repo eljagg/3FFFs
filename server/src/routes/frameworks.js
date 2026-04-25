@@ -138,6 +138,34 @@ router.get('/concepts/universal', async (req, res, next) => {
 })
 
 // ---------------------------------------------------------------------------
+// GET /api/frameworks/concepts/:id
+//   → single Concept with full details + which frameworks recognise it.
+//     Used by the v25.1 ConceptSidebar component on the Scenario page.
+//
+//     Route ordering note: this MUST come after /concepts/universal because
+//     Express matches in declaration order and "universal" would otherwise
+//     match the :id parameter.
+// ---------------------------------------------------------------------------
+router.get('/concepts/:id', async (req, res, next) => {
+  try {
+    const rows = await runQuery(`
+      MATCH (k:Concept {id: $id})
+      OPTIONAL MATCH (k)-[:APPEARS_IN_FRAMEWORK]->(f:Framework)
+      WITH k, collect(DISTINCT f { .id, .name, .region }) AS frameworks
+      RETURN k { .* } AS concept, frameworks
+    `, { id: req.params.id })
+
+    if (!rows.length) return res.status(404).json({ error: 'Concept not found' })
+
+    const r = rows[0]
+    res.json({
+      concept: parseJsonProps(r.concept, ['examples']),
+      frameworks: r.frameworks || [],
+    })
+  } catch (e) { next(e) }
+})
+
+// ---------------------------------------------------------------------------
 // GET /api/frameworks/threat-actors
 //   → all seeded threat actors for the Threat Matrix widget
 // ---------------------------------------------------------------------------
