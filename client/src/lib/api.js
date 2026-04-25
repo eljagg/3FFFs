@@ -67,17 +67,9 @@ export const api = {
   // Achievements
   getBadges:       ()        => request('/api/badges'),
 
-  // v23 — Admin users & invites (all gated by requireRole('admin') server-side)
-  listUsers:    ()      => request('/api/admin/users'),
-  listInvites:  ()      => request('/api/admin/invites'),
-  createInvite: (body)  => request('/api/admin/invites', {
-                             method: 'POST',
-                             body: JSON.stringify(body),
-                           }),
-  revokeInvite: (id)    => request(`/api/admin/invites/${encodeURIComponent(id)}/revoke`, {
-                             method: 'POST',
-                           }),
-  deleteInvite: (id)    => request(`/api/admin/invites/${encodeURIComponent(id)}`, {
-                             method: 'DELETE',
-                           }),
+  // Admin users + invites (v23)
+  adminListUsers:      ()        => request('/api/admin/users'),
+  adminListInvites:    ()        => request('/api/admin/invites'),
+  adminCreateInvite:   (body)    => request('/api/admin/invites',        { method: 'POST',   body: JSON.stringify(body) }),
+  adminRevokeInvite:   (id)      => request(`/api/admin/invites/${id}`,  { method: 'DELETE' }),
 }

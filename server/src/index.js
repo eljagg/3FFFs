@@ -3,6 +3,7 @@ import cors from 'cors'
 import { verifyConnection, runQuery } from './lib/neo4j.js'
 import { requireAuth, syncUser, getUser } from './lib/auth.js'
 import framework from './routes/framework.js'
+import authCheck from './routes/auth-check.js'
 import scenarios from './routes/scenarios.js'
 import quiz from './routes/quiz.js'
 import progress from './routes/progress.js'
@@ -11,7 +12,6 @@ import team from './routes/team.js'
 import games from './routes/games.js'
 import badges from './routes/badges.js'
 import admin from './routes/admin.js'
-import authCheck from './routes/auth-check.js'
 
 const app = express()
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true, credentials: true }))
@@ -22,16 +22,20 @@ app.get('/health', async (_req, res) => {
   catch { res.status(503).json({ ok: false, neo4j: false }) }
 })
 
+// ----------------------------------------------------------------------------
+// PUBLIC routes — mounted BEFORE the requireAuth wall.
+// /api/framework  — public framework encyclopedia (no auth needed)
+// /api/auth       — shared-secret endpoints called by the Auth0 post-login
+//                   Action (e.g. /api/auth/check-invite). These authenticate
+//                   via an `x-invite-secret` header, not a JWT.
+// ----------------------------------------------------------------------------
 app.use('/api/framework', framework)
-
-// ============================================================================
-// PUBLIC invite-check endpoint — MUST be mounted BEFORE the requireAuth wall.
-// It authenticates via a shared secret (X-Invite-Secret) because the caller
-// is the Auth0 Post-Login Action, which runs server-side and doesn't carry
-// a user JWT. See server/src/routes/auth-check.js.
-// ============================================================================
 app.use('/api/auth', authCheck)
 
+// ----------------------------------------------------------------------------
+// AUTH wall. Everything below requires a valid Auth0 access token AND
+// syncs the user into Neo4j as a :User node on every request.
+// ----------------------------------------------------------------------------
 app.use('/api', requireAuth, syncUser)
 app.get('/api/me', (req, res) => res.json({ user: getUser(req) }))
 app.use('/api/scenarios', scenarios)

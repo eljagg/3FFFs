@@ -1,32 +1,34 @@
 /**
- * Auth0 Post-Login Action — Domain Allowlist, Invite Fallback, Default Role
+ * Auth0 Post-Login Action — Domain Allowlist, Invite Bypass, Default Role
  *
- * Login policy (v23):
+ * Flow on every login:
+ *   1. If the user's email domain is on the hardcoded allowlist → proceed.
+ *   2. Otherwise, call /api/auth/check-invite on the 3fffs API with a
+ *      shared secret. If the email has an active :Invite in Neo4j, the
+ *      API returns the roles the user should be assigned; proceed.
+ *   3. If neither check passes → deny with a clear message.
  *
- *   1. If the user's email domain is on ALLOWED_DOMAINS → proceed; assign
- *      the "trainee" role on first login if they have no roles yet.
+ * First-login role assignment:
+ *   - Domain-allowlisted users get 'trainee' (the historical default).
+ *   - Invited users get the roles specified on their :Invite (e.g. ['trainee']
+ *     for an external reviewer, ['manager'] for a partner bank contact).
+ *   - Uses the Management API to persist the assignment on the Auth0 user
+ *     so subsequent logins already have roles on event.authorization.
  *
- *   2. Otherwise, call our server's public invite-check endpoint. If a valid
- *      invite exists for the email → proceed; assign whatever roles the
- *      invite specifies (default 'trainee') on first login.
+ * Claims:
+ *   https://3fffs.app/roles   — array of role name strings
+ *   https://3fffs.app/email   — normalized (lowercased) email
+ *   Set on BOTH the access token and the id token.
  *
- *   3. Otherwise, deny with a clear message and surface the domain to the
- *      signing-up user so they know to contact an admin.
+ * Secrets required in Auth0 Actions vault:
+ *   AUTH0_DOMAIN                — same as VITE_AUTH0_DOMAIN (e.g. 3fffs-training.us.auth0.com)
+ *   AUTH0_MGMT_CLIENT_ID        — M2M client with Management API grants
+ *   AUTH0_MGMT_CLIENT_SECRET    — its secret
+ *   API_BASE_URL                — e.g. https://server-production-7882.up.railway.app
+ *   INVITE_CHECK_SECRET         — same value as the INVITE_CHECK_SECRET env on the Railway server
  *
- * Role claims (access token + id token) are set at the bottom for every
- * user that gets through. Extracts role names from role objects before
- * setting the claim (`event.authorization.roles` returns `[{id, name}]`
- * not `['name']`, so we `.map(r => r.name)` before writing the claim).
- *
- * --- Required secrets (Auth0 Dashboard → Actions → Library → Edit this action):
- *
- *   AUTH0_DOMAIN             — e.g. `3fffs-training.us.auth0.com`
- *   AUTH0_MGMT_CLIENT_ID     — Management API M2M client ID
- *   AUTH0_MGMT_CLIENT_SECRET — Management API M2M client secret
- *   API_BASE_URL             — e.g. `https://server-production-7882.up.railway.app`
- *   INVITE_CHECK_SECRET      — 32-byte random; MUST match server env var
- *
- * Runs on Node 18+ so `fetch` is global.
+ * Dependencies to add in the Action (top-right panel):
+ *   auth0  (already present for ManagementClient)
  */
 
 const ALLOWED_DOMAINS = [
@@ -38,125 +40,124 @@ const ALLOWED_DOMAINS = [
 
 const DEFAULT_ROLE = 'trainee';
 const NAMESPACE = 'https://3fffs.app';
-const INVITE_CHECK_TIMEOUT_MS = 5000;
-
-/** Ask the server whether this email has a valid outstanding invite. */
-async function checkInvite(event, email) {
-  const apiBase = event.secrets.API_BASE_URL;
-  const secret = event.secrets.INVITE_CHECK_SECRET;
-  if (!apiBase || !secret) {
-    // Not configured — treat as "no invite". Fail safe.
-    return { valid: false, reason: 'not-configured' };
-  }
-
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), INVITE_CHECK_TIMEOUT_MS);
-  try {
-    const res = await fetch(apiBase.replace(/\/$/, '') + '/api/auth/check-invite', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Invite-Secret': secret,
-      },
-      body: JSON.stringify({ email }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      return { valid: false, reason: 'http-' + res.status };
-    }
-    const body = await res.json();
-    return body && typeof body === 'object' ? body : { valid: false, reason: 'bad-body' };
-  } catch (err) {
-    console.log('Invite check error:', err.message);
-    return { valid: false, reason: 'exception' };
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-/** Assign one or more roles (by name) to the newly created user via the Management API. */
-async function assignRolesByName(event, roleNames) {
-  if (!Array.isArray(roleNames) || roleNames.length === 0) return;
-  try {
-    const ManagementClient = require('auth0').ManagementClient;
-    const management = new ManagementClient({
-      domain: event.secrets.AUTH0_DOMAIN,
-      clientId: event.secrets.AUTH0_MGMT_CLIENT_ID,
-      clientSecret: event.secrets.AUTH0_MGMT_CLIENT_SECRET,
-    });
-
-    // Fetch the role IDs. The API accepts a `name_filter` for exact match,
-    // so we call once per role to keep the result size tiny.
-    const roleIds = [];
-    for (const name of roleNames) {
-      const resp = await management.roles.getAll({ name_filter: name });
-      const id = resp.data?.[0]?.id;
-      if (id) roleIds.push(id);
-    }
-
-    if (roleIds.length > 0) {
-      await management.users.assignRoles(
-        { id: event.user.user_id },
-        { roles: roleIds }
-      );
-    }
-  } catch (err) {
-    console.log('Role assignment failed:', err.message);
-  }
-}
 
 exports.onExecutePostLogin = async (event, api) => {
   const email = (event.user.email || '').toLowerCase().trim();
   const domain = email.split('@')[1];
 
-  const hasAnyRole = (event.authorization?.roles || []).length > 0;
-  const isFirstLogin = event.stats?.logins_count === 1;
+  // ---------------------------------------------------------------
+  // 1. Access decision — domain allowlist first, invite check next
+  // ---------------------------------------------------------------
+  let inviteRoles = null; // non-null if user was admitted via invite
 
-  // (1) Domain allowlist path — the 99% case for staff at partner banks.
-  if (ALLOWED_DOMAINS.includes(domain)) {
-    if (isFirstLogin && !hasAnyRole) {
-      await assignRolesByName(event, [DEFAULT_ROLE]);
-    }
-  } else {
-    // (2) Domain not on allowlist — ask the server if there's a valid invite.
-    const inviteResult = await checkInvite(event, email);
+  if (!ALLOWED_DOMAINS.includes(domain)) {
+    // Try the invite bypass. Only call out if the server is configured;
+    // otherwise fail closed with the original rejection.
+    const apiBase = event.secrets.API_BASE_URL;
+    const secret = event.secrets.INVITE_CHECK_SECRET;
 
-    if (!inviteResult || !inviteResult.valid) {
-      // (3) No invite either — deny.
+    if (!apiBase || !secret) {
       api.access.deny(
         `Email domain "${domain}" is not authorized. Contact your administrator.`
       );
       return;
     }
 
-    // Valid invite — assign whatever roles the admin chose, but only on
-    // first login. Subsequent logins via the same invite just coast through.
-    if (isFirstLogin && !hasAnyRole) {
-      const invitedRoles = Array.isArray(inviteResult.roles) && inviteResult.roles.length
-        ? inviteResult.roles
+    try {
+      const resp = await fetch(`${apiBase}/api/auth/check-invite`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-invite-secret': secret,
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!resp.ok) {
+        console.log(`[invite-check] non-OK status ${resp.status} for ${email}`);
+        api.access.deny(
+          `Email domain "${domain}" is not authorized. Contact your administrator.`
+        );
+        return;
+      }
+
+      const data = await resp.json();
+      if (!data.allowed) {
+        console.log(`[invite-check] ${email} denied: ${data.reason}`);
+        const msg = data.reason === 'expired'
+          ? 'Your invitation has expired. Contact your administrator.'
+          : data.reason === 'revoked'
+          ? 'Your invitation has been revoked. Contact your administrator.'
+          : `Email domain "${domain}" is not authorized. Contact your administrator.`;
+        api.access.deny(msg);
+        return;
+      }
+
+      inviteRoles = Array.isArray(data.roles) && data.roles.length > 0
+        ? data.roles
         : [DEFAULT_ROLE];
-      await assignRolesByName(event, invitedRoles);
+      console.log(`[invite-check] ${email} admitted via invite with roles: ${inviteRoles.join(', ')}`);
+    } catch (err) {
+      console.log(`[invite-check] error calling ${apiBase}: ${err.message}`);
+      api.access.deny(
+        `Email domain "${domain}" is not authorized. Contact your administrator.`
+      );
+      return;
     }
   }
 
-  // Extract role names from role objects.
-  // event.authorization.roles returns objects like [{id: 'rol_x', name: 'admin'}],
-  // but the client expects a string array like ['admin']. Map through r.name.
-  // Defensively handles the case where entries are already strings.
+  // ---------------------------------------------------------------
+  // 2. First-login role assignment (Management API)
+  // ---------------------------------------------------------------
+  const hasAnyRole = (event.authorization?.roles || []).length > 0;
+  const isFirstLogin = event.stats?.logins_count === 1;
+  const rolesToAssign = inviteRoles || [DEFAULT_ROLE];
+
+  if (isFirstLogin && !hasAnyRole) {
+    try {
+      const ManagementClient = require('auth0').ManagementClient;
+      const management = new ManagementClient({
+        domain: event.secrets.AUTH0_DOMAIN,
+        clientId: event.secrets.AUTH0_MGMT_CLIENT_ID,
+        clientSecret: event.secrets.AUTH0_MGMT_CLIENT_SECRET,
+      });
+
+      // Resolve each role name to an Auth0 role id, then assign all at once.
+      const roleIds = [];
+      for (const roleName of rolesToAssign) {
+        const found = await management.roles.getAll({ name_filter: roleName });
+        const id = found.data?.[0]?.id;
+        if (id) roleIds.push(id);
+        else console.log(`[role-assign] Auth0 role "${roleName}" not found`);
+      }
+      if (roleIds.length > 0) {
+        await management.users.assignRoles(
+          { id: event.user.user_id },
+          { roles: roleIds }
+        );
+      }
+    } catch (err) {
+      console.log('[role-assign] failed:', err.message);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // 3. Shape role claim for the access/id tokens
+  // ---------------------------------------------------------------
+  // event.authorization.roles is [{id, name}, ...]; map to name strings.
+  // Defensively handle already-stringified entries from other Actions.
   const roleObjects = event.authorization?.roles || [];
   const roleNames = roleObjects.map(r =>
     typeof r === 'string' ? r : (r.name || r)
   );
 
-  // If still empty and this is a first login, fall back to the default role
-  // (the Management API call above may not have persisted yet in this same request).
-  // For the invite path specifically we also want the assigned roles to show up;
-  // trainee is a safe default if the fetch hasn't caught up.
+  // Management API assignment in step 2 may not be reflected in
+  // event.authorization on this same request. Fall back to rolesToAssign
+  // on first login so the very first token carries a role claim.
   const roles = roleNames.length > 0
     ? roleNames
-    : (isFirstLogin ? [DEFAULT_ROLE] : []);
+    : (isFirstLogin ? rolesToAssign : []);
 
-  // Add role claims to both access token and ID token
   api.accessToken.setCustomClaim(`${NAMESPACE}/roles`, roles);
   api.accessToken.setCustomClaim(`${NAMESPACE}/email`, email);
   api.idToken.setCustomClaim(`${NAMESPACE}/roles`, roles);

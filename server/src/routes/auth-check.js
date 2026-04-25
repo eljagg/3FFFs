@@ -1,125 +1,108 @@
-/**
- * auth-check.js — PUBLIC invite-check endpoint for Auth0 Actions
- *
- * This router is mounted in index.js BEFORE the `/api` requireAuth wall,
- * because the caller here is the Auth0 post-login Action — a server-side
- * script that does not hold a user JWT when it runs. Instead we gate on a
- * shared secret passed in the `X-Invite-Secret` header.
- *
- * Contract:
- *   POST /api/auth/check-invite
- *   Headers:   X-Invite-Secret: <must match process.env.INVITE_CHECK_SECRET>
- *   Body:      { email: string }
- *
- *   200 { valid: true,  roles: ['trainee', ...], inviteId, expiresAt }
- *   200 { valid: false, reason: 'no-active-invite' | 'expired' | 'revoked' | 'no-invite' }
- *   403 { error: 'Forbidden' }   — secret missing / wrong
- *   400 { error: 'email required' }
- *
- * Access policy (per v23 design):
- *   - An invite stays valid for repeat logins — NOT single-use.
- *   - Access is granted if the invite is NOT revoked AND (expiresAt IS NULL
- *     OR expiresAt > now).
- *   - `consumedAt` is set on the first valid check and is analytics-only.
- *
- * Security:
- *   - Shared secret is a 32-byte random value provisioned in Railway AND in
- *     the Auth0 Action secrets panel. Never ship to the client.
- *   - We use a constant-time comparison to avoid timing side-channels.
- */
-
 import { Router } from 'express'
-import crypto from 'node:crypto'
 import { runQuery } from '../lib/neo4j.js'
+
+/* -------------------------------------------------------------------------
+   /api/auth/* — public endpoints protected by a shared secret, NOT by JWT
+
+   Mounted BEFORE the requireAuth wall in index.js so the Auth0 post-login
+   Action can call in before the user has a token.
+
+   Security model:
+     - Request must include `x-invite-secret: <INVITE_CHECK_SECRET>` header
+     - Secret is a high-entropy string shared between Railway server env
+       and the Auth0 Action secrets vault
+     - Constant-time comparison to avoid timing side-channels
+     - If the secret is not set in env, the endpoint refuses every request
+------------------------------------------------------------------------- */
 
 const router = Router()
 
-function timingSafeEqualStr(a, b) {
+function constantTimeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false
-  const bufA = Buffer.from(a)
-  const bufB = Buffer.from(b)
-  if (bufA.length !== bufB.length) return false
-  return crypto.timingSafeEqual(bufA, bufB)
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return diff === 0
 }
 
 function requireSharedSecret(req, res, next) {
   const expected = process.env.INVITE_CHECK_SECRET
   if (!expected) {
-    // Deployment misconfiguration — fail closed. Better to block the whole
-    // invite flow than to accept any request because the secret is unset.
-    console.error('[auth-check] INVITE_CHECK_SECRET is not set on the server')
-    return res.status(503).json({ error: 'Invite check unavailable' })
+    console.error('[auth-check] INVITE_CHECK_SECRET not set — refusing request')
+    return res.status(503).json({ error: 'Service unavailable' })
   }
-  const got = req.get('X-Invite-Secret') || req.get('x-invite-secret') || ''
-  if (!timingSafeEqualStr(expected, got)) {
-    return res.status(403).json({ error: 'Forbidden' })
+  const provided = req.get('x-invite-secret') || ''
+  if (!constantTimeEqual(provided, expected)) {
+    return res.status(401).json({ error: 'Unauthorized' })
   }
   next()
 }
 
-/**
- * POST /api/auth/check-invite
- *
- * Looks up the most recent non-revoked, non-expired invite for the given
- * email. On success, stamps `consumedAt` the first time and returns the
- * roles the inviting admin chose (default 'trainee' if none were set).
- */
+// ------------------------------------------------------------------
+// POST /api/auth/check-invite
+// ------------------------------------------------------------------
+// Body: { email }
+// Header: x-invite-secret: <INVITE_CHECK_SECRET>
+//
+// Called by the Auth0 post-login Action when an email's domain is NOT
+// on the hardcoded allowlist. Looks up a matching :Invite and, if it's
+// active (not revoked, not expired), returns the roles the Action should
+// assign to the user and use as the access_token claim.
+//
+// Also records consumption telemetry so the admin can see invites being
+// used in the Invites tab.
+//
+// Response shapes:
+//   200  { allowed: true,  roles: [...], inviteId: "..." }
+//   200  { allowed: false, reason: "no_invite" | "revoked" | "expired" }
+//   401  if shared secret is missing/wrong
+//   503  if the server has no INVITE_CHECK_SECRET configured
 router.post('/check-invite', requireSharedSecret, async (req, res, next) => {
   try {
-    const rawEmail = (req.body?.email || '').toString().toLowerCase().trim()
-    if (!rawEmail) return res.status(400).json({ error: 'email required' })
-
-    // Single Cypher call:
-    //   1) find the newest invite for this email
-    //   2) return its state so we can classify valid vs reason
-    //   3) if currently valid, SET consumedAt on first hit (coalesce preserves
-    //      the original timestamp on subsequent repeat logins)
-    const rows = await runQuery(
-      `
-      MATCH (i:Invite { email: $email })
-      WITH i ORDER BY coalesce(i.invitedAt, 0) DESC LIMIT 1
-      WITH i,
-           CASE WHEN i.revokedAt IS NOT NULL THEN false
-                WHEN i.expiresAt IS NOT NULL AND i.expiresAt <= timestamp() THEN false
-                ELSE true END AS isValid
-      FOREACH (_ IN CASE WHEN isValid AND i.consumedAt IS NULL THEN [1] ELSE [] END |
-        SET i.consumedAt = timestamp()
-      )
-      RETURN i.id         AS id,
-             i.email      AS email,
-             i.roles      AS roles,
-             i.invitedAt  AS invitedAt,
-             i.expiresAt  AS expiresAt,
-             i.revokedAt  AS revokedAt,
-             i.consumedAt AS consumedAt,
-             isValid      AS isValid
-      `,
-      { email: rawEmail }
-    )
-
-    if (rows.length === 0) {
-      return res.json({ valid: false, reason: 'no-invite' })
+    const email = String(req.body?.email || '').toLowerCase().trim()
+    if (!email) {
+      return res.status(400).json({ error: 'email is required' })
     }
 
-    const r = rows[0]
-    if (!r.isValid) {
-      const reason = r.revokedAt ? 'revoked'
-                    : (r.expiresAt && r.expiresAt <= Date.now()) ? 'expired'
-                    : 'no-active-invite'
-      return res.json({ valid: false, reason })
+    // Fetch the invite (if any) without mutating anything yet — so we can
+    // distinguish between "no invite", "revoked", and "expired" for clear
+    // logging in the Auth0 Action + admin UI.
+    const existing = await runQuery(`
+      MATCH (i:Invite {email: $email})
+      RETURN
+        i.id         AS id,
+        i.roles      AS roles,
+        i.expiresAt  AS expiresAt,
+        i.revokedAt  AS revokedAt
+    `, { email })
+
+    if (existing.length === 0) {
+      return res.json({ allowed: false, reason: 'no_invite' })
+    }
+    const inv = existing[0]
+    if (inv.revokedAt) {
+      return res.json({ allowed: false, reason: 'revoked' })
+    }
+    if (inv.expiresAt && Number(inv.expiresAt) < Date.now()) {
+      return res.json({ allowed: false, reason: 'expired' })
     }
 
-    const roles = (Array.isArray(r.roles) && r.roles.length > 0) ? r.roles : ['trainee']
-    return res.json({
-      valid: true,
-      roles,
-      inviteId: r.id,
-      expiresAt: r.expiresAt || null,
+    // Valid. Update usage telemetry (consumedAt set once, lastUsedAt/useCount always).
+    await runQuery(`
+      MATCH (i:Invite {id: $id})
+      SET i.consumedAt = coalesce(i.consumedAt, timestamp()),
+          i.lastUsedAt = timestamp(),
+          i.useCount   = coalesce(i.useCount, 0) + 1
+    `, { id: inv.id })
+
+    res.json({
+      allowed: true,
+      roles: Array.isArray(inv.roles) ? inv.roles : [],
+      inviteId: inv.id,
     })
-  } catch (e) {
-    console.error('[POST /api/auth/check-invite]', e)
-    next(e)
-  }
+  } catch (e) { next(e) }
 })
 
 export default router

@@ -4,66 +4,81 @@ import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
 
 /* -------------------------------------------------------------------------
-   Admin Users & Invites — v23
-   -------------------------------------------------------------------------
-   Two-tab page gated by AdminRoute in App.jsx:
+   /admin/users — admin-only user + invite management
 
-     • Users    — read-only list of every :User node with roll-up stats.
-                  Role changes for existing users happen in the Auth0
-                  dashboard (Actions + Management API wiring lands in v24).
-
-     • Invites  — list of :Invite nodes + a form to create new ones.
-                  Admin picks email, role, expiration (24h / 7d / 30d /
-                  never, default 7d), and optional notes. Revoke button
-                  flips revokedAt so the invite stops passing the Auth0
-                  Action's domain-deny fallback.
+   Two tabs:
+     • Users   — read-only list of every :User in the graph with progress
+                 rollups. Role changes happen in the Auth0 dashboard.
+     • Invites — full CRUD for the :Invite nodes that bypass the domain
+                 allowlist. Create + revoke + copy signup URL.
 ------------------------------------------------------------------------- */
 
+const ROLES = ['trainee', 'manager', 'admin']
+
 const EXPIRATION_OPTIONS = [
-  { label: '24 hours',  ms: 24 * 60 * 60 * 1000 },
-  { label: '7 days',    ms: 7  * 24 * 60 * 60 * 1000 },   // default
-  { label: '30 days',   ms: 30 * 24 * 60 * 60 * 1000 },
-  { label: 'Never',     ms: null },
+  { label: '24 hours',  hours: 24 },
+  { label: '7 days',    hours: 24 * 7 },
+  { label: '30 days',   hours: 24 * 30 },
+  { label: 'Never',     hours: null },
 ]
-const DEFAULT_EXP_INDEX = 1 // 7 days
+
+function fmtRelative(ts) {
+  if (!ts) return '—'
+  const diff = Date.now() - Number(ts)
+  const abs = Math.abs(diff)
+  const h = abs / 3_600_000
+  const future = diff < 0
+  if (h < 1)  return future ? 'in <1h' : 'just now'
+  if (h < 24) return future ? `in ${Math.floor(h)}h` : `${Math.floor(h)}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 30) return future ? `in ${d}d` : `${d}d ago`
+  const months = Math.floor(d / 30)
+  return future ? `in ${months}mo` : `${months}mo ago`
+}
+
+function fmtAbsolute(ts) {
+  if (!ts) return '—'
+  return new Date(Number(ts)).toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+function inviteStatus(inv) {
+  if (inv.revokedAt) return { label: 'Revoked', color: 'var(--ink-faint)', bg: 'var(--paper)' }
+  if (inv.expiresAt && Number(inv.expiresAt) < Date.now()) {
+    return { label: 'Expired', color: 'var(--warning)', bg: 'transparent' }
+  }
+  if (inv.consumedAt) return { label: 'Active · in use', color: 'var(--success)', bg: 'transparent' }
+  return { label: 'Pending', color: 'var(--accent)', bg: 'transparent' }
+}
 
 export default function AdminUsers() {
-  const [tab, setTab] = useState('invites')  // Invites is where most action is
+  const [tab, setTab] = useState('users')
+
   return (
     <Page
       eyebrow="Admin"
-      title="Users & invites."
-      lede="Review every trainee on the platform and issue invitations to staff outside the standard domain allowlist."
+      title="Users & invites"
+      lede="Manage who has access to 3fffs. All domain-allowlisted users appear here automatically. Use the Invites tab to grant access to reviewers or partners whose email domain isn't on the allowlist."
     >
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid var(--rule)' }}>
-        {[
-          { id: 'invites', label: 'Invites' },
-          { id: 'users',   label: 'Users' },
-        ].map(v => (
-          <button
-            key={v.id}
-            onClick={() => setTab(v.id)}
-            style={{
-              padding: '10px 16px', fontSize: 13, fontWeight: 500,
-              border: 'none', background: 'transparent',
-              color: tab === v.id ? 'var(--ink)' : 'var(--ink-faint)',
-              borderBottom: tab === v.id ? '2px solid var(--accent)' : '2px solid transparent',
-              marginBottom: -1, cursor: 'pointer',
-              fontFamily: 'inherit', transition: 'color var(--dur)',
-            }}
-          >{v.label}</button>
-        ))}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 28, borderBottom: '1px solid var(--rule)' }}>
+        <TabButton active={tab === 'users'}   onClick={() => setTab('users')}>Users</TabButton>
+        <TabButton active={tab === 'invites'} onClick={() => setTab('invites')}>Invites</TabButton>
       </div>
 
       <AnimatePresence mode="wait">
-        {tab === 'invites' && (
-          <motion.div key="invites" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <InvitesTab />
-          </motion.div>
-        )}
-        {tab === 'users' && (
-          <motion.div key="users" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        {tab === 'users' ? (
+          <motion.div key="users"
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}>
             <UsersTab />
+          </motion.div>
+        ) : (
+          <motion.div key="invites"
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}>
+            <InvitesTab />
           </motion.div>
         )}
       </AnimatePresence>
@@ -71,490 +86,516 @@ export default function AdminUsers() {
   )
 }
 
-/* ======================================================================= */
-/* ===  INVITES TAB  ====================================================  */
-/* ======================================================================= */
-
-function InvitesTab() {
-  const [invites, setInvites] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
-  const [busy, setBusy]       = useState(false)
-
-  // Form state
-  const [fEmail, setFEmail]     = useState('')
-  const [fRole,  setFRole]      = useState('trainee')
-  const [fExp,   setFExp]       = useState(DEFAULT_EXP_INDEX)
-  const [fNotes, setFNotes]     = useState('')
-  const [formError, setFormError] = useState(null)
-  const [formSuccess, setFormSuccess] = useState(null)
-
-  function reload() {
-    setLoading(true)
-    api.listInvites()
-      .then(r => { setInvites(r.invites || []); setError(null) })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(reload, [])
-
-  async function handleCreate(e) {
-    e.preventDefault()
-    setFormError(null)
-    setFormSuccess(null)
-
-    const email = fEmail.trim().toLowerCase()
-    if (!email || !email.includes('@')) {
-      setFormError('Enter a valid email address.')
-      return
-    }
-
-    setBusy(true)
-    try {
-      const exp = EXPIRATION_OPTIONS[fExp]
-      await api.createInvite({
-        email,
-        roles:       [fRole],
-        expiresInMs: exp.ms,
-        notes:       fNotes.trim() || null,
-      })
-      setFEmail(''); setFNotes(''); setFRole('trainee'); setFExp(DEFAULT_EXP_INDEX)
-      setFormSuccess(`Invited ${email} for ${exp.label.toLowerCase()}.`)
-      reload()
-    } catch (e) {
-      setFormError(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleRevoke(invite) {
-    if (!confirm(`Revoke invite for ${invite.email}? They will no longer be able to sign in via this invite.`)) return
-    try {
-      await api.revokeInvite(invite.id)
-      reload()
-    } catch (e) {
-      alert('Revoke failed: ' + e.message)
-    }
-  }
-
-  const summary = useMemo(() => {
-    const s = { total: invites.length, active: 0, consumed: 0, revoked: 0, expired: 0 }
-    for (const i of invites) {
-      if (i.status === 'active')  s.active++
-      if (i.status === 'revoked') s.revoked++
-      if (i.status === 'expired') s.expired++
-      if (i.consumedAt)           s.consumed++
-    }
-    return s
-  }, [invites])
-
+function TabButton({ active, onClick, children }) {
   return (
-    <>
-      {/* Summary row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-        {[
-          { label: 'Total invites', value: summary.total,    color: 'var(--ink)' },
-          { label: 'Active',        value: summary.active,   color: 'var(--success)' },
-          { label: 'Consumed',      value: summary.consumed, color: 'var(--accent)' },
-          { label: 'Revoked',       value: summary.revoked,  color: 'var(--danger)' },
-          { label: 'Expired',       value: summary.expired,  color: 'var(--ink-faint)' },
-        ].map(stat => (
-          <div key={stat.label} style={statCard(stat.color)}>
-            <div style={statValueStyle(stat.color)}>{stat.value}</div>
-            <div style={statLabelStyle}>{stat.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Create-invite form */}
-      <div style={{
-        background: 'var(--paper-hi)', border: '1px solid var(--rule)',
-        borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginBottom: 28,
-      }}>
-        <div style={sectionEyebrow}>New invite</div>
-        <form onSubmit={handleCreate} style={{ display: 'grid', gap: 12, marginTop: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.9fr 0.9fr', gap: 12 }}>
-            <Field label="Email">
-              <input
-                type="email"
-                value={fEmail}
-                onChange={e => setFEmail(e.target.value)}
-                placeholder="reviewer@example.com"
-                required
-                style={inputStyle}
-              />
-            </Field>
-            <Field label="Role">
-              <select value={fRole} onChange={e => setFRole(e.target.value)} style={inputStyle}>
-                <option value="trainee">Trainee</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-              </select>
-            </Field>
-            <Field label="Expires">
-              <select value={fExp} onChange={e => setFExp(Number(e.target.value))} style={inputStyle}>
-                {EXPIRATION_OPTIONS.map((o, i) => (
-                  <option key={o.label} value={i}>{o.label}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <Field label="Notes (optional)">
-            <input
-              type="text"
-              value={fNotes}
-              onChange={e => setFNotes(e.target.value)}
-              placeholder="e.g. Security reviewer — Q2 audit"
-              style={inputStyle}
-            />
-          </Field>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <button type="submit" disabled={busy} style={btnPrimary}>
-              {busy ? 'Creating…' : 'Create invite'}
-            </button>
-            {formError   && <span style={{ color: 'var(--danger)',  fontSize: 13 }}>{formError}</span>}
-            {formSuccess && <span style={{ color: 'var(--success)', fontSize: 13 }}>{formSuccess}</span>}
-          </div>
-        </form>
-      </div>
-
-      {/* Invites table */}
-      {loading && <Muted>Loading invites…</Muted>}
-      {error   && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
-      {!loading && !error && (
-        invites.length === 0
-          ? <EmptyState message="No invites yet. Create one above." />
-          : <InvitesTable invites={invites} onRevoke={handleRevoke} />
-      )}
-    </>
-  )
-}
-
-function InvitesTable({ invites, onRevoke }) {
-  return (
-    <div style={{
-      background: 'var(--paper-hi)', border: '1px solid var(--rule)',
-      borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+    <button onClick={onClick} style={{
+      background: 'transparent',
+      border: 'none',
+      padding: '10px 16px',
+      fontSize: 14,
+      fontWeight: 500,
+      fontFamily: 'inherit',
+      cursor: 'pointer',
+      color: active ? 'var(--ink)' : 'var(--ink-faint)',
+      borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+      marginBottom: -1,
+      transition: 'color var(--dur) ease',
     }}>
-      <HeaderRow columns="2fr 1fr 1fr 1fr 1fr 0.8fr">
-        <div>Email</div><div>Role</div><div>Status</div>
-        <div>Invited</div><div>Expires</div><div></div>
-      </HeaderRow>
-      {invites.map((inv, i) => (
-        <motion.div
-          key={inv.id}
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          transition={{ delay: 0.04 + i * 0.02 }}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 0.8fr',
-            gap: 16, padding: '14px 22px', alignItems: 'center',
-            borderBottom: i < invites.length - 1 ? '1px solid var(--rule)' : 'none',
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>{inv.email}</div>
-            {inv.notes && (
-              <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 2 }}>{inv.notes}</div>
-            )}
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-soft)' }}>
-            {(Array.isArray(inv.roles) ? inv.roles : []).join(', ') || '—'}
-          </div>
-          <StatusPill status={inv.status} consumed={!!inv.consumedAt} />
-          <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{fmtRelative(inv.invitedAt)}</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>
-            {inv.expiresAt ? fmtDateShort(inv.expiresAt) : 'Never'}
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            {inv.status === 'active'
-              ? <button onClick={() => onRevoke(inv)} style={btnDangerSm}>Revoke</button>
-              : <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>—</span>}
-          </div>
-        </motion.div>
-      ))}
-    </div>
+      {children}
+    </button>
   )
 }
 
-function StatusPill({ status, consumed }) {
-  const map = {
-    active:  { label: consumed ? 'Active · used' : 'Active', color: 'var(--success)' },
-    expired: { label: 'Expired',                              color: 'var(--ink-faint)' },
-    revoked: { label: 'Revoked',                              color: 'var(--danger)' },
-  }
-  const m = map[status] || { label: status || '—', color: 'var(--ink-faint)' }
-  return (
-    <span style={{
-      display: 'inline-block',
-      fontSize: 11, fontFamily: 'var(--font-mono)',
-      letterSpacing: '0.08em', textTransform: 'uppercase',
-      padding: '4px 10px', borderRadius: 4,
-      border: '1px solid', borderColor: m.color, color: m.color,
-    }}>{m.label}</span>
-  )
-}
-
-/* ======================================================================= */
-/* ===  USERS TAB  ======================================================  */
-/* ======================================================================= */
-
+// ============================================================================
+// Users tab — read-only table
+// ============================================================================
 function UsersTab() {
-  const [users, setUsers]     = useState([])
+  const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
-  const [filter, setFilter]   = useState('')
+  const [error, setError] = useState(null)
+  const [sortBy, setSortBy] = useState('lastSeenAt')
+  const [filter, setFilter] = useState('')
 
   useEffect(() => {
-    api.listUsers()
-      .then(r => { setUsers(r.users || []); setError(null) })
+    api.adminListUsers()
+      .then(d => setUsers(d.users || []))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
 
-  const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    if (!q) return users
-    return users.filter(u =>
-      (u.email  || '').toLowerCase().includes(q) ||
-      (u.name   || '').toLowerCase().includes(q) ||
-      (u.domain || '').toLowerCase().includes(q) ||
-      (Array.isArray(u.roles) ? u.roles.join(',').toLowerCase() : '').includes(q)
-    )
-  }, [users, filter])
+  const sorted = useMemo(() => {
+    const f = filter.trim().toLowerCase()
+    let rows = users
+    if (f) {
+      rows = rows.filter(u =>
+        (u.email || '').toLowerCase().includes(f) ||
+        (u.name  || '').toLowerCase().includes(f) ||
+        (u.domain|| '').toLowerCase().includes(f)
+      )
+    }
+    rows = [...rows].sort((a, b) => {
+      if (sortBy === 'lastSeenAt')         return (Number(b.lastSeenAt) || 0) - (Number(a.lastSeenAt) || 0)
+      if (sortBy === 'scenariosCompleted') return (b.scenariosCompleted || 0) - (a.scenariosCompleted || 0)
+      if (sortBy === 'email')              return String(a.email || '').localeCompare(String(b.email || ''))
+      return 0
+    })
+    return rows
+  }, [users, sortBy, filter])
 
-  if (loading) return <Muted>Loading users…</Muted>
-  if (error)   return <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>
+  if (loading) return <div style={{ color: 'var(--ink-faint)', fontSize: 14 }}>Loading users…</div>
+  if (error)   return <ErrorBox message={error} />
 
   return (
-    <>
-      <div style={{
-        display: 'flex', gap: 14, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap',
-      }}>
+    <div>
+      <InfoCallout>
+        Role changes and blocking are managed in the <strong>Auth0 dashboard</strong>
+        {' '}(Users → select user → Roles tab). To revoke access for an <em>invited</em> user,
+        revoke their invite on the Invites tab instead — that's faster and doesn't require Auth0 access.
+      </InfoCallout>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
         <input
-          type="text"
+          type="search"
           value={filter}
           onChange={e => setFilter(e.target.value)}
-          placeholder="Filter by email, name, domain, role…"
-          style={{ ...inputStyle, maxWidth: 360 }}
+          placeholder="Filter by email, name, or domain…"
+          style={inputStyle}
         />
-        <span style={{ fontSize: 12, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
-          {filtered.length} of {users.length}
-        </span>
-        <span style={{
-          marginLeft: 'auto', fontSize: 11, color: 'var(--ink-faint)',
-          fontFamily: 'var(--font-mono)', letterSpacing: '0.08em',
-        }}>
-          Role changes happen in Auth0 dashboard · inline edits land in v24
-        </span>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={selectStyle}>
+          <option value="lastSeenAt">Sort: most recent</option>
+          <option value="scenariosCompleted">Sort: most scenarios</option>
+          <option value="email">Sort: email A–Z</option>
+        </select>
+        <div style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-faint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          {sorted.length} {sorted.length === 1 ? 'user' : 'users'}
+        </div>
       </div>
 
-      {filtered.length === 0
-        ? <EmptyState message="No users match that filter." />
-        : <UsersTable users={filtered} />}
-    </>
+      <div style={{ border: '1px solid var(--rule)', borderRadius: 8, overflow: 'hidden' }}>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={{ background: 'var(--paper)' }}>
+              <Th>Email</Th>
+              <Th>Name</Th>
+              <Th>Domain</Th>
+              <Th>Roles</Th>
+              <Th align="right">Completed</Th>
+              <Th align="right">Quiz</Th>
+              <Th align="right">Stages</Th>
+              <Th>Last seen</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(u => (
+              <tr key={u.id} style={rowStyle}>
+                <Td>{u.email || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
+                <Td>{u.name || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
+                <Td><code style={codeStyle}>{u.domain || '—'}</code></Td>
+                <Td><RolePills roles={u.roles} /></Td>
+                <Td align="right">{u.scenariosCompleted || 0}</Td>
+                <Td align="right">{u.correctAnswers || 0}/{u.quizzesAnswered || 0}</Td>
+                <Td align="right">{u.stagesAttempted || 0}</Td>
+                <Td title={fmtAbsolute(u.lastSeenAt)}>{fmtRelative(u.lastSeenAt)}</Td>
+              </tr>
+            ))}
+            {sorted.length === 0 && (
+              <tr><Td colSpan={8}><div style={{ padding: 30, textAlign: 'center', color: 'var(--ink-faint)' }}>No users match.</div></Td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
-function UsersTable({ users }) {
+// ============================================================================
+// Invites tab — create + revoke, with copy-to-clipboard signup URL
+// ============================================================================
+function InvitesTab() {
+  const [invites, setInvites] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [showModal, setShowModal] = useState(false)
+  const [toast, setToast] = useState(null)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const d = await api.adminListInvites()
+      setInvites(d.invites || [])
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function handleCreate(payload) {
+    try {
+      const d = await api.adminCreateInvite(payload)
+      setShowModal(false)
+      await load()
+      // Copy signup URL immediately — the whole point of this feature
+      const url = window.location.origin
+      try {
+        await navigator.clipboard.writeText(url)
+        setToast({ kind: 'success', text: `Invited ${d.invite.email}. Signup URL copied to clipboard.` })
+      } catch {
+        setToast({ kind: 'success', text: `Invited ${d.invite.email}. Signup URL: ${url}` })
+      }
+      setTimeout(() => setToast(null), 5000)
+    } catch (e) {
+      setToast({ kind: 'error', text: e.message })
+      setTimeout(() => setToast(null), 5000)
+    }
+  }
+
+  async function handleRevoke(inv) {
+    if (!confirm(`Revoke invite for ${inv.email}? They'll be blocked from logging in.`)) return
+    try {
+      await api.adminRevokeInvite(inv.id)
+      await load()
+      setToast({ kind: 'success', text: `Revoked ${inv.email}.` })
+      setTimeout(() => setToast(null), 3500)
+    } catch (e) {
+      setToast({ kind: 'error', text: e.message })
+      setTimeout(() => setToast(null), 5000)
+    }
+  }
+
+  async function copySignupUrl() {
+    const url = window.location.origin
+    try {
+      await navigator.clipboard.writeText(url)
+      setToast({ kind: 'success', text: 'Signup URL copied.' })
+      setTimeout(() => setToast(null), 2500)
+    } catch {
+      setToast({ kind: 'error', text: `Copy failed. URL: ${url}` })
+      setTimeout(() => setToast(null), 5000)
+    }
+  }
+
   return (
-    <div style={{
-      background: 'var(--paper-hi)', border: '1px solid var(--rule)',
-      borderRadius: 'var(--radius-lg)', overflow: 'hidden',
-    }}>
-      <HeaderRow columns="2fr 1fr 1fr 0.8fr 0.8fr 0.8fr 1fr">
-        <div>User</div><div>Domain</div><div>Roles</div>
-        <div>Scenarios</div><div>Quizzes</div><div>Correct</div><div>Last seen</div>
-      </HeaderRow>
-      {users.map((u, i) => {
-        const roles = Array.isArray(u.roles) ? u.roles : []
-        const correctRate = u.quizzesAnswered > 0
-          ? Math.round((u.correctAnswers / u.quizzesAnswered) * 100)
-          : null
-        return (
+    <div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+        <button onClick={() => setShowModal(true)} style={primaryBtn}>+ Invite user</button>
+        <button onClick={copySignupUrl} style={secondaryBtn}>Copy signup URL</button>
+        <div style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-faint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          {invites.length} {invites.length === 1 ? 'invite' : 'invites'}
+        </div>
+      </div>
+
+      {loading && <div style={{ color: 'var(--ink-faint)', fontSize: 14 }}>Loading invites…</div>}
+      {error && <ErrorBox message={error} />}
+
+      {!loading && !error && (
+        <div style={{ border: '1px solid var(--rule)', borderRadius: 8, overflow: 'hidden' }}>
+          <table style={tableStyle}>
+            <thead>
+              <tr style={{ background: 'var(--paper)' }}>
+                <Th>Email</Th>
+                <Th>Roles</Th>
+                <Th>Status</Th>
+                <Th>Invited</Th>
+                <Th>Expires</Th>
+                <Th align="right">Uses</Th>
+                <Th>Notes</Th>
+                <Th align="right">Action</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {invites.map(inv => {
+                const st = inviteStatus(inv)
+                const isDone = inv.revokedAt || (inv.expiresAt && Number(inv.expiresAt) < Date.now())
+                return (
+                  <tr key={inv.id} style={rowStyle}>
+                    <Td>{inv.email}</Td>
+                    <Td><RolePills roles={inv.roles} /></Td>
+                    <Td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: st.color, fontWeight: 500, fontSize: 12 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: st.color, display: 'inline-block' }} />
+                        {st.label}
+                      </span>
+                    </Td>
+                    <Td title={fmtAbsolute(inv.invitedAt)}>{fmtRelative(inv.invitedAt)}</Td>
+                    <Td title={inv.expiresAt ? fmtAbsolute(inv.expiresAt) : 'No expiration'}>
+                      {inv.expiresAt ? fmtRelative(inv.expiresAt) : <span style={{ color: 'var(--ink-faint)' }}>Never</span>}
+                    </Td>
+                    <Td align="right">{inv.useCount || 0}</Td>
+                    <Td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={inv.notes || ''}>
+                      {inv.notes || <span style={{ color: 'var(--ink-faint)' }}>—</span>}
+                    </Td>
+                    <Td align="right">
+                      {!isDone && (
+                        <button onClick={() => handleRevoke(inv)} style={dangerLinkBtn}>Revoke</button>
+                      )}
+                    </Td>
+                  </tr>
+                )
+              })}
+              {invites.length === 0 && (
+                <tr><Td colSpan={8}>
+                  <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-faint)' }}>
+                    No invites yet. Click <strong>Invite user</strong> to grant access to someone off-allowlist.
+                  </div>
+                </Td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {showModal && <InviteModal onClose={() => setShowModal(false)} onSubmit={handleCreate} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {toast && (
           <motion.div
-            key={u.id}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            transition={{ delay: 0.03 + i * 0.015 }}
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
             style={{
-              display: 'grid',
-              gridTemplateColumns: '2fr 1fr 1fr 0.8fr 0.8fr 0.8fr 1fr',
-              gap: 16, padding: '14px 22px', alignItems: 'center',
-              borderBottom: i < users.length - 1 ? '1px solid var(--rule)' : 'none',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>
-                {u.name || (u.email || '').split('@')[0] || '(no name)'}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{u.email || '—'}</div>
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-soft)' }}>
-              {u.domain || '—'}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {roles.length === 0
-                ? <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>—</span>
-                : roles.map(r => (
-                    <span key={r} style={{
-                      fontSize: 10, fontFamily: 'var(--font-mono)',
-                      letterSpacing: '0.06em', textTransform: 'uppercase',
-                      padding: '3px 7px', borderRadius: 3,
-                      background: r === 'admin' ? 'var(--accent)'
-                                : r === 'manager' ? 'var(--ink)'
-                                : 'var(--paper-dim)',
-                      color: r === 'admin' ? '#fff'
-                           : r === 'manager' ? 'var(--paper-hi)'
-                           : 'var(--ink-soft)',
-                      border: r === 'trainee' ? '1px solid var(--rule-strong)' : 'none',
-                    }}>{r}</span>
-                  ))
-              }
-            </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500 }}>
-              {u.scenariosCompleted || 0}
-            </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500 }}>
-              {u.quizzesAnswered || 0}
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12,
-                          color: correctRate !== null ? 'var(--ink)' : 'var(--ink-faint)' }}>
-              {correctRate !== null ? `${correctRate}%` : '—'}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>
-              {fmtRelative(u.lastSeenAt)}
-            </div>
+              position: 'fixed', bottom: 30, left: '50%', transform: 'translateX(-50%)',
+              padding: '14px 22px', borderRadius: 8, fontSize: 14, fontWeight: 500,
+              maxWidth: 560, textAlign: 'center',
+              background: toast.kind === 'error' ? 'var(--danger)' : 'var(--ink)',
+              color: 'var(--paper)', zIndex: 100,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            }}>
+            {toast.text}
           </motion.div>
-        )
-      })}
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-/* ======================================================================= */
-/* ===  Shared bits  ===================================================== */
-/* ======================================================================= */
+// ============================================================================
+// Invite modal
+// ============================================================================
+function InviteModal({ onClose, onSubmit }) {
+  const [email, setEmail]     = useState('')
+  const [roles, setRoles]     = useState(['trainee'])
+  const [hours, setHours]     = useState(24 * 7) // default 7 days
+  const [notes, setNotes]     = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [err, setErr]         = useState(null)
 
-function Field({ label, children }) {
+  function toggleRole(r) {
+    setRoles(rs => rs.includes(r) ? rs.filter(x => x !== r) : [...rs, r])
+  }
+
+  async function submit(e) {
+    e.preventDefault()
+    setErr(null)
+    if (!email.trim()) { setErr('Email is required.'); return }
+    if (roles.length === 0) { setErr('Pick at least one role.'); return }
+    setSubmitting(true)
+    try {
+      await onSubmit({
+        email: email.trim(),
+        roles,
+        expirationHours: hours,
+        notes: notes.trim() || null,
+      })
+    } catch (e) {
+      setErr(e.message)
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <label style={{ display: 'block' }}>
-      <div style={{
-        fontFamily: 'var(--font-mono)', fontSize: 10,
-        letterSpacing: '0.1em', textTransform: 'uppercase',
-        color: 'var(--ink-faint)', marginBottom: 6,
-      }}>{label}</div>
-      {children}
-    </label>
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+        backdropFilter: 'blur(4px)',
+      }}>
+      <motion.form
+        onClick={e => e.stopPropagation()}
+        onSubmit={submit}
+        initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        style={{
+          background: 'var(--paper-hi)', borderRadius: 12, padding: '32px 36px',
+          maxWidth: 520, width: '92%', boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+          border: '1px solid var(--rule)',
+        }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
+          textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10,
+        }}>Invite user</div>
+        <h2 style={{
+          fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 500,
+          lineHeight: 1.15, letterSpacing: '-0.01em', marginBottom: 24,
+        }}>Grant access to a non-allowlisted email</h2>
+
+        <label style={labelStyle}>
+          <div style={labelHdr}>Email</div>
+          <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="reviewer@gmail.com" autoFocus style={inputStyle} />
+        </label>
+
+        <label style={labelStyle}>
+          <div style={labelHdr}>Roles</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {ROLES.map(r => (
+              <button key={r} type="button" onClick={() => toggleRole(r)} style={{
+                padding: '8px 14px', borderRadius: 20, fontSize: 13,
+                fontFamily: 'inherit', cursor: 'pointer',
+                border: '1px solid ' + (roles.includes(r) ? 'var(--ink)' : 'var(--rule)'),
+                background: roles.includes(r) ? 'var(--ink)' : 'transparent',
+                color: roles.includes(r) ? 'var(--paper)' : 'var(--ink-soft)',
+                transition: 'all var(--dur) ease',
+              }}>
+                {r}
+              </button>
+            ))}
+          </div>
+        </label>
+
+        <label style={labelStyle}>
+          <div style={labelHdr}>Expires in</div>
+          <select value={hours === null ? 'null' : String(hours)}
+            onChange={e => setHours(e.target.value === 'null' ? null : Number(e.target.value))}
+            style={selectStyle}>
+            {EXPIRATION_OPTIONS.map(o => (
+              <option key={o.label} value={o.hours === null ? 'null' : String(o.hours)}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          <div style={labelHdr}>Notes <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>(optional)</span></div>
+          <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder="e.g. Security reviewer — contract through June" style={inputStyle} maxLength={500} />
+        </label>
+
+        {err && <div style={{
+          color: 'var(--danger)', fontSize: 13, padding: '10px 12px',
+          background: 'rgba(220,38,38,0.08)', borderRadius: 6, marginBottom: 16,
+        }}>{err}</div>}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+          <button type="button" onClick={onClose} style={secondaryBtn} disabled={submitting}>Cancel</button>
+          <button type="submit" style={primaryBtn} disabled={submitting}>
+            {submitting ? 'Creating…' : 'Create invite'}
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
   )
 }
 
-function HeaderRow({ columns, children }) {
+// ============================================================================
+// Shared small components
+// ============================================================================
+function RolePills({ roles }) {
+  const list = Array.isArray(roles) ? roles : []
+  if (list.length === 0) return <span style={{ color: 'var(--ink-faint)' }}>—</span>
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+      {list.map(r => (
+        <span key={r} style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10, padding: '2px 8px',
+          borderRadius: 4, background: 'var(--paper)', color: 'var(--ink-soft)',
+          border: '1px solid var(--rule)', letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+        }}>{r}</span>
+      ))}
+    </span>
+  )
+}
+
+function InfoCallout({ children }) {
   return (
     <div style={{
-      display: 'grid',
-      gridTemplateColumns: columns,
-      gap: 16, padding: '12px 22px',
-      background: 'var(--paper-dim)',
-      borderBottom: '1px solid var(--rule)',
-      fontFamily: 'var(--font-mono)', fontSize: 10,
-      letterSpacing: '0.1em', textTransform: 'uppercase',
-      color: 'var(--ink-faint)',
+      padding: '14px 18px', background: 'var(--paper)', border: '1px solid var(--rule)',
+      borderLeft: '3px solid var(--accent)', borderRadius: 6, marginBottom: 20,
+      fontSize: 13.5, color: 'var(--ink-soft)', lineHeight: 1.55,
     }}>
       {children}
     </div>
   )
 }
 
-function EmptyState({ message }) {
+function ErrorBox({ message }) {
   return (
     <div style={{
-      padding: 40, textAlign: 'center',
-      background: 'var(--paper-hi)', border: '1px dashed var(--rule-strong)',
-      borderRadius: 'var(--radius-lg)', color: 'var(--ink-faint)',
-    }}>{message}</div>
+      padding: 20, background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.3)',
+      borderRadius: 8, color: 'var(--danger)', fontSize: 14,
+    }}>
+      <strong>Error:</strong> {message}
+    </div>
   )
 }
 
-function Muted({ children }) {
-  return <div style={{ fontSize: 13, color: 'var(--ink-faint)', fontStyle: 'italic' }}>{children}</div>
+function Th({ children, align = 'left' }) {
+  return (
+    <th style={{
+      textAlign: align, padding: '12px 14px', fontSize: 11, fontWeight: 500,
+      fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase',
+      color: 'var(--ink-faint)', borderBottom: '1px solid var(--rule)',
+    }}>{children}</th>
+  )
 }
 
-function fmtRelative(ts) {
-  if (!ts) return '—'
-  const diff = Date.now() - Number(ts)
-  if (!Number.isFinite(diff)) return '—'
-  const h = diff / 3_600_000
-  if (h < 1)  return 'just now'
-  if (h < 24) return `${Math.floor(h)}h ago`
-  const d = Math.floor(h / 24)
-  if (d < 30) return `${d}d ago`
-  return `${Math.floor(d / 30)}mo ago`
+function Td({ children, align = 'left', colSpan, style, title }) {
+  return (
+    <td colSpan={colSpan} title={title} style={{
+      textAlign: align, padding: '12px 14px', fontSize: 13.5,
+      color: 'var(--ink)', borderBottom: '1px solid var(--rule)', verticalAlign: 'middle',
+      ...(style || {}),
+    }}>{children}</td>
+  )
 }
 
-function fmtDateShort(ts) {
-  const n = Number(ts)
-  if (!Number.isFinite(n)) return '—'
-  try { return new Date(n).toISOString().slice(0, 10) }
-  catch { return '—' }
+// ============================================================================
+// Shared styles
+// ============================================================================
+const tableStyle = {
+  width: '100%', borderCollapse: 'collapse', background: 'var(--paper-hi)',
 }
-
+const rowStyle = { transition: 'background var(--dur) ease' }
+const codeStyle = {
+  fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 6px',
+  background: 'var(--paper)', borderRadius: 3, color: 'var(--ink-soft)',
+}
 const inputStyle = {
-  width: '100%',
-  padding: '10px 12px',
-  fontFamily: 'inherit', fontSize: 14,
-  color: 'var(--ink)', background: 'var(--paper)',
-  border: '1px solid var(--rule-strong)',
-  borderRadius: 'var(--radius)',
-  outline: 'none',
+  width: '100%', padding: '10px 12px', fontSize: 14, fontFamily: 'inherit',
+  background: 'var(--paper)', color: 'var(--ink)',
+  border: '1px solid var(--rule)', borderRadius: 6,
+  outline: 'none', transition: 'border-color var(--dur) ease',
   boxSizing: 'border-box',
 }
-
-const btnPrimary = {
-  padding: '10px 18px',
-  fontFamily: 'var(--font-mono)', fontSize: 12,
-  letterSpacing: '0.1em', textTransform: 'uppercase',
-  background: 'var(--ink)', color: 'var(--paper-hi)',
-  border: 'none', borderRadius: 'var(--radius)',
-  cursor: 'pointer',
+const selectStyle = {
+  padding: '10px 12px', fontSize: 14, fontFamily: 'inherit',
+  background: 'var(--paper)', color: 'var(--ink)',
+  border: '1px solid var(--rule)', borderRadius: 6,
+  outline: 'none', cursor: 'pointer',
 }
-
-const btnDangerSm = {
-  padding: '6px 12px',
-  fontFamily: 'var(--font-mono)', fontSize: 11,
-  letterSpacing: '0.08em', textTransform: 'uppercase',
-  background: 'transparent', color: 'var(--danger)',
-  border: '1px solid var(--danger)', borderRadius: 'var(--radius)',
-  cursor: 'pointer',
+const labelStyle = { display: 'block', marginBottom: 18 }
+const labelHdr = {
+  fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
+  textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 8, fontWeight: 500,
 }
-
-const sectionEyebrow = {
-  fontFamily: 'var(--font-mono)', fontSize: 10,
-  letterSpacing: '0.14em', textTransform: 'uppercase',
-  color: 'var(--accent)',
+const primaryBtn = {
+  padding: '10px 18px', background: 'var(--ink)', color: 'var(--paper-hi)',
+  borderRadius: 6, fontSize: 14, fontWeight: 500, border: 'none', cursor: 'pointer',
+  fontFamily: 'inherit', transition: 'opacity var(--dur) ease',
 }
-
-const statLabelStyle = {
-  fontFamily: 'var(--font-mono)', fontSize: 10,
-  letterSpacing: '0.1em', textTransform: 'uppercase',
-  color: 'var(--ink-faint)',
+const secondaryBtn = {
+  padding: '10px 18px', background: 'transparent', color: 'var(--ink)',
+  borderRadius: 6, fontSize: 14, fontWeight: 500,
+  border: '1px solid var(--rule-strong)', cursor: 'pointer', fontFamily: 'inherit',
 }
-
-function statCard(accent) {
-  return {
-    padding: '14px 16px',
-    background: 'var(--paper-hi)',
-    border: '1px solid var(--rule)',
-    borderLeft: `3px solid ${accent}`,
-    borderRadius: 'var(--radius-lg)',
-  }
-}
-
-function statValueStyle(color) {
-  return {
-    fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500,
-    lineHeight: 1, letterSpacing: '-0.02em', color, marginBottom: 4,
-  }
+const dangerLinkBtn = {
+  background: 'transparent', border: 'none', color: 'var(--danger)',
+  fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px',
+  textDecoration: 'underline',
 }

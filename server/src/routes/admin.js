@@ -1,221 +1,199 @@
-/**
- * admin.js — admin-only user & invite management
- *
- * Every route in this router is gated by requireRole('admin'). Mounted in
- * index.js AFTER the `/api` requireAuth wall, so getUser(req) is always
- * populated.
- *
- * Endpoints:
- *   GET    /api/admin/users                 — read-only list of users (v23)
- *   GET    /api/admin/invites               — list of invites (all states)
- *   POST   /api/admin/invites               — create invite
- *   POST   /api/admin/invites/:id/revoke    — mark invite revoked (idempotent)
- *   DELETE /api/admin/invites/:id           — hard-delete (rare; use revoke)
- *
- * Scope note for v23: role changes on EXISTING users happen in the Auth0
- * dashboard, not here. Inline role editing will land in v24 once we wire
- * the Management API in the server.
- */
-
 import { Router } from 'express'
-import crypto from 'node:crypto'
+import { randomUUID } from 'crypto'
 import { runQuery } from '../lib/neo4j.js'
 import { requireRole, getUser } from '../lib/auth.js'
 
+/* -------------------------------------------------------------------------
+   /api/admin/* — admin-only user and invite management
+
+   Everything in this router is gated behind the 'admin' role. Mounted
+   AFTER the requireAuth / syncUser wall in index.js.
+
+   Endpoints:
+     GET    /users              — list all :User nodes with progress rollups
+     GET    /invites            — list all :Invite nodes (active, revoked, expired)
+     POST   /invites            — create or upsert an invite by email
+     DELETE /invites/:id        — soft-revoke an invite (sets revokedAt)
+
+   Invite lifecycle:
+     - invitedAt:    when the admin created/re-issued the invite
+     - expiresAt:    null for never, otherwise a timestamp
+     - revokedAt:    null until admin revokes; non-null blocks future logins
+     - consumedAt:   set on first successful login via the shared-secret check
+     - lastUsedAt:   updated on every login that matched this invite
+     - useCount:     number of logins that matched this invite
+
+   The Auth0 post-login action calls /api/auth/check-invite (see routes/auth-check.js)
+   for domains NOT on the allowlist. Invites remain valid for the whole
+   expiresAt window — they are not single-use. This is intentional so a
+   reviewer can log out and log back in without a new invite.
+------------------------------------------------------------------------- */
+
 const router = Router()
 
-// Everything under /api/admin requires admin role
+// Admin-only. Runs AFTER requireAuth + syncUser (mounted at /api).
 router.use(requireRole('admin'))
 
-const VALID_ROLES = ['trainee', 'manager', 'admin']
-
-/* --------------------------------------------------------------------------
- * Users
- * ----------------------------------------------------------------------- */
-
-/**
- * GET /api/admin/users
- *
- * Returns every User node with lightweight progress stats rolled up. The v23
- * Users tab is read-only — editing happens in Auth0.
- */
+// ------------------------------------------------------------------
+// GET /api/admin/users
+// ------------------------------------------------------------------
+// Full user list with progress rollups for the Users tab. Read-only.
+// Role changes go through the Auth0 dashboard — the Action reads Auth0
+// as source of truth for roles on each login.
 router.get('/users', async (_req, res, next) => {
   try {
-    const rows = await runQuery(
-      `
-      MATCH (user:User)
-      OPTIONAL MATCH (user)-[c:COMPLETED]->(sc:Scenario)
-      OPTIONAL MATCH (user)-[a:ANSWERED]->(q:Quiz)
-      OPTIONAL MATCH (user)-[att:ATTEMPTED_STAGE]->(:Stage)
-      WITH user,
+    const rows = await runQuery(`
+      MATCH (u:User)
+      OPTIONAL MATCH (u)-[c:COMPLETED]->(sc:Scenario)
+      OPTIONAL MATCH (u)-[a:ANSWERED]->(q:Quiz)
+      OPTIONAL MATCH (u)-[att:ATTEMPTED_STAGE]->(st:Stage)
+      WITH u,
            count(DISTINCT sc) AS scenariosCompleted,
            count(DISTINCT q)  AS quizzesAnswered,
            sum(CASE WHEN a.correct THEN 1 ELSE 0 END) AS correctAnswers,
-           count(DISTINCT att) AS stageAttempts
-      RETURN user.id          AS id,
-             user.email       AS email,
-             user.name        AS name,
-             user.domain      AS domain,
-             user.roles       AS roles,
-             user.firstSeenAt AS firstSeenAt,
-             user.lastSeenAt  AS lastSeenAt,
-             scenariosCompleted,
-             quizzesAnswered,
-             correctAnswers,
-             stageAttempts
-      ORDER BY coalesce(user.lastSeenAt, 0) DESC
-      `
-    )
+           count(DISTINCT st) AS stagesAttempted
+      RETURN
+        u.id           AS id,
+        u.email        AS email,
+        u.name         AS name,
+        u.domain       AS domain,
+        u.roles        AS roles,
+        u.firstSeenAt  AS firstSeenAt,
+        u.lastSeenAt   AS lastSeenAt,
+        scenariosCompleted,
+        quizzesAnswered,
+        correctAnswers,
+        stagesAttempted
+      ORDER BY u.lastSeenAt DESC
+    `)
     res.json({ users: rows })
   } catch (e) { next(e) }
 })
 
-/* --------------------------------------------------------------------------
- * Invites
- * ----------------------------------------------------------------------- */
-
-/**
- * GET /api/admin/invites
- *
- * Returns every invite with computed status (active / expired / revoked /
- * consumed). Newest first. The admin UI filters/labels from `status`.
- */
+// ------------------------------------------------------------------
+// GET /api/admin/invites
+// ------------------------------------------------------------------
+// Returns every invite ever created, including revoked + expired ones so
+// the admin has a full audit trail in the UI.
 router.get('/invites', async (_req, res, next) => {
   try {
-    const rows = await runQuery(
-      `
+    const rows = await runQuery(`
       MATCH (i:Invite)
-      OPTIONAL MATCH (admin:User { id: i.invitedBy })
-      RETURN i.id          AS id,
-             i.email       AS email,
-             i.roles       AS roles,
-             i.invitedBy   AS invitedBy,
-             admin.email   AS invitedByEmail,
-             i.invitedAt   AS invitedAt,
-             i.expiresAt   AS expiresAt,
-             i.revokedAt   AS revokedAt,
-             i.consumedAt  AS consumedAt,
-             i.notes       AS notes,
-             CASE
-               WHEN i.revokedAt IS NOT NULL THEN 'revoked'
-               WHEN i.expiresAt IS NOT NULL AND i.expiresAt <= timestamp() THEN 'expired'
-               ELSE 'active'
-             END AS status
-      ORDER BY coalesce(i.invitedAt, 0) DESC
-      `
-    )
+      OPTIONAL MATCH (inviter:User {id: i.invitedBy})
+      RETURN
+        i.id            AS id,
+        i.email         AS email,
+        i.roles         AS roles,
+        i.notes         AS notes,
+        i.invitedBy     AS invitedBy,
+        inviter.email   AS invitedByEmail,
+        i.invitedAt     AS invitedAt,
+        i.expiresAt     AS expiresAt,
+        i.revokedAt     AS revokedAt,
+        i.consumedAt    AS consumedAt,
+        i.lastUsedAt    AS lastUsedAt,
+        i.useCount      AS useCount
+      ORDER BY i.invitedAt DESC
+    `)
     res.json({ invites: rows })
   } catch (e) { next(e) }
 })
 
-/**
- * POST /api/admin/invites
- *
- * Body: { email, roles?, expiresInMs?, notes? }
- *   - email        required, lowercased + trimmed
- *   - roles        defaults to ['trainee']; validated against VALID_ROLES
- *   - expiresInMs  null/undefined => never expires; otherwise a positive int
- *                  (UI maps 24h/7d/30d/never to the right value)
- *   - notes        optional free-text for the admin's own record
- */
+// ------------------------------------------------------------------
+// POST /api/admin/invites
+// ------------------------------------------------------------------
+// Body: { email, roles, expirationHours, notes }
+//   email:            required, lowercased
+//   roles:            required, array of strings from ['trainee','manager','admin']
+//   expirationHours:  number of hours until expiry, or null for never
+//   notes:            optional free-text
+//
+// If an invite already exists for that email, this UPDATES it (un-revoking
+// it if needed, resetting expiry, swapping roles). This makes "re-invite"
+// a natural action without needing a separate endpoint.
 router.post('/invites', async (req, res, next) => {
   try {
     const me = getUser(req)
-    const email = (req.body?.email || '').toString().toLowerCase().trim()
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({ error: 'Valid email required' })
-    }
+    const email = String(req.body?.email || '').toLowerCase().trim()
+    const roles = Array.isArray(req.body?.roles) ? req.body.roles : []
+    const notes = req.body?.notes ? String(req.body.notes).slice(0, 500) : null
+    const expirationHours = req.body?.expirationHours
 
-    const requestedRoles = Array.isArray(req.body?.roles) && req.body.roles.length
-      ? req.body.roles
-      : ['trainee']
-    const roles = requestedRoles
-      .map(r => String(r).toLowerCase().trim())
-      .filter(r => VALID_ROLES.includes(r))
-    if (roles.length === 0) {
-      return res.status(400).json({ error: `roles must be a subset of ${VALID_ROLES.join(', ')}` })
+    // Validation
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return res.status(400).json({ error: 'A valid email is required.' })
     }
-
+    const validRoles = ['trainee', 'manager', 'admin']
+    const cleanRoles = roles.filter(r => validRoles.includes(r))
+    if (cleanRoles.length === 0) {
+      return res.status(400).json({ error: 'At least one role is required.' })
+    }
     let expiresAt = null
-    if (req.body?.expiresInMs !== null && req.body?.expiresInMs !== undefined) {
-      const ms = Number(req.body.expiresInMs)
-      if (!Number.isFinite(ms) || ms <= 0) {
-        return res.status(400).json({ error: 'expiresInMs must be a positive number or null (never)' })
+    if (expirationHours !== null && expirationHours !== undefined) {
+      const hours = Number(expirationHours)
+      if (!Number.isFinite(hours) || hours <= 0) {
+        return res.status(400).json({ error: 'expirationHours must be a positive number or null.' })
       }
-      expiresAt = Date.now() + ms
+      expiresAt = Date.now() + Math.round(hours * 3_600_000)
     }
 
-    const notes = typeof req.body?.notes === 'string' ? req.body.notes.slice(0, 1000) : null
-    const id = crypto.randomUUID()
+    // Upsert. Preserve id on re-invite, reset revokedAt, refresh fields.
+    const [row] = await runQuery(`
+      MERGE (i:Invite {email: $email})
+      ON CREATE SET
+        i.id         = $newId,
+        i.invitedAt  = timestamp(),
+        i.useCount   = 0
+      SET
+        i.roles      = $roles,
+        i.notes      = $notes,
+        i.invitedBy  = $invitedBy,
+        i.expiresAt  = $expiresAt,
+        i.revokedAt  = null,
+        i.invitedAt  = CASE WHEN i.invitedAt IS NULL THEN timestamp() ELSE i.invitedAt END
+      RETURN
+        i.id        AS id,
+        i.email     AS email,
+        i.roles     AS roles,
+        i.notes     AS notes,
+        i.invitedBy AS invitedBy,
+        i.invitedAt AS invitedAt,
+        i.expiresAt AS expiresAt,
+        i.revokedAt AS revokedAt,
+        i.consumedAt AS consumedAt,
+        i.lastUsedAt AS lastUsedAt,
+        i.useCount  AS useCount
+    `, {
+      email,
+      newId: randomUUID(),
+      roles: cleanRoles,
+      notes,
+      invitedBy: me.id,
+      expiresAt,
+    })
 
-    const rows = await runQuery(
-      `
-      CREATE (i:Invite {
-        id:        $id,
-        email:     $email,
-        roles:     $roles,
-        invitedBy: $invitedBy,
-        invitedAt: timestamp(),
-        expiresAt: $expiresAt,
-        notes:     $notes
-      })
-      RETURN i.id         AS id,
-             i.email      AS email,
-             i.roles      AS roles,
-             i.invitedBy  AS invitedBy,
-             i.invitedAt  AS invitedAt,
-             i.expiresAt  AS expiresAt,
-             i.revokedAt  AS revokedAt,
-             i.consumedAt AS consumedAt,
-             i.notes      AS notes
-      `,
-      { id, email, roles, invitedBy: me.id, expiresAt, notes }
-    )
-    res.status(201).json({ invite: rows[0] })
+    res.json({ invite: row })
   } catch (e) { next(e) }
 })
 
-/**
- * POST /api/admin/invites/:id/revoke
- *
- * Idempotent — re-revoking a revoked invite is a no-op that returns 200.
- */
-router.post('/invites/:id/revoke', async (req, res, next) => {
-  try {
-    const { id } = req.params
-    const rows = await runQuery(
-      `
-      MATCH (i:Invite { id: $id })
-      SET i.revokedAt = coalesce(i.revokedAt, timestamp())
-      RETURN i.id AS id, i.email AS email, i.revokedAt AS revokedAt
-      `,
-      { id }
-    )
-    if (rows.length === 0) return res.status(404).json({ error: 'Invite not found' })
-    res.json({ invite: rows[0] })
-  } catch (e) { next(e) }
-})
-
-/**
- * DELETE /api/admin/invites/:id
- *
- * Hard-deletes the node. Prefer revoke() above for an audit trail; delete
- * is here for cleaning up test data.
- */
+// ------------------------------------------------------------------
+// DELETE /api/admin/invites/:id
+// ------------------------------------------------------------------
+// Soft-revoke. Sets revokedAt; the check-invite endpoint will refuse to
+// return roles for a revoked invite, so next login by that email will
+// be rejected by the Auth0 Action.
 router.delete('/invites/:id', async (req, res, next) => {
   try {
     const { id } = req.params
-    const rows = await runQuery(
-      `
-      MATCH (i:Invite { id: $id })
-      WITH i, i.id AS id
-      DETACH DELETE i
-      RETURN id
-      `,
-      { id }
-    )
-    if (rows.length === 0) return res.status(404).json({ error: 'Invite not found' })
-    res.json({ ok: true, id: rows[0].id })
+    const rows = await runQuery(`
+      MATCH (i:Invite {id: $id})
+      SET i.revokedAt = timestamp()
+      RETURN i.id AS id, i.email AS email, i.revokedAt AS revokedAt
+    `, { id })
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Invite not found.' })
+    }
+    res.json({ invite: rows[0] })
   } catch (e) { next(e) }
 })
 
