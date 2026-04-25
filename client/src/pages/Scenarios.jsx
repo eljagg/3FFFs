@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth0 } from '@auth0/auth0-react'
 import { motion } from 'framer-motion'
 import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
-import { useUser } from '../lib/user.jsx'
+import { useUser, ROLES } from '../lib/user.jsx'
+
+const NAMESPACE = 'https://3fffs.app'
 
 /* -------------------------------------------------------------------------
    Scenarios page
@@ -18,6 +21,11 @@ import { useUser } from '../lib/user.jsx'
     - A small progress summary sits under the lede so the page always
       answers "how far along am I?" without a trip to Home.
 
+   v25.3.1: role-context banner above the list. Tells the user (and the
+   admin) which role's scenarios they're seeing. Replaces the previous
+   silent filter that left admins confused about why they saw all 12 and
+   non-admins confused about why their list was shorter than someone else's.
+
    Severity ordering is now fixed server-side: high → medium → low.
    ------------------------------------------------------------------------- */
 
@@ -28,18 +36,32 @@ const SEVERITY_COLORS = {
 }
 
 export default function Scenarios() {
-  const { role } = useUser()
+  const { role, simulateRole } = useUser()
+  const { user } = useAuth0()
+  const auth0Roles = user?.[`${NAMESPACE}/roles`] || []
+  const isAdmin = auth0Roles.includes('admin')
+
   const navigate = useNavigate()
   const [scenarios, setScenarios] = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(null)
+  const [filterMeta, setFilterMeta] = useState({})  // v25.3.1: server-returned filter context
 
   useEffect(() => {
-    api.listScenarios(role)
-      .then(r => setScenarios(r.scenarios || []))
+    setLoading(true)
+    api.listScenarios(role, simulateRole)
+      .then(r => {
+        setScenarios(r.scenarios || [])
+        setFilterMeta({
+          filteredByRole: r.filteredByRole,
+          isAdmin: r.isAdmin,
+          simulating: r.simulating,
+          simulatedRole: r.simulatedRole,
+        })
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [role])
+  }, [role, simulateRole])
 
   const { completedCount, totalCount, completedPct } = useMemo(() => {
     const completed = scenarios.filter(s => s.completed).length
@@ -60,6 +82,15 @@ export default function Scenarios() {
       title="Walk through the attacks."
       lede="Each scenario is a real attack pattern drawn from the F3 framework. You'll navigate the attacker's path stage by stage, spot the signals, and pick the right controls."
     >
+      {/* v25.3.1: role-context banner — surfaces what the user is seeing AS */}
+      <RoleContextBanner
+        role={role}
+        simulateRole={simulateRole}
+        isAdmin={isAdmin}
+        filteredByRole={filterMeta.filteredByRole}
+        scenarioCount={totalCount}
+      />
+
       {/* Progress summary — always visible, no trip to Home needed */}
       {totalCount > 0 && (
         <motion.div
@@ -127,6 +158,150 @@ export default function Scenarios() {
         </div>
       )}
     </Page>
+  )
+}
+
+/**
+ * v25.3.1 — RoleContextBanner
+ *
+ * Three states:
+ *   1. Admin, not simulating → "Admin view — showing all N scenarios. [Simulate as ▾]"
+ *   2. Admin, simulating → "Simulating as <Role> — N scenarios visible. [Stop simulating]"
+ *   3. Non-admin → "Showing scenarios for <Role>. [Change role]"
+ */
+function RoleContextBanner({ role, simulateRole, isAdmin, filteredByRole, scenarioCount }) {
+  const { setSimulateRole, clearSimulateRole, chooseRole, clearRole } = useUser()
+  const [open, setOpen] = useState(false)
+
+  // Pick the resolved role for label rendering
+  const labelFor = (id) => ROLES.find(r => r.id === id)?.label || id
+
+  let mode, headline, action
+  if (isAdmin && simulateRole) {
+    mode = 'simulating'
+    headline = (
+      <>
+        Simulating as <strong>{labelFor(simulateRole)}</strong> — {scenarioCount}{' '}
+        {scenarioCount === 1 ? 'scenario' : 'scenarios'} visible
+      </>
+    )
+    action = (
+      <button onClick={clearSimulateRole} style={bannerBtn}>↺ Stop simulating</button>
+    )
+  } else if (isAdmin && !simulateRole) {
+    mode = 'admin'
+    headline = (
+      <>Admin view — showing all <strong>{scenarioCount}</strong> scenarios</>
+    )
+    action = (
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => setOpen(o => !o)} style={bannerBtn}>
+          Filter by role ▾
+        </button>
+        {open && (
+          <RolePicker
+            current={null}
+            onPick={(id) => { setSimulateRole(id); setOpen(false) }}
+            onClose={() => setOpen(false)}
+          />
+        )}
+      </div>
+    )
+  } else if (role) {
+    mode = 'user'
+    headline = (
+      <>
+        Showing scenarios for <strong>{labelFor(role)}</strong>
+      </>
+    )
+    action = (
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => setOpen(o => !o)} style={bannerBtn}>
+          Change role ▾
+        </button>
+        {open && (
+          <RolePicker
+            current={role}
+            onPick={(id) => { chooseRole(id); setOpen(false) }}
+            onClose={() => setOpen(false)}
+          />
+        )}
+      </div>
+    )
+  } else {
+    // Non-admin without role — shouldn't normally happen (RolePicker wraps protected pages)
+    mode = 'no-role'
+    headline = <>No role selected — showing all available scenarios</>
+    action = null
+  }
+
+  const accent = mode === 'simulating' ? 'var(--accent)' : 'var(--rule-strong)'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 16,
+        padding: '10px 14px',
+        marginBottom: 18,
+        background: 'var(--paper-hi)',
+        border: `1px solid ${accent}`,
+        borderLeft: `3px solid ${accent}`,
+        borderRadius: 'var(--radius)',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 200, fontSize: 13, color: 'var(--ink)', lineHeight: 1.5 }}>
+        {headline}
+      </div>
+      {action}
+    </motion.div>
+  )
+}
+
+const bannerBtn = {
+  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+  padding: '6px 10px',
+  background: 'transparent', color: 'var(--ink)',
+  border: '1px solid var(--rule-strong)', borderRadius: 4,
+  cursor: 'pointer',
+  transition: 'border-color var(--dur) ease',
+}
+
+function RolePicker({ current, onPick, onClose }) {
+  return (
+    <>
+      {/* Click-out catcher */}
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 80 }}
+      />
+      <div style={{
+        position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 81,
+        minWidth: 240, padding: 6,
+        background: 'var(--paper)', border: '1px solid var(--rule-strong)',
+        borderRadius: 'var(--radius)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+      }}>
+        {ROLES.map(r => (
+          <button
+            key={r.id}
+            onClick={() => onPick(r.id)}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '8px 10px', border: 'none', cursor: 'pointer',
+              background: r.id === current ? 'var(--paper-hi)' : 'transparent',
+              borderRadius: 'var(--radius)',
+              fontSize: 13, color: 'var(--ink)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = r.id === current ? 'var(--paper-hi)' : 'transparent' }}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+    </>
   )
 }
 

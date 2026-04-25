@@ -32,7 +32,7 @@ export const AASE_SCENARIO_SC011 = {
   severity: 'high',
   estimatedLoss: 8_500_000,  // Higher than SC010 — execution-phase mistakes can cause real outages
   summary: 'You\'re three weeks into the AASE you commissioned six months ago at First Caribbean Trust. Provider B\'s Attackers are deep in the trade-finance environment. You\'re the Exercise Director. The Working Group meets every Tuesday but the calls you make in between meetings can\'t wait. Five situations are about to land on your desk over the course of this week — each one of them tests a specific clause in the AASE risk-management framework, and each one of them has a seductive-but-wrong answer that will haunt the bank for years if you pick it. The CISO is travelling. Your hotline to the provider is open. The Test/Halt model lives or dies in the next five decisions.',
-  roles: ['admin', 'manager'],
+  roles: ['admin', 'manager', 'analyst'],
   framework: 'AASE',
   stages: [
     // -----------------------------------------------------------------------
@@ -485,7 +485,7 @@ export const AASE_SCENARIO_SC012 = {
   severity: 'medium',  // Closure-phase work is high-stakes for the bank but lower urgency than execution
   estimatedLoss: 2_500_000,
   summary: 'It\'s six weeks after AASE execution closed at First Caribbean Trust. Provider B has delivered its Exercise Report. The Blue Team has delivered the Defence Report. The CISO has asked you, the Exercise Director, to read the Defence Report and produce a 2-page interpretation memo for the Board: what does this evidence actually tell us about our SOC, and what should the Remediation Action Plan focus on. As you read, you start to notice things. Across five findings in the Defence Report, you have to decide what each one means — and whether the report\'s overall optimism is justified.',
-  roles: ['admin', 'manager'],
+  roles: ['admin', 'manager', 'analyst'],
   framework: 'AASE',
   stages: [
     // -----------------------------------------------------------------------

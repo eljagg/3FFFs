@@ -21,6 +21,8 @@ async function request(path, opts = {}) {
 
 export const api = {
   me:              ()        => request('/api/me'),
+  // v25.3.1: persist job-function role to User node + roleHistory audit trail
+  setMyRole:       (role)    => request('/api/me/role', { method: 'POST', body: JSON.stringify({ role }) }),
   getTactics:      ()        => request('/api/framework/tactics'),
   getTechniques:   ()        => request('/api/framework/techniques'),
   searchFramework: (q)       => request(`/api/framework/search?q=${encodeURIComponent(q)}`),
@@ -28,8 +30,22 @@ export const api = {
 
   // Scenarios — unified naming. Both listScenarios and getScenarios work
   // (alias keeps older pages from breaking during iteration).
-  listScenarios:   (role)    => request(`/api/scenarios${role ? `?role=${encodeURIComponent(role)}` : ''}`),
-  getScenarios:    (role)    => request(`/api/scenarios${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+  // v25.3.1: optional simulateRole param — admins use this to test what
+  // each job-function role would see without leaving their admin session.
+  listScenarios:   (role, simulateRole) => {
+    const params = new URLSearchParams()
+    if (role) params.set('role', role)
+    if (simulateRole) params.set('simulateRole', simulateRole)
+    const qs = params.toString()
+    return request(`/api/scenarios${qs ? `?${qs}` : ''}`)
+  },
+  getScenarios:    (role, simulateRole) => {
+    const params = new URLSearchParams()
+    if (role) params.set('role', role)
+    if (simulateRole) params.set('simulateRole', simulateRole)
+    const qs = params.toString()
+    return request(`/api/scenarios${qs ? `?${qs}` : ''}`)
+  },
   getScenario:     (id)      => request(`/api/scenarios/${id}`),
   getScenarioPath: (id)      => request(`/api/scenarios/${id}/path`),
   submitStage:     (id, b)   => request(`/api/scenarios/${id}/submit`, { method: 'POST', body: JSON.stringify(b) }),

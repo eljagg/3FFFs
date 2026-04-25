@@ -1,7 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
+import { AnimatePresence } from 'framer-motion'
 import { useTheme } from '../lib/theme.jsx'
+import { useUser, ROLES } from '../lib/user.jsx'
 import UserMenu from './UserMenu.jsx'
+import RoleSwitcher from './RoleSwitcher.jsx'
 
 const NAMESPACE = 'https://3fffs.app'
 
@@ -31,9 +35,20 @@ function MoonIcon() {
 export default function AppShell() {
   const { theme, toggle } = useTheme()
   const { user } = useAuth0()
+  const { role, simulateRole, effectiveRole } = useUser()
   const roles = user?.[`${NAMESPACE}/roles`] || []
   const canSeeTeam = roles.includes('manager') || roles.includes('admin')
   const isAdmin = roles.includes('admin')
+
+  // v25.3.1: role pill state
+  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false)
+  const activeRoleId = isAdmin ? simulateRole : role
+  const activeRoleObj = ROLES.find(r => r.id === activeRoleId)
+  // Short label for the pill — uses the part before any space or slash
+  // ("Frontline / teller" -> "TELLER", "Risk manager / exec" -> "EXEC")
+  const pillLabel = activeRoleObj
+    ? activeRoleObj.id.toUpperCase()
+    : (isAdmin ? 'ALL' : 'NONE')
 
   let NAV = BASE_NAV
   if (canSeeTeam) NAV = [...NAV, { to: '/team', label: 'Team' }]
@@ -62,6 +77,20 @@ export default function AppShell() {
       border: '1px solid var(--rule)', background: 'transparent',
       transition: 'all var(--dur) ease',
     },
+    rolePill: {
+      // v25.3.1: small monospace pill in the nav showing what role the user
+      // is seeing the app as. Click to open RoleSwitcher.
+      position: 'relative',
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      height: 32, padding: '0 10px', marginRight: 8,
+      borderRadius: 6, border: '1px solid var(--rule)',
+      background: simulateRole ? 'var(--accent-bg, var(--paper-dim))' : 'transparent',
+      borderColor: simulateRole ? 'var(--accent)' : 'var(--rule)',
+      fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
+      fontWeight: 600, color: simulateRole ? 'var(--accent)' : 'var(--ink-soft)',
+      cursor: 'pointer',
+      transition: 'all var(--dur) ease',
+    },
     main: { flex: 1, width: '100%' },
     footer: { marginTop: 60, padding: '24px 28px', borderTop: '1px solid var(--rule)', fontSize: 12, color: 'var(--ink-faint)', textAlign: 'center', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' },
   }
@@ -84,6 +113,36 @@ export default function AppShell() {
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--ink)'; e.currentTarget.style.color = 'var(--ink)' }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--rule)'; e.currentTarget.style.color = 'var(--ink-soft)' }}>
               {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+            </button>
+            {/* v25.3.1: role pill — shows current effective role, click to open switcher */}
+            <button
+              onClick={() => setRoleSwitcherOpen(o => !o)}
+              aria-label={`Current role: ${activeRoleObj?.label || 'None'}. Click to change.`}
+              aria-expanded={roleSwitcherOpen}
+              style={s.rolePill}
+              onMouseEnter={(e) => {
+                if (!simulateRole) {
+                  e.currentTarget.style.borderColor = 'var(--ink)'
+                  e.currentTarget.style.color = 'var(--ink)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!simulateRole) {
+                  e.currentTarget.style.borderColor = 'var(--rule)'
+                  e.currentTarget.style.color = 'var(--ink-soft)'
+                }
+              }}
+            >
+              <span>ROLE: {pillLabel}</span>
+              {simulateRole && <span style={{ fontSize: 9 }}>• SIM</span>}
+              <AnimatePresence>
+                {roleSwitcherOpen && (
+                  <RoleSwitcher
+                    isAdmin={isAdmin}
+                    onClose={() => setRoleSwitcherOpen(false)}
+                  />
+                )}
+              </AnimatePresence>
             </button>
             <UserMenu />
           </nav>

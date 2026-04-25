@@ -40,6 +40,45 @@ app.use('/api/auth', authCheck)
 // ----------------------------------------------------------------------------
 app.use('/api', requireAuth, syncUser)
 app.get('/api/me', (req, res) => res.json({ user: getUser(req) }))
+
+// v25.3.1: persist the user's job-function role to the User node + append
+// to a roleHistory array with timestamps. Establishes the audit trail that
+// previously didn't exist (role was localStorage-only).
+//
+// Request body: { role: 'teller' | 'analyst' | 'soc' | 'executive' | null }
+//   role: null clears the role (logout-from-wizard scenario)
+app.post('/api/me/role', async (req, res, next) => {
+  try {
+    const user = getUser(req)
+    const { role } = req.body || {}
+    const validRoles = ['teller', 'analyst', 'soc', 'executive']
+    if (role !== null && !validRoles.includes(role)) {
+      return res.status(400).json({ error: 'invalid role' })
+    }
+    // MERGE the User node (defensive — should already exist via syncUser middleware)
+    // and update both .role (current) and .roleHistory (audit trail).
+    // roleHistory is an array of objects { role, at } stored as JSON strings
+    // because Neo4j arrays must be primitive-typed. Each entry: '{"role":"analyst","at":1735000000000}'.
+    await runQuery(
+      `MERGE (u:User {id: $userId})
+       ON CREATE SET u.email = $email, u.name = $name, u.createdAt = timestamp()
+       SET u.role = $role,
+           u.roleHistory = coalesce(u.roleHistory, []) + [$historyEntry],
+           u.roleUpdatedAt = timestamp()`,
+      {
+        userId: user.id,
+        email: user.email || null,
+        name: user.name || null,
+        role: role,
+        historyEntry: JSON.stringify({ role: role, at: Date.now() }),
+      }
+    )
+    res.json({ ok: true, role })
+  } catch (e) {
+    console.error('[POST /api/me/role]', e.message)
+    next(e)
+  }
+})
 app.use('/api/scenarios', scenarios)
 app.use('/api/quiz', quiz)
 app.use('/api/progress', progress)

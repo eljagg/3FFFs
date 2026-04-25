@@ -32,7 +32,20 @@ router.get('/', async (req, res, next) => {
     const user = getUser(req)
     const isAdmin = (user.roles || []).includes('admin')
     const role = (req.query.role || '').toLowerCase()
-    const applyFilter = !!role && !isAdmin
+    const simulateRole = (req.query.simulateRole || '').toLowerCase()
+
+    // v25.3.1 filter rules:
+    //   - simulateRole, when present, ALWAYS applies (admins use this to test
+    //     what each job-function role would see; non-admins should not be
+    //     sending simulateRole, but if they do it's just an alternate role
+    //     and behaves like 'role' would)
+    //   - role, when present and the user is non-admin, applies as before
+    //   - admins WITHOUT simulateRole bypass the filter and see all scenarios
+    //   - empty role + non-admin defaults to show-all (defensive — was
+    //     previously empty-list, which was confusing for users whose
+    //     localStorage cleared)
+    const effectiveRole = simulateRole || role
+    const applyFilter = !!effectiveRole && (!isAdmin || !!simulateRole)
 
     // Two fixes here vs the v16 version:
     //   1. Severity sort uses a CASE-mapped integer — the previous
@@ -43,7 +56,7 @@ router.get('/', async (req, res, next) => {
     //      without needing a second request.
     const rows = await runQuery(
       `MATCH (s:Scenario)
-       ${applyFilter ? `WHERE ANY(r IN s.roles WHERE toLower(r) = $role)` : ''}
+       ${applyFilter ? `WHERE ANY(r IN s.roles WHERE toLower(r) = $effectiveRole)` : ''}
        OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage)
        WHERE st.type IS NULL OR st.type = 'primary'
        WITH s, count(st) AS stageCount
@@ -62,12 +75,15 @@ router.get('/', async (req, res, next) => {
            ELSE 99
          END,
          s.id`,
-      { role, userId: user.id }
+      { effectiveRole, userId: user.id }
     )
     res.json({
       scenarios: rows.map(r => r.scenario),
-      filteredByRole: applyFilter ? role : null,
-      adminOverride: isAdmin && !!role,
+      filteredByRole: applyFilter ? effectiveRole : null,
+      // v25.3.1: surface filter context to the client banner
+      isAdmin,
+      simulating: !!simulateRole && isAdmin,
+      simulatedRole: simulateRole || null,
     })
   } catch (e) { next(e) }
 })

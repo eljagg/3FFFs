@@ -48,7 +48,7 @@ export const AASE_SCENARIO = {
   // production can cost millions in outage. Both are real bank scenarios.
   estimatedLoss: 5_000_000,
   summary: 'You\'re a senior security analyst at First Caribbean Trust, a regional bank with retail, trade-finance, and correspondent-banking operations across Jamaica, Cayman, and the OECS. The CISO has delegated the planning of the bank\'s first Adversarial Attack Simulation Exercise to you. The Board has approved a budget. The Bank of Jamaica\'s cyber-resilience guidance points at the four major frameworks (AASE, CBEST, TIBER-EU, iCAST) but mandates none. Decisions you make in the next four weeks shape whether the exercise tells the truth, costs the bank operational pain for nothing, or — worst — fails silently and gives senior management false confidence. Work through the Planning phase one decision at a time.',
-  roles: ['admin', 'manager'],
+  roles: ['admin', 'manager', 'analyst'],
   framework: 'AASE',  // new field, denotes which framework this scenario teaches
   stages: [
     // -----------------------------------------------------------------------
