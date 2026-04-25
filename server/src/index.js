@@ -3,6 +3,7 @@ import cors from 'cors'
 import { verifyConnection, runQuery } from './lib/neo4j.js'
 import { requireAuth, syncUser, getUser } from './lib/auth.js'
 import framework from './routes/framework.js'
+import frameworks from './routes/frameworks.js'
 import authCheck from './routes/auth-check.js'
 import scenarios from './routes/scenarios.js'
 import quiz from './routes/quiz.js'
@@ -30,6 +31,7 @@ app.get('/health', async (_req, res) => {
 //                   via an `x-invite-secret` header, not a JWT.
 // ----------------------------------------------------------------------------
 app.use('/api/framework', framework)
+app.use('/api/frameworks', frameworks)
 app.use('/api/auth', authCheck)
 
 // ----------------------------------------------------------------------------

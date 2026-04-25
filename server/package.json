@@ -7,7 +7,11 @@
   "scripts": {
     "dev": "node --watch --env-file-if-exists=../.env src/index.js",
     "start": "node --env-file-if-exists=../.env src/index.js",
-    "seed": "node --env-file-if-exists=../.env src/seed/run.js"
+    "seed": "node --env-file-if-exists=../.env src/seed/run.js",
+    "migrate:caribbean": "node --env-file-if-exists=../.env src/seed/add-caribbean.js",
+    "migrate:admin": "node --env-file-if-exists=../.env src/seed/add-admin-schema.js",
+    "migrate:quizzes": "node --env-file-if-exists=../.env src/seed/add-quizzes.js",
+    "migrate:frameworks": "node --env-file-if-exists=../.env src/seed/add-frameworks.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
