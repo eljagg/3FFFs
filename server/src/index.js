@@ -4,6 +4,7 @@ import { verifyConnection, runQuery } from './lib/neo4j.js'
 import { requireAuth, syncUser, getUser } from './lib/auth.js'
 import framework from './routes/framework.js'
 import frameworks from './routes/frameworks.js'
+import mitre from './routes/mitre.js'
 import authCheck from './routes/auth-check.js'
 import scenarios from './routes/scenarios.js'
 import quiz from './routes/quiz.js'
@@ -32,6 +33,9 @@ app.get('/health', async (_req, res) => {
 // ----------------------------------------------------------------------------
 app.use('/api/framework', framework)
 app.use('/api/frameworks', frameworks)
+// v25.5: MITRE ATT&CK reference module. Like frameworks/, this is public —
+// reference content only, no user data, no permissions to check.
+app.use('/api/mitre', mitre)
 app.use('/api/auth', authCheck)
 
 // ----------------------------------------------------------------------------

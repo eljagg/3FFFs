@@ -99,6 +99,12 @@ export const api = {
   getConcept:          (id)      => request(`/api/frameworks/concepts/${id}`),
   // v25.4.2: where this concept is practiced (scenarios + stages)
   getConceptPracticedIn: (id)    => request(`/api/frameworks/concepts/${id}/practiced-in`),
+
+  // v25.5: MITRE ATT&CK reference endpoints
+  listMitreTactics:           ()        => request('/api/mitre/tactics'),
+  listMitreTechniques:        (tactic)  => request(`/api/mitre/techniques${tactic ? `?tactic=${encodeURIComponent(tactic)}` : ''}`),
+  getMitreTechnique:          (id)      => request(`/api/mitre/techniques/${encodeURIComponent(id)}`),
+  getMitreTechniquePracticedIn: (id)    => request(`/api/mitre/techniques/${encodeURIComponent(id)}/practiced-in`),
   getThreatActors:     ()        => request('/api/frameworks/data/threat-actors'),
   recommendFrameworks: (regulatorId) => request(`/api/frameworks/data/recommend?regulator=${encodeURIComponent(regulatorId)}`),
 }
