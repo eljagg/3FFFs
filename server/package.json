@@ -17,7 +17,8 @@
     "migrate:update-aase-roles": "node --env-file-if-exists=../.env src/seed/update-aase-scenario-roles.js",
     "migrate:concept-summaries": "node --env-file-if-exists=../.env src/seed/add-concept-framework-summaries.js",
     "migrate:mitre-foundation": "node --env-file-if-exists=../.env src/seed/add-mitre-foundation.js",
-    "migrate:sc013": "node --env-file-if-exists=../.env src/seed/add-sc013.js"
+    "migrate:sc013": "node --env-file-if-exists=../.env src/seed/add-sc013.js",
+    "migrate:sc014": "node --env-file-if-exists=../.env src/seed/add-sc014.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
