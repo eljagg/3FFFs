@@ -97,6 +97,8 @@ export const api = {
   getUniversalConcepts:()        => request('/api/frameworks/concepts/universal'),
   // Concept lookup is the v25.1 wedge — used by ConceptSidebar
   getConcept:          (id)      => request(`/api/frameworks/concepts/${id}`),
+  // v25.4.2: where this concept is practiced (scenarios + stages)
+  getConceptPracticedIn: (id)    => request(`/api/frameworks/concepts/${id}/practiced-in`),
   getThreatActors:     ()        => request('/api/frameworks/data/threat-actors'),
   recommendFrameworks: (regulatorId) => request(`/api/frameworks/data/recommend?regulator=${encodeURIComponent(regulatorId)}`),
 }

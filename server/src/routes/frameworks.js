@@ -11,7 +11,9 @@
  *   GET /api/frameworks                      list all frameworks
  *   GET /api/frameworks/:id                  one framework with phases, deliverables, concepts
  *   GET /api/frameworks/:id/phases           lifecycle phases for visualisation
- *   GET /api/frameworks/concepts/universal   concepts shared across all four frameworks
+ *   GET /api/frameworks/concepts/universal           concepts shared across all four frameworks
+ *   GET /api/frameworks/concepts/:id                  one Concept with per-framework summaries (v25.4.2)
+ *   GET /api/frameworks/concepts/:id/practiced-in     scenarios+stages that test this concept (v25.4.2)
  *   GET /api/frameworks/threat-actors        the seeded threat actors for the matrix widget
  *   GET /api/frameworks/recommend            recommend a framework given a regulator
  */
@@ -153,11 +155,24 @@ router.get('/concepts/universal', async (req, res, next) => {
 // ---------------------------------------------------------------------------
 router.get('/concepts/:id', async (req, res, next) => {
   try {
+    // v25.4.2: now reads per-framework summary from the [:APPEARS_IN_FRAMEWORK]
+    // edge (populated by the add-concept-framework-summaries migration).
+    // Falls back to Concept.summary on the node when an edge has no summary
+    // (defensive — shouldn't happen post-migration, but keeps the response
+    // shape sane if the migration hasn't run yet).
     const rows = await runQuery(`
       MATCH (k:Concept {id: $id})
-      OPTIONAL MATCH (k)-[:APPEARS_IN_FRAMEWORK]->(f:Framework)
-      WITH k, collect(DISTINCT f { .id, .name, .region }) AS frameworks
-      RETURN k { .* } AS concept, frameworks
+      OPTIONAL MATCH (k)-[r:APPEARS_IN_FRAMEWORK]->(f:Framework)
+      WITH k, collect({
+        id:       f.id,
+        name:     f.name,
+        region:   f.region,
+        summary:  coalesce(r.summary, k.summary),
+        pending:  coalesce(r.pending, false),
+        vintage:  r.vintage
+      }) AS frameworks
+      RETURN k { .* } AS concept,
+             [fw IN frameworks WHERE fw.id IS NOT NULL] AS frameworks
     `, { id: req.params.id })
 
     if (!rows.length) return res.status(404).json({ error: 'Concept not found' })
@@ -166,6 +181,45 @@ router.get('/concepts/:id', async (req, res, next) => {
     res.json({
       concept: parseJsonProps(r.concept, ['examples']),
       frameworks: r.frameworks || [],
+    })
+  } catch (e) { next(e) }
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/frameworks/concepts/:id/practiced-in
+//   v25.4.2: returns the scenarios + stages where this concept is practiced
+//   via :TESTS_CONCEPT edges. Used by the ConceptSidebar to surface
+//   "Practiced in: SC010 Stage 1 ↗" cross-links between reference and
+//   applied learning.
+//
+//   Result shape: array of { scenarioId, scenarioTitle, stageOrder, stageId }
+//   ordered by scenarioId then stageOrder.
+// ---------------------------------------------------------------------------
+router.get('/concepts/:id/practiced-in', async (req, res, next) => {
+  try {
+    const rows = await runQuery(`
+      MATCH (sc:Scenario)-[:HAS_STAGE]->(st:Stage)-[:TESTS_CONCEPT]->(c:Concept {id: $id})
+      WHERE st.type IS NULL OR st.type = 'primary'
+      WITH sc, st
+      ORDER BY sc.id, st.order
+      RETURN sc.id        AS scenarioId,
+             sc.title     AS scenarioTitle,
+             sc.severity  AS scenarioSeverity,
+             st.id        AS stageId,
+             st.order     AS stageOrder,
+             st.title     AS stageTitle
+    `, { id: req.params.id })
+
+    res.json({
+      practicedIn: rows.map(r => ({
+        scenarioId:       r.scenarioId,
+        scenarioTitle:    r.scenarioTitle,
+        scenarioSeverity: r.scenarioSeverity,
+        stageId:          r.stageId,
+        stageOrder:       typeof r.stageOrder === 'object' && r.stageOrder?.toNumber
+                            ? r.stageOrder.toNumber() : r.stageOrder,
+        stageTitle:       r.stageTitle,
+      })),
     })
   } catch (e) { next(e) }
 })
