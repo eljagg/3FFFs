@@ -91,43 +91,55 @@ router.get('/', async (req, res, next) => {
 // GET /api/scenarios/:id — full scenario with all stages
 router.get('/:id', async (req, res, next) => {
   try {
-    // v25.5.1: extended to also pull the MITRE technique reference per stage,
-    // so the StagePanel client component can render a MITRE chip in addition
-    // to the existing F3 technique chip.
-    //
-    // Defensive query shape: aggregate stages with their MITRE wedge in a
-    // single per-stage WITH, avoiding the Cartesian-product duplication that
-    // would happen if a stage had both USES_TECHNIQUE and USES_MITRE_TECHNIQUE
-    // edges and we did the joins in series. (OBS-011 lesson — do all the
-    // joins under one WITH per stage, then collect.)
+    // v25.5.1.1 hotfix (ISS-011): the v25.5.1 single-query shape that
+    // joined MitreTechnique inline broke every scenario detail response.
+    // Reverted to the v25.4.2.1 query shape (which we know works in
+    // production), then a second pass fetches MITRE wedges keyed by
+    // stage IDs. Two round-trips, but eliminates the join-shape risk
+    // that caused the regression.
     const rows = await runQuery(
       `MATCH (s:Scenario {id: $id})
        OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage)
        OPTIONAL MATCH (st)-[:USES_TECHNIQUE]->(tech:Technique)
-       OPTIONAL MATCH (st)-[:USES_MITRE_TECHNIQUE]->(mitre:MitreTechnique)
-       WITH s, st, tech, mitre ORDER BY st.order
+       WITH s, st, tech ORDER BY st.order
        RETURN s { .* } AS scenario,
-              collect({
-                stage: st { .* },
-                technique: tech { .id, .name },
-                mitreTechnique: mitre { .id, .name }
-              }) AS stages`,
+              collect({ stage: st { .* }, technique: tech { .id, .name } }) AS stages`,
       { id: req.params.id }
     )
     if (!rows.length || !rows[0].scenario) return res.status(404).json({ error: 'Scenario not found' })
     const { scenario, stages } = rows[0]
+
+    // v25.5.1.1: separate query for MITRE wedge. Fetch all stages
+    // belonging to this scenario that have a USES_MITRE_TECHNIQUE edge.
+    // Build a map from stage ID → MITRE technique reference, then merge
+    // into the parsed payload. Stages without an edge get mitreTechnique
+    // = null (the default).
+    const mitreRows = await runQuery(
+      `MATCH (s:Scenario {id: $id})-[:HAS_STAGE]->(st:Stage)-[:USES_MITRE_TECHNIQUE]->(mt:MitreTechnique)
+       RETURN st.id AS stageId, mt.id AS mitreId, mt.name AS mitreName`,
+      { id: req.params.id }
+    )
+    const mitreByStage = {}
+    for (const r of mitreRows) {
+      mitreByStage[r.stageId] = { id: r.mitreId, name: r.mitreName }
+    }
+
     const parsed = stages
       .filter(s => s.stage)
-      .map(({ stage, technique, mitreTechnique }, i) => ({
-        ...stage,
-        id: ensureStageId(stage, scenario.id, i + 1),
-        signals: safeParse(stage.signals),
-        options: safeParse(stage.options),
-        technique,
-        // v25.5.1: MITRE technique reference (or null if stage has no
-        // USES_MITRE_TECHNIQUE edge — most existing AASE stages don't yet)
-        mitreTechnique: (mitreTechnique && mitreTechnique.id) ? mitreTechnique : null,
-      }))
+      .map(({ stage, technique }, i) => {
+        const stageId = ensureStageId(stage, scenario.id, i + 1)
+        return {
+          ...stage,
+          id: stageId,
+          signals: safeParse(stage.signals),
+          options: safeParse(stage.options),
+          technique,
+          // v25.5.1.1: MITRE wedge looked up from the second-pass map.
+          // null when this stage has no USES_MITRE_TECHNIQUE edge —
+          // which is the default for SC001-SC012 and most SC013 stages.
+          mitreTechnique: mitreByStage[stageId] || null,
+        }
+      })
     res.json({ scenario, stages: parsed })
   } catch (e) { next(e) }
 })
