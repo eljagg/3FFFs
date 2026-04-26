@@ -87,6 +87,12 @@ router.get('/:id', async (req, res, next) => {
 router.get('/:id/phases', async (req, res, next) => {
   try {
     const { id } = req.params
+    // v25.4.1 fix (ISS-006): the previous query had a trailing
+    // `ORDER BY p.order` AFTER the RETURN, which Neo4j rejects because
+    // `p` is not accessible past the projection that contains
+    // collect(DISTINCT ...). The WITH on the line above already orders
+    // rows before aggregation, so the trailing ORDER BY was both
+    // redundant and broken. Removing it restores the endpoint.
     const rows = await runQuery(`
       MATCH (f:Framework {id: $id})-[:HAS_PHASE]->(p:FrameworkPhase)
       OPTIONAL MATCH (d:Deliverable)-[:IN_PHASE]->(p)
@@ -95,7 +101,6 @@ router.get('/:id/phases', async (req, res, next) => {
       ORDER BY p.order
       RETURN p { .* } AS phase,
              collect(DISTINCT { deliverable: d { .* }, producedBy: r { .* } }) AS deliverables
-      ORDER BY p.order
     `, { id })
 
     const phases = rows.map(row => ({
