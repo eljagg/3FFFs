@@ -10,15 +10,20 @@ import RoleSwitcher from './RoleSwitcher.jsx'
 const NAMESPACE = 'https://3fffs.app'
 
 const BASE_NAV = [
-  { to: '/',          label: 'Home',      end: true },
-  { to: '/scenarios', label: 'Scenarios' },
-  { to: '/coverage',  label: 'My Coverage' },
-  { to: '/matrix',    label: 'Matrix' },
-  { to: '/explorer',  label: 'Explorer' },
-  { to: '/framework', label: 'Framework' },
-  { to: '/play',      label: 'Play' },
-  { to: '/quiz',      label: 'Quiz' },
-  { to: '/tutor',     label: 'Tutor' },
+  { to: '/',           label: 'Home',      end: true },
+  { to: '/scenarios',  label: 'Scenarios' },
+  { to: '/coverage',   label: 'My Coverage' },
+  { to: '/matrix',     label: 'Matrix' },
+  { to: '/explorer',   label: 'Explorer' },
+  { to: '/framework',  label: 'Framework' },
+  // v25.4: new top-level reference module for cyber resilience frameworks
+  // (AASE, CBEST, TIBER-EU, iCAST). Distinct from /framework (singular) which
+  // covers the F3 fraud framework. Naming option (i) — both kept; future
+  // v26 may consolidate.
+  { to: '/frameworks', label: 'Frameworks' },
+  { to: '/play',       label: 'Play' },
+  { to: '/quiz',       label: 'Quiz' },
+  { to: '/tutor',      label: 'Tutor' },
 ]
 
 function SunIcon() {

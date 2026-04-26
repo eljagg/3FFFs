@@ -6,6 +6,7 @@ import Home from './pages/Home.jsx'
 import Scenarios from './pages/Scenarios.jsx'
 import Scenario from './pages/Scenario.jsx'
 import Framework from './pages/Framework.jsx'
+import Frameworks from './pages/Frameworks.jsx'
 import Matrix from './pages/Matrix.jsx'
 import Explorer from './pages/Explorer.jsx'
 import Coverage from './pages/Coverage.jsx'
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/explorer"               element={<Safe><Explorer /></Safe>} />
           <Route path="/play"                   element={<Safe><SignalSort /></Safe>} />
           <Route path="/framework"              element={<Safe><Framework /></Safe>} />
+          <Route path="/frameworks"             element={<Safe><Frameworks /></Safe>} />
           <Route path="/quiz"                   element={<Safe><Quiz /></Safe>} />
           <Route path="/tutor"                  element={<Safe><Tutor /></Safe>} />
           <Route path="/team"                   element={<ManagerRoute><Safe><Team /></Safe></ManagerRoute>} />
