@@ -9,6 +9,7 @@ import WhatIfPreview from '../components/scenario/WhatIfPreview.jsx'
 import InlineTutor from '../components/scenario/InlineTutor.jsx'
 import ConceptSidebar from '../components/scenario/ConceptSidebar.jsx'
 import MitreTechniqueSidebar from '../components/scenario/MitreTechniqueSidebar.jsx'
+import FrameworkPhaseSidebar from '../components/scenario/FrameworkPhaseSidebar.jsx'
 
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }
 
@@ -54,6 +55,12 @@ export default function Scenario() {
   // MITRE chip on a stage that has a USES_MITRE_TECHNIQUE edge to a
   // MitreTechnique node. First user-facing consumer of the v25.5 foundation.
   const [mitreSidebar, setMitreSidebar] = useState({ open: false, techniqueId: null })
+  // v25.6.1: CBEST FrameworkPhase sidebar (ISS-013) — third wedge alongside
+  // ConceptSidebar and MitreTechniqueSidebar. Opens when the analyst clicks
+  // the phase chip on a stage that has an IN_FRAMEWORK_PHASE edge. Renders
+  // OBS-018 four-level role-conditional content (teller / analyst / soc /
+  // executive) via tabs at the top of the sidebar.
+  const [frameworkPhaseSidebar, setFrameworkPhaseSidebar] = useState({ open: false, phaseId: null })
   // v25.2: collapse the scenario header (title, summary, progress bar) once
   // the learner is committed to engaging — frees vertical space so the
   // AttackPath stays visible alongside the active stage. Click the collapsed
@@ -440,6 +447,7 @@ export default function Scenario() {
               onAskTutor={() => setTutorOpen(true)}
               onConceptLookup={(conceptId) => setConceptSidebar({ open: true, conceptId })}
               onMitreLookup={(techniqueId) => setMitreSidebar({ open: true, techniqueId })}
+              onPhaseLookup={(phaseId) => setFrameworkPhaseSidebar({ open: true, phaseId })}
               allStages={allStages}
               totalPrimary={path.length}
               currentIdx={path.findIndex(p => p.stage.id === currentStageId)}
@@ -574,6 +582,16 @@ export default function Scenario() {
         open={mitreSidebar.open}
         techniqueId={mitreSidebar.techniqueId}
         onClose={() => setMitreSidebar({ open: false, techniqueId: null })}
+      />
+      {/* v25.6.1: CBEST FrameworkPhase sidebar (ISS-013) — opens via the
+          phase chip on any stage with an IN_FRAMEWORK_PHASE edge. Currently
+          populated for SC013 (Phases 1.2 → 4.1) and SC014 (all stages →
+          Phase 3.2 Execution). Renders OBS-018 four-level role-conditional
+          content via tabs (teller / analyst / soc / executive). */}
+      <FrameworkPhaseSidebar
+        open={frameworkPhaseSidebar.open}
+        phaseId={frameworkPhaseSidebar.phaseId}
+        onClose={() => setFrameworkPhaseSidebar({ open: false, phaseId: null })}
       />
     </div>
   )
@@ -807,13 +825,15 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
   )
 }
 
-function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, onAskTutor, onConceptLookup, onMitreLookup, allStages, totalPrimary, currentIdx }) {
+function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, onAskTutor, onConceptLookup, onMitreLookup, onPhaseLookup, allStages, totalPrimary, currentIdx }) {
   // v25.1: AASE-tier scenarios (SC010+) carry concept and phase instead of
   // (or alongside) technique and tactic. The destructure tolerates both
   // shapes; downstream we check for presence per render decision.
   // v25.5.1: also destructure mitreTechnique — present on stages with a
   // USES_MITRE_TECHNIQUE edge (SC013+).
-  const { stage, technique, tactic, concept, phase, mitreTechnique } = entry
+  // v25.6.1: also destructure frameworkPhase — present on stages with an
+  // IN_FRAMEWORK_PHASE edge (SC013/SC014 in v25.6.1, AASE in future).
+  const { stage, technique, tactic, concept, phase, mitreTechnique, frameworkPhase } = entry
   const isConsequence = stage.type === 'consequence'
 
   // v24.3: detect dark mode by reading the data-theme attribute set in theme.jsx.
@@ -933,6 +953,44 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
             <span style={{ color: 'var(--ink-soft)' }}>MITRE</span>
             <span>{mitreTechnique.id}</span>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
+            </svg>
+          </button>
+        )}
+        {/* v25.6.1: FrameworkPhase chip (ISS-013) — interactive, opens the
+            FrameworkPhaseSidebar with role-conditional content. Visually
+            distinct from concept (solid border, accent) and MITRE (dashed
+            border, mono). This one uses a DOTTED border + accent colour
+            so the trainee can tell at a glance there are now three
+            different reference systems in play. Currently populated for
+            SC013/SC014; null for AASE scenarios until v25.6.x. */}
+        {frameworkPhase && (
+          <button
+            onClick={() => onPhaseLookup && onPhaseLookup(frameworkPhase.id)}
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              color: 'var(--ink)', fontWeight: 500,
+              padding: '4px 10px',
+              background: 'transparent',
+              border: '1px dotted var(--accent)',
+              borderRadius: 4, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              transition: 'all var(--dur) ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--paper-dim)'
+              e.currentTarget.style.borderStyle = 'solid'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.borderStyle = 'dotted'
+            }}
+            aria-label={`Look up framework phase ${frameworkPhase.code} ${frameworkPhase.name}`}
+            title={`CBEST: ${frameworkPhase.code} · ${frameworkPhase.name}`}
+          >
+            <span style={{ color: 'var(--accent)' }}>CBEST</span>
+            <span>{frameworkPhase.code}</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
             </svg>
           </button>

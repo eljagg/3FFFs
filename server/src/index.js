@@ -5,6 +5,7 @@ import { requireAuth, syncUser, getUser } from './lib/auth.js'
 import framework from './routes/framework.js'
 import frameworks from './routes/frameworks.js'
 import mitre from './routes/mitre.js'
+import frameworkPhases from './routes/framework-phases.js'
 import authCheck from './routes/auth-check.js'
 import scenarios from './routes/scenarios.js'
 import quiz from './routes/quiz.js'
@@ -36,6 +37,9 @@ app.use('/api/frameworks', frameworks)
 // v25.5: MITRE ATT&CK reference module. Like frameworks/, this is public —
 // reference content only, no user data, no permissions to check.
 app.use('/api/mitre', mitre)
+// v25.6.1: CBEST FrameworkPhase reference module (ISS-013). Same access
+// pattern — public reference content, no user data.
+app.use('/api/framework-phases', frameworkPhases)
 app.use('/api/auth', authCheck)
 
 // ----------------------------------------------------------------------------

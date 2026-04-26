@@ -124,6 +124,22 @@ router.get('/:id', async (req, res, next) => {
       mitreByStage[r.stageId] = { id: r.mitreId, name: r.mitreName }
     }
 
+    // v25.6.1: separate query for CBEST FrameworkPhase wedge (ISS-013).
+    // Same pattern as the MITRE one — attach the sub-stage phase to each
+    // stage that has an IN_FRAMEWORK_PHASE edge. Stages without an edge
+    // get frameworkPhase = null. Currently populated for SC013 + SC014;
+    // other scenarios get null until v25.6.x rolls AASE phases through
+    // the same wedge.
+    const phaseRows = await runQuery(
+      `MATCH (s:Scenario {id: $id})-[:HAS_STAGE]->(st:Stage)-[:IN_FRAMEWORK_PHASE]->(p:FrameworkPhase)
+       RETURN st.id AS stageId, p.id AS phaseId, p.name AS phaseName, p.code AS phaseCode`,
+      { id: req.params.id }
+    )
+    const phaseByStage = {}
+    for (const r of phaseRows) {
+      phaseByStage[r.stageId] = { id: r.phaseId, name: r.phaseName, code: r.phaseCode }
+    }
+
     const parsed = stages
       .filter(s => s.stage)
       .map(({ stage, technique }, i) => {
@@ -138,6 +154,10 @@ router.get('/:id', async (req, res, next) => {
           // null when this stage has no USES_MITRE_TECHNIQUE edge —
           // which is the default for SC001-SC012 and most SC013 stages.
           mitreTechnique: mitreByStage[stageId] || null,
+          // v25.6.1: CBEST FrameworkPhase wedge looked up from the
+          // third-pass map. null when this stage has no
+          // IN_FRAMEWORK_PHASE edge (default for SC001-SC012).
+          frameworkPhase: phaseByStage[stageId] || null,
         }
       })
     res.json({ scenario, stages: parsed })

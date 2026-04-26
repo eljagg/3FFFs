@@ -105,6 +105,9 @@ export const api = {
   listMitreTechniques:        (tactic)  => request(`/api/mitre/techniques${tactic ? `?tactic=${encodeURIComponent(tactic)}` : ''}`),
   getMitreTechnique:          (id)      => request(`/api/mitre/techniques/${encodeURIComponent(id)}`),
   getMitreTechniquePracticedIn: (id)    => request(`/api/mitre/techniques/${encodeURIComponent(id)}/practiced-in`),
+  // v25.6.1: CBEST FrameworkPhase reference endpoints (ISS-013)
+  getFrameworkPhase:           (id)     => request(`/api/framework-phases/${encodeURIComponent(id)}`),
+  getFrameworkPhasePracticedIn: (id)    => request(`/api/framework-phases/${encodeURIComponent(id)}/practiced-in`),
   getThreatActors:     ()        => request('/api/frameworks/data/threat-actors'),
   recommendFrameworks: (regulatorId) => request(`/api/frameworks/data/recommend?regulator=${encodeURIComponent(regulatorId)}`),
 }
