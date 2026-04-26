@@ -8,6 +8,7 @@ import ConfidenceSlider, { ConfidenceFeedback } from '../components/scenario/Con
 import WhatIfPreview from '../components/scenario/WhatIfPreview.jsx'
 import InlineTutor from '../components/scenario/InlineTutor.jsx'
 import ConceptSidebar from '../components/scenario/ConceptSidebar.jsx'
+import MitreTechniqueSidebar from '../components/scenario/MitreTechniqueSidebar.jsx'
 
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }
 
@@ -49,6 +50,10 @@ export default function Scenario() {
   // v25.1: AASE concept sidebar — opens when the analyst clicks the "Look up"
   // affordance on a stage that has a TESTS_CONCEPT edge to a Concept node.
   const [conceptSidebar, setConceptSidebar] = useState({ open: false, conceptId: null })
+  // v25.5.1: MITRE technique sidebar — opens when the analyst clicks the
+  // MITRE chip on a stage that has a USES_MITRE_TECHNIQUE edge to a
+  // MitreTechnique node. First user-facing consumer of the v25.5 foundation.
+  const [mitreSidebar, setMitreSidebar] = useState({ open: false, techniqueId: null })
   // v25.2: collapse the scenario header (title, summary, progress bar) once
   // the learner is committed to engaging — frees vertical space so the
   // AttackPath stays visible alongside the active stage. Click the collapsed
@@ -434,6 +439,7 @@ export default function Scenario() {
               onAnswer={handleAnswer}
               onAskTutor={() => setTutorOpen(true)}
               onConceptLookup={(conceptId) => setConceptSidebar({ open: true, conceptId })}
+              onMitreLookup={(techniqueId) => setMitreSidebar({ open: true, techniqueId })}
               allStages={allStages}
               totalPrimary={path.length}
               currentIdx={path.findIndex(p => p.stage.id === currentStageId)}
@@ -560,6 +566,14 @@ export default function Scenario() {
         open={conceptSidebar.open}
         conceptId={conceptSidebar.conceptId}
         onClose={() => setConceptSidebar({ open: false, conceptId: null })}
+      />
+      {/* v25.5.1: MITRE technique sidebar — opens via the MITRE chip on any
+          stage with a USES_MITRE_TECHNIQUE edge. First user-facing consumer
+          of the v25.5 MITRE foundation. */}
+      <MitreTechniqueSidebar
+        open={mitreSidebar.open}
+        techniqueId={mitreSidebar.techniqueId}
+        onClose={() => setMitreSidebar({ open: false, techniqueId: null })}
       />
     </div>
   )
@@ -793,11 +807,13 @@ function AttackPath({ path = [], consequenceStages = [], answers = {}, currentSt
   )
 }
 
-function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, onAskTutor, onConceptLookup, allStages, totalPrimary, currentIdx }) {
+function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, onAskTutor, onConceptLookup, onMitreLookup, allStages, totalPrimary, currentIdx }) {
   // v25.1: AASE-tier scenarios (SC010+) carry concept and phase instead of
   // (or alongside) technique and tactic. The destructure tolerates both
   // shapes; downstream we check for presence per render decision.
-  const { stage, technique, tactic, concept, phase } = entry
+  // v25.5.1: also destructure mitreTechnique — present on stages with a
+  // USES_MITRE_TECHNIQUE edge (SC013+).
+  const { stage, technique, tactic, concept, phase, mitreTechnique } = entry
   const isConsequence = stage.type === 'consequence'
 
   // v24.3: detect dark mode by reading the data-theme attribute set in theme.jsx.
@@ -845,6 +861,10 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
                 ? `Stage ${currentIdx + 1} of ${totalPrimary} · ${tactic.name}`
                 : `Stage ${currentIdx + 1} of ${totalPrimary}`}
         </div>
+        {/* v25.5.1: chip row holds the concept chip (or technique chip)
+            AND the MITRE technique chip when present. Stages with both a
+            concept and a MITRE technique render two chips side by side. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {concept ? (
           // v25.1: AASE concept chip — interactive, opens the ConceptSidebar.
           // This is the visible "the graph is doing work" cue: tap a concept,
@@ -880,6 +900,44 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
             padding: '3px 8px', border: '1px solid var(--rule-strong)', borderRadius: 4,
           }}>{technique.id} · {technique.name}</div>
         )}
+        {/* v25.5.1: MITRE technique chip — interactive, opens the
+            MitreTechniqueSidebar. Renders when the stage has a
+            USES_MITRE_TECHNIQUE edge (SC013+). Visually distinct from
+            the concept chip (mono ID prefix, slightly different border)
+            so the trainee can tell at a glance there are two different
+            reference systems in play. */}
+        {mitreTechnique && (
+          <button
+            onClick={() => onMitreLookup && onMitreLookup(mitreTechnique.id)}
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              color: 'var(--ink)', fontWeight: 500,
+              padding: '4px 10px',
+              background: 'transparent',
+              border: '1px dashed var(--ink-soft)',
+              borderRadius: 4, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              transition: 'all var(--dur) ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--paper-dim)'
+              e.currentTarget.style.borderStyle = 'solid'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.borderStyle = 'dashed'
+            }}
+            aria-label={`Look up MITRE technique ${mitreTechnique.id}`}
+            title={`MITRE: ${mitreTechnique.id} · ${mitreTechnique.name}`}
+          >
+            <span style={{ color: 'var(--ink-soft)' }}>MITRE</span>
+            <span>{mitreTechnique.id}</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
+            </svg>
+          </button>
+        )}
+        </div>
       </div>
 
       <h2 style={{

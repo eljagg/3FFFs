@@ -91,25 +91,42 @@ router.get('/', async (req, res, next) => {
 // GET /api/scenarios/:id — full scenario with all stages
 router.get('/:id', async (req, res, next) => {
   try {
+    // v25.5.1: extended to also pull the MITRE technique reference per stage,
+    // so the StagePanel client component can render a MITRE chip in addition
+    // to the existing F3 technique chip.
+    //
+    // Defensive query shape: aggregate stages with their MITRE wedge in a
+    // single per-stage WITH, avoiding the Cartesian-product duplication that
+    // would happen if a stage had both USES_TECHNIQUE and USES_MITRE_TECHNIQUE
+    // edges and we did the joins in series. (OBS-011 lesson — do all the
+    // joins under one WITH per stage, then collect.)
     const rows = await runQuery(
       `MATCH (s:Scenario {id: $id})
        OPTIONAL MATCH (s)-[:HAS_STAGE]->(st:Stage)
        OPTIONAL MATCH (st)-[:USES_TECHNIQUE]->(tech:Technique)
-       WITH s, st, tech ORDER BY st.order
+       OPTIONAL MATCH (st)-[:USES_MITRE_TECHNIQUE]->(mitre:MitreTechnique)
+       WITH s, st, tech, mitre ORDER BY st.order
        RETURN s { .* } AS scenario,
-              collect({ stage: st { .* }, technique: tech { .id, .name } }) AS stages`,
+              collect({
+                stage: st { .* },
+                technique: tech { .id, .name },
+                mitreTechnique: mitre { .id, .name }
+              }) AS stages`,
       { id: req.params.id }
     )
     if (!rows.length || !rows[0].scenario) return res.status(404).json({ error: 'Scenario not found' })
     const { scenario, stages } = rows[0]
     const parsed = stages
       .filter(s => s.stage)
-      .map(({ stage, technique }, i) => ({
+      .map(({ stage, technique, mitreTechnique }, i) => ({
         ...stage,
         id: ensureStageId(stage, scenario.id, i + 1),
         signals: safeParse(stage.signals),
         options: safeParse(stage.options),
         technique,
+        // v25.5.1: MITRE technique reference (or null if stage has no
+        // USES_MITRE_TECHNIQUE edge — most existing AASE stages don't yet)
+        mitreTechnique: (mitreTechnique && mitreTechnique.id) ? mitreTechnique : null,
       }))
     res.json({ scenario, stages: parsed })
   } catch (e) { next(e) }
