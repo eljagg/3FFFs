@@ -44,7 +44,7 @@
  *     than SIM swap.
  *
  * Vintage marker: 'public threat reporting on 2025 UK retail intrusions
- * (M&S/Co-op/Harrods cluster), and CBEST 2.0 procedural framing'.
+ * (M&S/Co-op/Harrods cluster); CBEST procedural framing aligned to BoE Implementation Guide 2024 in v25.6.0 freshness pass'.
  */
 
 export const CBEST_SCENARIO_SC014 = {
@@ -213,7 +213,7 @@ export const CBEST_SCENARIO_SC014 = {
         {
           text: 'The supplier-onboarding controls should have prevented the new-supplier-plus-large-payment workflow within hours of supplier creation',
           correct: false,
-          rationale: 'True but secondary. Yes, supplier-onboarding controls are weak — that\'s a finding for the IDR Report. But the lesson HERE is that the SOC had the signal to stop this at 14:15 and didn\'t. Compounding controls (onboarding rules) and fast-response controls (SOC containment) both matter, but only one of them was your job at 14:15.',
+          rationale: 'True but secondary. Yes, supplier-onboarding controls are weak — that\'s a finding for the Penetration Test Report. But the lesson HERE is that the SOC had the signal to stop this at 14:15 and didn\'t. Compounding controls (onboarding rules) and fast-response controls (SOC containment) both matter, but only one of them was your job at 14:15.',
         },
       ],
     },
@@ -324,7 +324,7 @@ export const CBEST_SCENARIO_SC014 = {
         {
           text: 'Reverse the SID-history modification but leave svc-backup and the trust relationship untouched — that minimises operational disruption while removing the immediate exposure',
           correct: false,
-          rationale: 'svc-backup is the demonstrated attack vector — if you don\'t lock it, the same actor (test or real) makes the same modification again as soon as you turn around. Reversing the modification without locking the account is a defensive half-measure that preserves the vulnerability. The CBEST IDR Report would specifically flag this kind of incomplete response as a finding.',
+          rationale: 'svc-backup is the demonstrated attack vector — if you don\'t lock it, the same actor (test or real) makes the same modification again as soon as you turn around. Reversing the modification without locking the account is a defensive half-measure that preserves the vulnerability. The Detection & Response Capability Assessment (CBEST 2024i) would specifically flag this kind of incomplete response as a finding.',
         },
         {
           text: 'Treat as PT provider behaviour following on from Stage 3 — they confirmed DC02-LON, the trust-modification is the natural next step in their test plan, escalate only if a NEW indicator appears',
@@ -428,9 +428,9 @@ export const CBEST_SCENARIO_SC014 = {
       question: 'What do you do in the next 60 seconds?',
       options: [
         {
-          text: 'Initiate the formal CBEST Halt of the entire test (not just one arc) — call the deputy CISO and CISO simultaneously. Power off ESXi-CLU01 from the BMC/iDRAC level (not from vSphere — vSphere is compromised). Disable svc-vsphere and every other service account ending in -vsphere, -backup, or -admin until they can be individually validated. Engage the breach-response runbook including external IR retainer. Notify the BoE Sector Cyber Team within the regulatory 4-hour window. Begin restoration planning from offline backups.',
+          text: 'Initiate the formal CBEST Halt of the entire test (not just one arc) — call the deputy CISO and CISO simultaneously. Power off ESXi-CLU01 from the BMC/iDRAC level (not from vSphere — vSphere is compromised). Disable svc-vsphere and every other service account ending in -vsphere, -backup, or -admin until they can be individually validated. Engage the breach-response runbook including external IR retainer. Notify the regulator immediately per CBEST secrecy obligations (Implementation Guide §3.2.2 / §5). Begin restoration planning from offline backups.',
           correct: true,
-          rationale: 'PT provider has confirmed not-them; the activity matches ransomware-on-ESXi observed in the public 2025 cluster of UK retail breaches; speed of encryption means every minute is irrecoverable VMs. Power-off at the iDRAC level is correct because vSphere itself is compromised — using vSphere to power off would route the command through the attacker\'s control. The 4-hour BoE notification window starts at first detection; getting that call in early is regulatory necessity not paperwork.',
+          rationale: 'PT provider has confirmed not-them; the activity matches ransomware-on-ESXi observed in the public 2025 cluster of UK retail breaches; speed of encryption means every minute is irrecoverable VMs. Power-off at the iDRAC level is correct because vSphere itself is compromised — using vSphere to power off would route the command through the attacker\'s control. CBEST secrecy obligations require the firm to notify the regulator immediately if secrecy is compromised or there is a suspicion that it has been (BoE Implementation Guide §3.2.2); getting that call in early is regulatory necessity, not paperwork.',
         },
         {
           text: 'Call Chen back to triple-confirm — sometimes hotline operators don\'t have visibility into all the PT provider\'s scheduled activities, and Sunday-vs-Friday could be a calendar mistake',
@@ -459,7 +459,7 @@ export const CBEST_SCENARIO_SC014 = {
       order: 6.5,
       type: 'consequence',
       heading: 'Three minutes later: 31 VMs encrypted',
-      narrative: 'You called Chen back. Chen put you on hold while she "triple-checked" with her ops lead — the call lasted 2 minutes 40 seconds. When she came back on the line confirming again that this is NOT their activity, you turned to the vSphere console: 31 VMs are now showing as encrypted, including all four VMs that hosted the warehouse-management primary database cluster. The encryption process is still running. The Friday warehouse operations stand-up is in 5 hours. The CISO\'s phone is ringing through to your handset because someone in the SOC ops centre noticed your face. The Bank of England\'s Sector Cyber Team has not yet been notified.',
+      narrative: 'You called Chen back. Chen put you on hold while she "triple-checked" with her ops lead — the call lasted 2 minutes 40 seconds. When she came back on the line confirming again that this is NOT their activity, you turned to the vSphere console: 31 VMs are now showing as encrypted, including all four VMs that hosted the warehouse-management primary database cluster. The encryption process is still running. The Friday warehouse operations stand-up is in 5 hours. The CISO\'s phone is ringing through to your handset because someone in the SOC ops centre noticed your face. The regulator has not yet been notified.',
       aaseConcept: 'CONCEPT-TEST-HALT-MODEL',
       mitreTechnique: 'T1486',
       signals: [
@@ -469,7 +469,7 @@ export const CBEST_SCENARIO_SC014 = {
         },
         {
           severity: 'high',
-          text: '4-hour BoE notification window now compressed; failing to notify on time is itself a finding',
+          text: 'CBEST regulator notification was not made promptly; the delay is itself a finding under the firm\'s secrecy obligations',
         },
         {
           severity: 'high',
@@ -477,7 +477,7 @@ export const CBEST_SCENARIO_SC014 = {
         },
         {
           severity: 'medium',
-          text: 'CBEST IDR Report will name this incident chain in the closure findings; SOC decision-making at 03:14 is now the regulatory finding',
+          text: 'The Penetration Test Report and D&R Capability Assessment will name this incident chain in the closure findings; SOC decision-making at 03:14 is now the regulatory finding',
         },
       ],
       question: 'What is the lesson?',

@@ -23,15 +23,17 @@
  * sufficient for v25.5.1.
  *
  * Source-material caveat: this scenario is authored from the Exabeam
- * CBEST 2.0 solution brief plus general public CBEST knowledge. The Bank
- * of England's authoritative CBEST Implementation Guide is the canonical
+ * Bank of England's CBEST Threat Intelligence-Led Assessments
+ * Implementation Guide (2024 edition, PRA, CC-BY 4.0). v25.6.0 freshness
+ * pass aligned terminology to this source of truth. The canonical
  * source; v25.6 freshness pass should verify procedural detail against
  * that document and update as needed. The four-phase shape, party
- * structure (SCT, Firm/FMI, TI provider, PT provider, Regulator), and
- * CREST accreditation requirement are public knowledge and reflected
+ * structure (Regulator, Firm/FMI Control Group, TISP, PTSP), and
+ * CBEST accreditation requirement (BoE-issued, with CREST membership
+ * as co-requirement) are public knowledge and reflected
  * accurately here.
  *
- * Vintage marker: 'CBEST 2.0 (procedural shape from Exabeam brief, July 2020)'
+ * Vintage marker: 'CBEST 2024 BoE Implementation Guide (v25.6.0 freshness pass)'
  */
 
 export const CBEST_SCENARIO_SC013 = {
@@ -39,7 +41,7 @@ export const CBEST_SCENARIO_SC013 = {
   title: 'Commissioning a CBEST Assessment — Northgate Apparel',
   severity: 'high',
   estimatedLoss: 15_000_000,  // £15M composite: regulator scrutiny, remediation cost, reputational
-  summary: 'You\'re the security manager at Northgate Apparel plc, a UK retailer with around £2.4bn annual revenue and a digital footprint covering e-commerce, in-store payments, warehouse management and customer data. Yesterday the CISO forwarded you a letter from the Bank of England: Northgate has been added to the CBEST scope. Your job for the next six months is to coordinate the assessment — scope it, procure the providers, validate the threat intelligence, supervise the live test, and close it out with the Bank\'s Sector Cyber Team. Six decisions stand between you and a clean closure. Two of them have consequence branches because the wrong answer triggers the regulator before the test even finishes.',
+  summary: 'You\'re the security manager at Northgate Apparel plc, a UK retailer with around £2.4bn annual revenue and a digital footprint covering e-commerce, in-store payments, warehouse management and customer data. Yesterday the CISO forwarded you a letter from the Bank of England: Northgate has been added to the CBEST scope. Your job for the next nine to twelve months is to coordinate the assessment — scope it, procure the providers, validate the threat intelligence, supervise the live test, and close it out with the regulator. Six decisions stand between you and a clean closure. Two of them have consequence branches because the wrong answer triggers the regulator before the test even finishes.',
   roles: ['admin', 'manager', 'analyst'],
   framework: 'CBEST',
   stages: [
@@ -50,8 +52,8 @@ export const CBEST_SCENARIO_SC013 = {
       id: 'SC013-S1',
       order: 1,
       type: 'primary',
-      heading: 'The kickoff with the Sector Cyber Team',
-      narrative: 'You and the CISO meet the Bank of England\'s Sector Cyber Team for the formal CBEST kickoff. There are four people in the room from the SCT side, plus a representative from the FCA who\'s observing. The SCT chair opens with a question you weren\'t expecting: "Before we start the formal scoping, walk us through how you\'d describe Northgate\'s current cyber posture in two minutes — what you\'d tell your Board if they asked tonight." You have a minute to think. The CISO has signalled with a glance that this is your call.',
+      heading: 'The kickoff with the regulator',
+      narrative: 'You and the CISO meet the regulator for the formal CBEST kickoff. There are four people in the room from the regulatory team, plus a representative from the FCA who\'s observing. The chair opens with a question you weren\'t expecting: "Before we start the formal scoping, walk us through how you\'d describe Northgate\'s current cyber posture in two minutes — what you\'d tell your Board if they asked tonight." You have a minute to think. The CISO has signalled with a glance that this is your call.',
       aaseConcept: 'CONCEPT-CRITICAL-FUNCTION',
       signals: [
         {
@@ -64,7 +66,7 @@ export const CBEST_SCENARIO_SC013 = {
         },
         {
           severity: 'low',
-          text: 'The SCT runs CBEST kickoffs at 5-7 firms per quarter — they have a calibrated sense of what honest posture sounds like',
+          text: 'The regulator runs CBEST kickoffs at several firms per quarter — they have a calibrated sense of what honest posture sounds like',
         },
       ],
       question: 'How do you frame Northgate\'s posture?',
@@ -72,23 +74,23 @@ export const CBEST_SCENARIO_SC013 = {
         {
           text: 'Honest and specific. Two recent strengths (MFA rollout completed across all employee accounts in 2024, EDR deployed to all servers), two known gaps (legacy warehouse-management system has not been pen-tested since 2021, no formal threat-hunting capability in-house). Frame the gaps as the specific things you hope the CBEST test will quantify.',
           correct: true,
-          rationale: 'CBEST is intelligence-led — meaning the testers will find what\'s really there, regardless of what you said in week one. Specific, calibrated honesty about known gaps positions Northgate as a serious participant. The SCT and FCA both reward this: it tells them you understand the framework. The CISO\'s glance was permission to be candid, not pressure to perform.',
+          rationale: 'CBEST is intelligence-led — meaning the testers will find what\'s really there, regardless of what you said in week one. Specific, calibrated honesty about known gaps positions Northgate as a serious participant. The regulator and FCA both reward this: it tells them you understand the framework. The CISO\'s glance was permission to be candid, not pressure to perform.',
         },
         {
           text: 'Defensive — emphasise what Northgate has invested in, downplay gaps. The Board will see this transcript and you don\'t want to be the security manager who undersold the team\'s work.',
           correct: false,
           leadsTo: 'SC013-S1-CONSEQUENCE',
-          rationale: 'Tempting because it protects internal politics. But CBEST is going to find the gaps anyway — that is the entire point of the framework. A defensive opening creates a credibility delta when the test report lands twelve weeks later. The SCT\'s tolerance for "we didn\'t know" shrinks rapidly when their kickoff notes show you DID know. See the consequence.',
+          rationale: 'Tempting because it protects internal politics. But CBEST is going to find the gaps anyway — that is the entire point of the framework. A defensive opening creates a credibility delta when the test report lands twelve weeks later. The regulator\'s tolerance for "we didn\'t know" shrinks rapidly when their kickoff notes show you DID know. See the consequence.',
         },
         {
           text: 'Aspirational — describe the posture you\'re building toward in 2026 (zero-trust architecture, SOC 24x7) rather than today\'s reality',
           correct: false,
-          rationale: 'Aspirational framing reads as evasion to the regulator. The SCT asks "what would you tell your Board tonight" specifically to get current-state, not roadmap. Answering the wrong question is itself a signal about how Northgate handles regulatory scrutiny.',
+          rationale: 'Aspirational framing reads as evasion to the regulator. The regulator asks "what would you tell your Board tonight" specifically to get current-state, not roadmap. Answering the wrong question is itself a signal about how Northgate handles regulatory scrutiny.',
         },
         {
           text: 'Decline to answer until the formal scoping is done — say it\'s premature to characterise posture before the test',
           correct: false,
-          rationale: 'Refusing to answer a regulator\'s opening question is not neutral; it\'s a posture statement in itself. The SCT will note it. The CISO\'s glance was telling you to engage, not deflect. There is no version of this scenario where silence helps you.',
+          rationale: 'Refusing to answer a regulator\'s opening question is not neutral; it\'s a posture statement in itself. The regulator will note it. The CISO\'s glance was telling you to engage, not deflect. There is no version of this scenario where silence helps you.',
         },
       ],
     },
@@ -101,7 +103,7 @@ export const CBEST_SCENARIO_SC013 = {
       order: 1.5,
       type: 'consequence',
       heading: 'Twelve weeks later: the credibility delta lands',
-      narrative: 'The penetration test is complete. The PT provider\'s draft report shows the testers achieved domain admin via the legacy warehouse-management system in 11 days — exploiting an unpatched vulnerability you knew about in October. The SCT chair calls a meeting. Their kickoff notes from week one are open on the screen. They quote your answer back to you: "...solid coverage across our critical business systems..." and ask you to reconcile that statement with the fact that the warehouse system had a known unpatched RCE for six months. The FCA observer is on the call.',
+      narrative: 'The penetration test is complete. The PT provider\'s draft report shows the testers achieved domain admin via the legacy warehouse-management system in 11 days — exploiting an unpatched vulnerability you knew about in October. The regulator\'s chair calls a meeting. Their kickoff notes from week one are open on the screen. They quote your answer back to you: "...solid coverage across our critical business systems..." and ask you to reconcile that statement with the fact that the warehouse system had a known unpatched RCE for six months. The FCA observer is on the call.',
       aaseConcept: 'CONCEPT-CRITICAL-FUNCTION',
       signals: [
         {
@@ -140,7 +142,7 @@ export const CBEST_SCENARIO_SC013 = {
       order: 2,
       type: 'primary',
       heading: 'Selecting the Critical Functions in scope',
-      narrative: 'Phase 1.3 of CBEST is Scoping. The SCT asks Northgate to propose two to four "Important Business Services" (CBEST\'s term for what AASE calls Critical Functions) for the test. Six candidate systems are on your shortlist. The CRO wants the payment-processing platform tested because that\'s where regulator pressure concentrates. The COO wants the warehouse-management system because of the recent vulnerability disclosure. Customer Operations wants the e-commerce platform because Black Friday is in the test window and they need confidence. Marketing wants the customer-data platform because of GDPR. Trade Finance has just one system but it processes £400m a quarter. The legacy point-of-sale platform is end-of-life and being replaced next year. You can recommend three.',
+      narrative: 'Phase 1.3 of CBEST is Scoping. The regulator asks Northgate to propose an appropriate set of "Important Business Services" (CBEST\'s term for what AASE calls Critical Functions) for the test, justified by impact assessment. Six candidate systems are on your shortlist. The CRO wants the payment-processing platform tested because that\'s where regulator pressure concentrates. The COO wants the warehouse-management system because of the recent vulnerability disclosure. Customer Operations wants the e-commerce platform because Black Friday is in the test window and they need confidence. Marketing wants the customer-data platform because of GDPR. Trade Finance has just one system but it processes £400m a quarter. The legacy point-of-sale platform is end-of-life and being replaced next year. You can recommend three.',
       aaseConcept: 'CONCEPT-CRITICAL-FUNCTION',
       signals: [
         {
@@ -178,9 +180,9 @@ export const CBEST_SCENARIO_SC013 = {
           rationale: 'Trade finance is plausible but it has only one system, narrowing the architectural diversity of the test. Legacy POS being replaced next year means the findings have a one-year shelf life — the firm gets a snapshot of a system it\'s already deprecating. Both are legitimate concerns but neither produces enduring learning.',
         },
         {
-          text: 'Defer to the SCT — let them pick three from the list based on their cross-sector threat picture',
+          text: 'Defer to the regulator — let them pick three from the list based on their cross-sector threat picture',
           correct: false,
-          rationale: 'CBEST\'s scoping principle is firm-led with regulator review. The firm proposes Important Business Services because the firm understands its own business; the SCT validates the proposal against threat intelligence. Deferring to the SCT inverts that and signals that the firm doesn\'t understand which of its services matter most — which is itself a finding.',
+          rationale: 'CBEST\'s scoping principle is firm-led with regulator review. The firm proposes Important Business Services because the firm understands its own business; the regulator validates the proposal against threat intelligence. Deferring to the regulator inverts that and signals that the firm doesn\'t understand which of its services matter most — which is itself a finding.',
         },
       ],
     },
@@ -193,13 +195,13 @@ export const CBEST_SCENARIO_SC013 = {
       order: 3,
       type: 'primary',
       heading: 'Choosing the Threat Intelligence provider',
-      narrative: 'Phase 1.4 of CBEST is Procurement. You need to onboard two service providers: a Threat Intelligence (TI) provider who will produce a Targeting Report and Threat Modelling Report for Northgate, and a Penetration Testing (PT) provider who will execute the test using that intelligence. CBEST requires both to be CREST-accredited. You have three TI quotes on your desk. Provider Alpha is CREST-accredited, has done eight UK retail CBESTs, quotes £180,000 for the TI phase. Provider Beta is CREST-accredited, has only done banking sector CBESTs, quotes £140,000. Provider Gamma is a respected boutique with deep retail-sector expertise — but their CREST accreditation lapsed three months ago and is "in renewal", quotes £120,000. The CFO has signalled budget pressure.',
+      narrative: 'Phase 1.4 of CBEST is Procurement. You need to onboard two service providers: a Threat Intelligence Service Provider (TISP) who will produce a Targeting Report (CBEST 2024e) and Threat Intelligence Report (CBEST 2024f) for Northgate, and a Penetration Testing Service Provider (PTSP) who will execute the test using that intelligence. CBEST requires both to be CBEST-accredited by the Bank of England (the accredited register lives on the CREST website; providers must also be CREST members). You have three TI quotes on your desk. Provider Alpha is CBEST-accredited, has done eight UK retail CBESTs, quotes £180,000 for the TI phase. Provider Beta is CBEST-accredited, has only done banking sector CBESTs, quotes £140,000. Provider Gamma is a respected boutique with deep retail-sector expertise — but their CBEST accreditation lapsed three months ago and is "in renewal", quotes £120,000. The CFO has signalled budget pressure.',
       aaseConcept: 'CONCEPT-CRITICAL-FUNCTION',  // tests rigour around the firm's qualification process — closest existing concept; the new CREST concept gets its own TESTS_CONCEPT below via cbestConcept
       cbestConcept: 'CONCEPT-CREST-ACCREDITATION',
       signals: [
         {
           severity: 'high',
-          text: 'CBEST requires CREST accreditation — "in renewal" is not the same as "accredited"',
+          text: 'CBEST requires CBEST accreditation — "in renewal" is not the same as "accredited"',
         },
         {
           severity: 'medium',
@@ -217,15 +219,15 @@ export const CBEST_SCENARIO_SC013 = {
       question: 'Which TI provider do you recommend?',
       options: [
         {
-          text: 'Provider Alpha — CREST-accredited and retail-experienced. £40k more than Beta but the sector match is worth more than the price difference, and Beta\'s banking-only history means Northgate\'s threat profile is unfamiliar territory for them.',
+          text: 'Provider Alpha — CBEST-accredited and retail-experienced. £40k more than Beta but the sector match is worth more than the price difference, and Beta\'s banking-only history means Northgate\'s threat profile is unfamiliar territory for them.',
           correct: true,
-          rationale: 'CREST accreditation is the regulatory floor, not a preference. Within accredited providers, sector relevance is the deciding factor. Alpha\'s eight UK retail CBESTs means their Targeting Report will be calibrated to threat actors that actually target retailers — not extrapolated from banking-sector intelligence. The £40k delta against Beta is real but defensible to the CFO because the alternative compromises test quality.',
+          rationale: 'CBEST accreditation is the regulatory floor, not a preference. Within accredited providers, sector relevance is the deciding factor. Alpha\'s eight UK retail CBESTs means their Targeting Report will be calibrated to threat actors that actually target retailers — not extrapolated from banking-sector intelligence. The £40k delta against Beta is real but defensible to the CFO because the alternative compromises test quality.',
         },
         {
           text: 'Provider Gamma — they have the deepest retail expertise and the lowest price; the lapsed accreditation is a paperwork issue that will be resolved before the test starts',
           correct: false,
           leadsTo: 'SC013-S3-CONSEQUENCE',
-          rationale: 'CBEST requires CREST accreditation as a hard condition. "In renewal" is a procedural status, not the same as accredited. The SCT will reject the procurement when they review it, and Northgate will lose 4-6 weeks re-running the procurement — but only if they catch it before the contract is signed. See the consequence.',
+          rationale: 'CBEST requires CBEST accreditation as a hard condition. "In renewal" is a procedural status, not the same as accredited. The regulator will reject the procurement when they review it, and Northgate will lose 4-6 weeks re-running the procurement — but only if they catch it before the contract is signed. See the consequence.',
         },
         {
           text: 'Provider Beta — accredited, cheapest of the accredited options, banking-sector experience is close enough to retail',
@@ -235,7 +237,7 @@ export const CBEST_SCENARIO_SC013 = {
         {
           text: 'Run a competitive process between all three, scoring CREST status as 30% of the selection criteria',
           correct: false,
-          rationale: 'CREST accreditation cannot be "30% of the criteria" because CBEST requires it absolutely. Scoring it as a fraction means the procurement framework is unsound. The right structure is: CREST accreditation as a gate (binary, must pass), then competitive selection among those who pass.',
+          rationale: 'CBEST accreditation cannot be "30% of the criteria" because CBEST requires it absolutely. Scoring it as a fraction means the procurement framework is unsound. The right structure is: CBEST accreditation as a gate (binary, must pass), then competitive selection among those who pass.',
         },
       ],
     },
@@ -247,8 +249,8 @@ export const CBEST_SCENARIO_SC013 = {
       id: 'SC013-S3-CONSEQUENCE',
       order: 3.5,
       type: 'consequence',
-      heading: 'Six weeks later: the SCT rejects the procurement',
-      narrative: 'The SCT reviews the procurement documentation as part of Phase 1.4 sign-off. They flag Provider Gamma\'s accreditation status. Their lapse-renewal cycle is real — the lapse occurred in January, renewal paperwork was filed in February, but as of the procurement decision in April CREST has not yet issued the new certificate. The SCT instructs Northgate to either select a currently-accredited provider or wait until Gamma\'s renewal completes. Six weeks of slippage. The Black Friday test window is now compressed.',
+      heading: 'Six weeks later: the regulator rejects the procurement',
+      narrative: 'The regulator reviews the procurement documentation as part of Phase 1.4 sign-off. They flag Provider Gamma\'s accreditation status. Their lapse-renewal cycle is real — the lapse occurred in January, renewal paperwork was filed in February, but as of the procurement decision in April the BoE has not yet issued the new accreditation certificate. The regulator instructs Northgate to either select a currently-accredited provider or wait until Gamma\'s renewal completes. Six weeks of slippage. The Black Friday test window is now compressed.',
       aaseConcept: 'CONCEPT-CRITICAL-FUNCTION',
       cbestConcept: 'CONCEPT-CREST-ACCREDITATION',
       signals: [
@@ -258,7 +260,7 @@ export const CBEST_SCENARIO_SC013 = {
         },
         {
           severity: 'high',
-          text: 'SCT supervisory note added to Northgate\'s file: "Procurement governance requires reinforcement"',
+          text: 'Regulator supervisory note added to Northgate\'s file: "Procurement governance requires reinforcement"',
         },
         {
           severity: 'medium',
@@ -268,7 +270,7 @@ export const CBEST_SCENARIO_SC013 = {
       question: 'What is the lesson?',
       options: [
         {
-          text: 'Hard regulatory requirements (CREST accreditation, FCA handbook rules, BoE supervisory expectations) are gates, not preferences. Treat them as binary qualifying conditions before any cost or capability comparison. The slippage cost of getting this wrong always exceeds any saving on the original procurement.',
+          text: 'Hard regulatory requirements (CBEST accreditation, FCA handbook rules, BoE supervisory expectations) are gates, not preferences. Treat them as binary qualifying conditions before any cost or capability comparison. The slippage cost of getting this wrong always exceeds any saving on the original procurement.',
           correct: true,
           rationale: 'CREST is the regulatory gate. The £60k saved on Gamma\'s quote is now consumed by the legal cost, the procurement re-run, and the supervisory note in Northgate\'s file. Treating regulatory floors as floors — not as one criterion among many — is the procedural discipline CBEST tests.',
         },
@@ -289,7 +291,7 @@ export const CBEST_SCENARIO_SC013 = {
       order: 4,
       type: 'primary',
       heading: 'Validating the Threat Intelligence',
-      narrative: 'Provider Alpha has delivered the draft Targeting Report. It identifies three threat actors as plausibly relevant to Northgate: an organised cybercriminal group with known UK retail TTPs (helpdesk vishing → MFA bypass → ransomware), a North Korean state-aligned group focused on financial gain, and a Russian intelligence service that occasionally compromises Western retailers as a peripheral target. The Targeting Report recommends in-scope TTPs including T1566.004 (spearphishing voice) and T1219 (remote access tools as command-and-control). Phase 2.3 of CBEST is Validation — the firm reviews the TI report and either accepts it or argues it. Each rejected scenario must be justified in writing to the SCT.',
+      narrative: 'Provider Alpha has delivered the draft Targeting Report (CBEST 2024e) and Threat Intelligence Report (CBEST 2024f). The TI Report identifies three threat actors as plausibly relevant to Northgate: an organised cybercriminal group with known UK retail TTPs (helpdesk vishing → MFA bypass → ransomware), a North Korean state-aligned group focused on financial gain, and a Russian intelligence service that occasionally compromises Western retailers as a peripheral target. The TI Report recommends in-scope TTPs including T1566.004 (spearphishing voice) and T1219 (remote access tools as command-and-control). Phase 2.3 of CBEST is Validation — the firm reviews the TI deliverables in a three-hour Validation workshop with the regulator and the PTSP, and either accepts them or argues. Each rejected scenario must be justified in writing to the regulator.',
       aaseConcept: 'CONCEPT-THREAT-MATRIX',
       mitreTechnique: 'T1566.004',  // v25.5 wedge — stage carries a MITRE technique reference
       signals: [
@@ -315,7 +317,7 @@ export const CBEST_SCENARIO_SC013 = {
         {
           text: 'Accept the organised cybercrime group as primary scope, accept the North Korean group as secondary scope, formally argue the Russian intelligence service out of scope on the grounds that their UK-retail targeting is peripheral and the test budget is better spent on the two more probable threat profiles.',
           correct: true,
-          rationale: 'CBEST validation is calibration, not capitulation. The firm has standing to argue scope based on threat probability against its specific business profile. The organised cybercrime group is the dominant threat to UK retailers right now and accepting that is non-negotiable. The North Korean group is a secondary but real threat. Arguing the Russian state actor out is defensible IN WRITING with the supporting argument — and the SCT respects firms that engage with the report rather than rubber-stamping it.',
+          rationale: 'CBEST validation is calibration, not capitulation. The firm has standing to argue scope based on threat probability against its specific business profile. The organised cybercrime group is the dominant threat to UK retailers right now and accepting that is non-negotiable. The North Korean group is a secondary but real threat. Arguing the Russian state actor out is defensible IN WRITING with the supporting argument — and the regulator respects firms that engage with the report rather than rubber-stamping it.',
         },
         {
           text: 'Accept all three threat actors as in-scope. The TI provider has more visibility than Northgate and the validation is a formality.',
@@ -330,7 +332,7 @@ export const CBEST_SCENARIO_SC013 = {
         {
           text: 'Accept the report in full to avoid delay; the validation phase has a 2-week clock',
           correct: false,
-          rationale: 'Same flaw as option 2 dressed up as schedule pressure. CBEST\'s 2-week validation window exists to make the firm engage with the report — using the clock as an excuse to skip engagement defeats the phase\'s purpose. The SCT allows extensions for substantive validation; they do not allow extensions for "we needed more time to argue".',
+          rationale: 'Same flaw as option 2 dressed up as schedule pressure. CBEST\'s Validation stage exists to make the firm engage with the report — using the clock as an excuse to skip engagement defeats the phase\'s purpose. The regulator allows extensions for substantive validation; they do not allow extensions for "we needed more time to argue".',
         },
       ],
     },
@@ -399,7 +401,7 @@ export const CBEST_SCENARIO_SC013 = {
       order: 5.5,
       type: 'consequence',
       heading: 'Two days later: the IP belongs to the testers AND a real attacker',
-      narrative: 'You stood down the SOC. Forty-eight hours later, the PT provider escalates: the IP they "didn\'t recognise" is a hosting endpoint they share with another active engagement. They\'re sure their use of AnyDesk on Northgate stopped at 03:00 Wednesday — the activity yesterday morning at 06:14 is NOT theirs. Northgate has a real intrusion. The SOC, having been told to stand down, did not investigate further. The intrusion has now been live for a full additional day. The PT provider halts the test. The CISO and Bank of England SCT chair are on a call within the hour. The opening line is: "Walk us through your decision-making at 14:30 on Thursday."',
+      narrative: 'You stood down the SOC. Forty-eight hours later, the PT provider escalates: the IP they "didn\'t recognise" is a hosting endpoint they share with another active engagement. They\'re sure their use of AnyDesk on Northgate stopped at 03:00 Wednesday — the activity yesterday morning at 06:14 is NOT theirs. Northgate has a real intrusion. The SOC, having been told to stand down, did not investigate further. The intrusion has now been live for a full additional day. The PT provider halts the test. The CISO and the regulator\'s lead are on a call within the hour. The opening line is: "Walk us through your decision-making at 14:30 on Thursday."',
       aaseConcept: 'CONCEPT-TEST-HALT-MODEL',
       mitreTechnique: 'T1219',
       signals: [
@@ -439,7 +441,7 @@ export const CBEST_SCENARIO_SC013 = {
       order: 6,
       type: 'primary',
       heading: 'The Board asks: which remediation matters most?',
-      narrative: 'The Bank of England\'s Sector Cyber Team has issued the Intelligence, Detection and Response (IDR) Report. Three remediation findings have been agreed with Northgate. Finding A: the warehouse-management system\'s legacy authentication gateway has insufficient logging — testers were able to operate undetected for 9 days. Finding B: the SOC\'s detection of MFA-fatigue patterns lags behind current best practice. Finding C: Northgate\'s incident-response runbook does not have an explicit branch for "is this the CBEST test or a real intrusion" decisions. The Board meets next week and the CFO has signalled there\'s budget for one of these to start immediately, with the other two phased over the following six months. The Board chair asks you: which one first?',
+      narrative: 'Following the Phase 3.4 Review workshop, the regulator has signed off the Penetration Test Report (CBEST 2024h spec) and the Detection & Response Capability Assessment (CBEST 2024i spec). Three remediation findings have been agreed with Northgate. Finding A: the warehouse-management system\'s legacy authentication gateway has insufficient logging — testers were able to operate undetected for 9 days (PT Report). Finding B: the SOC\'s detection of MFA-fatigue patterns lags behind current best practice (D&R Capability Assessment). Finding C: Northgate\'s incident-response runbook does not have an explicit branch for "is this the CBEST test or a real intrusion" decisions (D&R Capability Assessment). The Board meets next week and the CFO has signalled there\'s budget for one of these to start immediately, with the other two phased over the following six months. The Board chair asks you: which one first?',
       aaseConcept: 'CONCEPT-ESCALATION-PATH',
       signals: [
         {
@@ -456,20 +458,20 @@ export const CBEST_SCENARIO_SC013 = {
         },
         {
           severity: 'medium',
-          text: 'CBEST closure is supervised — the SCT will track which finding got prioritised and follow up at 3, 6, and 12 months',
+          text: 'CBEST closure is supervised — the regulator will track which finding got prioritised and follow up at 3, 6, and 12 months',
         },
       ],
       question: 'Which do you recommend the Board prioritise?',
       options: [
         {
-          text: 'Finding A first. The 9-day undetected access on a Critical Function is the root concern that the entire CBEST exercise was designed to surface. Funding A immediately demonstrates to the SCT that Northgate is taking the most serious finding seriously. Findings B and C are sequenced behind A: B in months 1-3, C in months 1-2 (it\'s cheap and procedural so it can run in parallel to A).',
+          text: 'Finding A first. The 9-day undetected access on a Critical Function is the root concern that the entire CBEST exercise was designed to surface. Funding A immediately demonstrates to the regulator that Northgate is taking the most serious finding seriously. Findings B and C are sequenced behind A: B in months 1-3, C in months 1-2 (it\'s cheap and procedural so it can run in parallel to A).',
           correct: true,
-          rationale: 'CBEST remediation prioritisation is supervised — the SCT will assess Northgate\'s judgment as well as the remediation itself. Picking the largest blast-radius finding first is the answer the framework rewards. Finding C is cheap enough to run in parallel without competing for the budget envelope, and Finding B can sequence behind A without compromising the priority signal.',
+          rationale: 'CBEST remediation prioritisation is supervised — the regulator will assess Northgate\'s judgment as well as the remediation itself. Picking the largest blast-radius finding first is the answer the framework rewards. Finding C is cheap enough to run in parallel without competing for the budget envelope, and Finding B can sequence behind A without compromising the priority signal.',
         },
         {
           text: 'Finding C first. It\'s the cheapest, fastest, and shows Board-level engagement immediately — quick win for the supervisory file.',
           correct: false,
-          rationale: 'Finding C is cheap and worth doing, but leading with it sends the wrong signal — that the firm prioritised the easy fix over the hard one. The SCT reads the prioritisation as a posture statement: "what does Northgate think mattered most about this test?" Leading with the procedural fix instead of the 9-day undetected access answers that question badly.',
+          rationale: 'Finding C is cheap and worth doing, but leading with it sends the wrong signal — that the firm prioritised the easy fix over the hard one. The regulator reads the prioritisation as a posture statement: "what does Northgate think mattered most about this test?" Leading with the procedural fix instead of the 9-day undetected access answers that question badly.',
         },
         {
           text: 'Finding B first. SOC capability uplift is the long-term lever — you can\'t solve A or C without a stronger detection capability behind them.',
@@ -477,9 +479,9 @@ export const CBEST_SCENARIO_SC013 = {
           rationale: 'Plausible but inverts the right framing. SOC tooling matters, but Finding B is a capability uplift — useful, not urgent. Finding A is a known active gap on a Critical Function. The Board\'s question is "which remediation first" not "which capability investment first" — those are different questions.',
         },
         {
-          text: 'Defer to the SCT — they\'ve seen the test, they should rank the findings',
+          text: 'Defer to the regulator — they\'ve seen the test, they should rank the findings',
           correct: false,
-          rationale: 'CBEST closure assigns remediation prioritisation to the firm, with SCT supervision of execution. Asking the SCT to rank means Northgate is not engaging with its own remediation governance. The supervisory file note will be unfavourable.',
+          rationale: 'CBEST closure assigns remediation prioritisation to the firm, with regulator supervision of execution. Asking the regulator to rank means Northgate is not engaging with its own remediation governance. The supervisory file note will be unfavourable.',
         },
       ],
     },

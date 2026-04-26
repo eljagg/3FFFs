@@ -29,17 +29,21 @@
 import { runQuery, verifyConnection, closeDriver } from '../lib/neo4j.js'
 import { CBEST_SCENARIO_SC013 } from './data/sc013.js'
 
-// New concept introduced by SC013 — the only schema addition (other than
-// the SC013 nodes themselves)
+// Concept introduced by SC013 — graph ID kept as CONCEPT-CREST-ACCREDITATION
+// for stability (no edge migration needed). v25.6.0 freshness pass updated
+// the display name + summary + examples to reflect the BoE source of truth:
+// the gating accreditation is BoE-issued, with CREST membership as a
+// co-requirement. Concept ID rename deferred to a future schema-migration
+// release.
 const CREST_CONCEPT = {
   id: 'CONCEPT-CREST-ACCREDITATION',
-  name: 'CREST Accreditation',
-  universal: false,  // CBEST-specific (TIBER-EU recognises CREST equivalents but uses different terminology)
-  summary: 'A formal accreditation administered by CREST (the Council of Registered Ethical Security Testers) that qualifies penetration-testing and threat-intelligence service providers for CBEST and similar regulator-led intelligence-led red-team frameworks. CBEST requires both the Threat Intelligence and Penetration Testing providers to be CREST-accredited at the time of procurement; "in renewal" is not the same as "accredited" and is not accepted by the SCT. Accreditation has to be verified before contract signature, not after.',
+  name: 'CBEST Accreditation',
+  universal: false,  // CBEST-specific (TIBER-EU and similar frameworks have their own accreditation regimes)
+  summary: 'A formal accreditation administered by the Bank of England that qualifies penetration-testing and threat-intelligence service providers for CBEST. Accredited providers must also be members of CREST (the Council of Registered Ethical Security Testers) and abide by its code of conduct. The accredited-provider register is published on the CREST website but the gating accreditation itself is BoE-issued. CBEST requires both the TISP and PTSP to be CBEST-accredited at the time of procurement; "in renewal" is not the same as "accredited" and is not accepted by the regulator. Accreditation must be verified before contract signature, not after.',
   examples: [
-    'Provider Alpha: CREST STAR accredited (Simulated Targeted Attack and Response) — qualified for CBEST',
-    'Provider Beta: CREST STAR accredited but with banking-sector specialisation only',
-    'Provider Gamma: CREST accreditation lapsed January, renewal in progress as of April — NOT qualified at procurement',
+    'Provider Alpha: CBEST-accredited by the Bank of England, CREST STAR member — qualified for CBEST',
+    'Provider Beta: CBEST-accredited but with banking-sector specialisation only — qualified, but sector match weaker',
+    'Provider Gamma: CBEST accreditation lapsed January, renewal in progress as of April — NOT qualified at procurement',
   ],
 }
 
@@ -64,19 +68,22 @@ async function main() {
   }
   console.log('')
 
-  // SC013 must not already exist (or we re-set it). Get pre-state for safety.
+  // SC013 may already exist (idempotent re-run for v25.6.x freshness passes).
+  // Capture pre-state so the preservation check can adapt accordingly.
   const sc013Pre = await runQuery(
     `MATCH (sc:Scenario {id: 'SC013'}) RETURN count(sc) AS c`
   )
-  if (sc013Pre[0].c > 0) {
-    console.log('ℹ️  SC013 already exists — re-running migration will refresh its properties.\n')
+  const sc013Existed = sc013Pre[0].c > 0
+  if (sc013Existed) {
+    console.log('ℹ️  SC013 already exists; re-running idempotently to refresh properties.\n')
   }
 
   // -------------------------------------------------------------------------
-  // Step 1: new CREST concept node + APPEARS_IN_FRAMEWORK edges
-  //   (matches v25.4.2's per-framework summary structure)
+  // Step 1: CBEST accreditation concept (graph ID kept as
+  //   CONCEPT-CREST-ACCREDITATION for stability; display name + summary +
+  //   examples reflect BoE source of truth as of v25.6.0)
   // -------------------------------------------------------------------------
-  console.log('💡  Step 1: CREST Accreditation concept...')
+  console.log('💡  Step 1: CBEST Accreditation concept...')
   await runQuery(
     `MERGE (k:Concept {id: $id})
      SET k.name      = $name,
@@ -242,34 +249,56 @@ async function main() {
   const postCounts = {}
   postSnapshot.forEach(r => { postCounts[r.label] = r.c })
 
-  // Expected deltas: Scenario +1 (if SC013 didn't exist), Stage +9, Concept +1.
-  // Everything else must be unchanged.
-  const expectedDeltas = {
-    Scenario: sc013Pre[0].c === 0 ? 1 : 0,
-    Stage: 9,  // 6 primary + 3 consequence (S1-CONS, S3-CONS, S5-CONS)
-    Concept: 1,
-  }
+  // Expected deltas: idempotent-aware. If SC013 already existed at start of
+  // run, all writes are MERGE+SET property refreshes — zero count changes.
+  // Fresh seed adds 1 Scenario, 9 Stages (6 primary + 3 consequence), 1 Concept.
+  // Backported from add-sc014.js canonical pattern (v25.5.2) in v25.6.0.1.
+  const expectedDeltas = sc013Existed
+    ? { Scenario: 0, Stage: 0, Concept: 0 }
+    : { Scenario: 1, Stage: 9, Concept: 1 }
 
   let preservationOK = true
-  for (const [label, before] of Object.entries(preCounts)) {
+  // Check the labels we expect to change
+  for (const [label, expectedDelta] of Object.entries(expectedDeltas)) {
+    const before = preCounts[label] || 0
     const after = postCounts[label] || 0
-    const expectedDelta = expectedDeltas[label] || 0
     const actualDelta = after - before
     if (actualDelta !== expectedDelta) {
       console.error(`    ❌  ${label}: ${before} → ${after} (expected delta ${expectedDelta}, got ${actualDelta})`)
       preservationOK = false
     }
   }
+  // Check that NO OTHER label changed unexpectedly
+  for (const [label, before] of Object.entries(preCounts)) {
+    if (label in expectedDeltas) continue
+    const after = postCounts[label] || 0
+    if (after !== before) {
+      console.error(`    ❌  ${label}: ${before} → ${after} (unexpected change; this label should be untouched)`)
+      preservationOK = false
+    }
+  }
+  // Check that no NEW labels appeared
+  for (const label of Object.keys(postCounts)) {
+    if (!(label in preCounts) && !(label in expectedDeltas)) {
+      console.error(`    ❌  New label appeared: ${label} (count: ${postCounts[label]})`)
+      preservationOK = false
+    }
+  }
+
   if (!preservationOK) {
     console.error('\n❌  Preservation check FAILED.')
     await closeDriver()
     process.exit(1)
   }
 
-  console.log('🔒  Preservation: deltas exactly as expected:')
-  for (const [label, delta] of Object.entries(expectedDeltas)) {
-    if (delta > 0) {
-      console.log(`    ${label.padEnd(20)} +${delta} (now ${postCounts[label] || 0})`)
+  console.log('🔒  Preservation: deltas match expected pattern')
+  if (sc013Existed) {
+    console.log(`    (idempotent re-run; no count changes expected, none observed)`)
+  } else {
+    for (const [label, delta] of Object.entries(expectedDeltas)) {
+      if (delta > 0) {
+        console.log(`    ${label.padEnd(20)} +${delta} (now ${postCounts[label] || 0})`)
+      }
     }
   }
   console.log('')
