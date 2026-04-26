@@ -273,7 +273,7 @@ export default function ConceptSidebar({ open, conceptId, onClose }) {
                             </span>
                             <span style={{ flex: 1, lineHeight: 1.35, minWidth: 0 }}>
                               <span style={{ display: 'block', color: 'var(--ink)' }}>
-                                Stage {p.stageOrder} · {p.stageTitle}
+                                Stage {p.stageOrder} · {p.stageHeading || 'Untitled stage'}
                               </span>
                               <span style={{
                                 display: 'block', color: 'var(--ink-soft)',

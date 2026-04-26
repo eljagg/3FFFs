@@ -207,7 +207,7 @@ router.get('/concepts/:id/practiced-in', async (req, res, next) => {
              sc.severity  AS scenarioSeverity,
              st.id        AS stageId,
              st.order     AS stageOrder,
-             st.title     AS stageTitle
+             coalesce(st.heading, st.title, 'Untitled stage') AS stageHeading
     `, { id: req.params.id })
 
     res.json({
@@ -218,7 +218,12 @@ router.get('/concepts/:id/practiced-in', async (req, res, next) => {
         stageId:          r.stageId,
         stageOrder:       typeof r.stageOrder === 'object' && r.stageOrder?.toNumber
                             ? r.stageOrder.toNumber() : r.stageOrder,
-        stageTitle:       r.stageTitle,
+        // v25.4.2.1 hotfix (ISS-010): the Stage node uses `heading` as its
+        // display field, not `title`. The original v25.4.2 endpoint queried
+        // `st.title` (which doesn't exist on Stage nodes), returning null
+        // for every entry. Renamed payload field from stageTitle to
+        // stageHeading to match the underlying schema.
+        stageHeading:     r.stageHeading,
       })),
     })
   } catch (e) { next(e) }
