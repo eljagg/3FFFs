@@ -108,6 +108,14 @@ export const api = {
   // v25.6.1: CBEST FrameworkPhase reference endpoints (ISS-013)
   getFrameworkPhase:           (id)     => request(`/api/framework-phases/${encodeURIComponent(id)}`),
   getFrameworkPhasePracticedIn: (id)    => request(`/api/framework-phases/${encodeURIComponent(id)}/practiced-in`),
+
+  // v25.7.0: rich per-user progress (ISS-017) and Bank multi-tenant context (ISS-019a/019b/021)
+  getMyProgressFull:           ()       => request('/api/progress/me/full'),
+  getUserProgressFull:         (userId) => request(`/api/progress/user/${encodeURIComponent(userId)}/full`),
+  getMyBank:                   ()       => request('/api/banks/me'),
+  getMyBankMembers:            ()       => request('/api/banks/me/members'),
+  assignManager: (managerId, reportId)  => request('/api/banks/me/manages', { method: 'POST', body: JSON.stringify({ managerId, reportId }) }),
+  revokeManager: (managerId, reportId)  => request(`/api/banks/me/manages/${encodeURIComponent(reportId)}`, { method: 'DELETE', body: JSON.stringify({ managerId }) }),
   getThreatActors:     ()        => request('/api/frameworks/data/threat-actors'),
   recommendFrameworks: (regulatorId) => request(`/api/frameworks/data/recommend?regulator=${encodeURIComponent(regulatorId)}`),
 }

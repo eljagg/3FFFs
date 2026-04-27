@@ -13,6 +13,8 @@ import Coverage from './pages/Coverage.jsx'
 import Quiz from './pages/Quiz.jsx'
 import Tutor from './pages/Tutor.jsx'
 import Team from './pages/Team.jsx'
+import TeamMember from './pages/TeamMember.jsx'
+import MyProgress from './pages/MyProgress.jsx'
 import SignalSort from './pages/SignalSort.jsx'
 import Debug from './pages/Debug.jsx'
 import AdminUsers from './pages/AdminUsers.jsx'
@@ -61,6 +63,8 @@ export default function App() {
           <Route path="/quiz"                   element={<Safe><Quiz /></Safe>} />
           <Route path="/tutor"                  element={<Safe><Tutor /></Safe>} />
           <Route path="/team"                   element={<ManagerRoute><Safe><Team /></Safe></ManagerRoute>} />
+          <Route path="/team/:userId"           element={<ManagerRoute><Safe><TeamMember /></Safe></ManagerRoute>} />
+          <Route path="/me/progress"            element={<Safe><MyProgress /></Safe>} />
           <Route path="/admin/users"            element={<AdminRoute><Safe><AdminUsers /></Safe></AdminRoute>} />
           <Route path="/debug"                  element={<Safe><Debug /></Safe>} />
           <Route path="*"                       element={<Navigate to="/" replace />} />

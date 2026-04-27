@@ -69,11 +69,19 @@ export function requireRole(...allowed) {
  * Middleware: syncs the authenticated user into Neo4j as a :User node
  * on every request. Idempotent — MERGE by Auth0 ID (sub).
  * Also records their effective role for manager-dashboard queries.
+ *
+ * v25.7.0 (ISS-019a / ISS-021): also auto-maps the user to their Bank
+ * via :MEMBER_OF edge based on User.domain (their email domain). Banks
+ * are seeded via migrate:banks; mapping is best-effort. If the user's
+ * domain doesn't match any Bank, they're left without an edge — the
+ * client falls back to a default-theme experience and admin can assign
+ * manually later.
  */
 export async function syncUser(req, res, next) {
   try {
     const u = getUser(req)
     if (!u.id) return next()
+    const domain = (u.email || '').split('@')[1] || null
 
     await runQuery(
       `MERGE (user:User {id: $id})
@@ -88,9 +96,24 @@ export async function syncUser(req, res, next) {
         email: u.email,
         name: u.name,
         roles: u.roles,
-        domain: (u.email || '').split('@')[1] || null,
+        domain,
       }
     )
+
+    // v25.7.0: auto-link user to Bank by domain match. Best-effort —
+    // OPTIONAL MATCH means no error if no Bank node matches the domain
+    // (could be a new domain, or the migration hasn't run yet).
+    if (domain) {
+      await runQuery(
+        `MATCH (user:User {id: $id})
+         OPTIONAL MATCH (b:Bank) WHERE $domain IN b.domains
+         FOREACH (_ IN CASE WHEN b IS NULL THEN [] ELSE [1] END |
+           MERGE (user)-[r:MEMBER_OF]->(b)
+           ON CREATE SET r.linkedAt = timestamp(), r.method = 'auto-domain'
+         )`,
+        { id: u.id, domain }
+      )
+    }
   } catch (err) {
     console.error('syncUser failed:', err.message)
   }

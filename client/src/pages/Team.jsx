@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
@@ -34,6 +35,7 @@ function statusFor(row) {
 }
 
 export default function Team() {
+  const navigate = useNavigate()
   const [progress, setProgress] = useState([])
   const [coverage, setCoverage] = useState([])
   const [skills, setSkills]     = useState([])
@@ -470,14 +472,17 @@ function TeamTable({ team }) {
             key={row.id}
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             transition={{ delay: 0.05 + i * 0.03 }}
+            onClick={() => navigate(`/team/${encodeURIComponent(row.id)}`)}
             style={{
               display: 'grid',
               gridTemplateColumns: '2fr 1fr 0.7fr 0.7fr 1fr 1fr',
               gap: 16, padding: '16px 22px',
               borderBottom: i < team.length - 1 ? '1px solid var(--rule)' : 'none',
               alignItems: 'center', transition: 'background var(--dur)',
+              cursor: 'pointer',
             }}
             whileHover={{ backgroundColor: 'var(--paper-dim)' }}
+            title={`Open ${row.name || row.email}'s full progress`}
           >
             <div>
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 2, color: 'var(--ink)' }}>

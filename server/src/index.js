@@ -6,6 +6,7 @@ import framework from './routes/framework.js'
 import frameworks from './routes/frameworks.js'
 import mitre from './routes/mitre.js'
 import frameworkPhases from './routes/framework-phases.js'
+import banks from './routes/banks.js'
 import authCheck from './routes/auth-check.js'
 import scenarios from './routes/scenarios.js'
 import quiz from './routes/quiz.js'
@@ -92,6 +93,8 @@ app.use('/api/quiz', quiz)
 app.use('/api/progress', progress)
 app.use('/api/tutor', tutor)
 app.use('/api/team', team)
+// v25.7.0: Bank multi-tenant endpoints (ISS-019a / 019b / 021)
+app.use('/api/banks', banks)
 app.use('/api/games', games)
 app.use('/api/badges', badges)
 app.use('/api/admin', admin)
