@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../../lib/api.js'
+import { useUser } from '../../lib/user.jsx'
 
 /* -------------------------------------------------------------------------
    ConceptSidebar — slide-over panel that renders an AASE/CBEST/TIBER/iCAST
@@ -19,6 +20,13 @@ import { api } from '../../lib/api.js'
    render a "v25.6 — content pending" placeholder until the freshness
    pass fills them in.
 
+   v25.6.2 (ISS-014): each framework card can now ALSO carry roleContent
+   (4 lenses: teller / analyst / soc / executive). Where present, the
+   card renders four-lens tabs matching FrameworkPhaseSidebar's pattern
+   (v25.6.1). Where absent, the card falls back to the existing single-
+   text rendering. CBEST framework cards are populated for all 9 concepts
+   in v25.6.2; AASE/TIBER/iCAST will follow in later releases.
+
    v25.4.2 also adds a "Practiced in" section that lists the scenarios +
    stages where this concept is tested via :TESTS_CONCEPT edges. Click any
    stage to jump straight from reference content to applied scenario play.
@@ -27,6 +35,14 @@ import { api } from '../../lib/api.js'
    sidebar serve the Frameworks page (it does, since v25.4), and makes
    "look it up in another framework" a 1-line addition later.
 ------------------------------------------------------------------------- */
+
+// v25.6.2: same lens taxonomy as FrameworkPhaseSidebar — keep them in sync.
+const ROLE_TABS = [
+  { id: 'teller',    short: 'Frontline',  long: 'Frontline / Teller' },
+  { id: 'analyst',   short: 'Analyst',    long: 'Fraud Analyst' },
+  { id: 'soc',       short: 'SOC',        long: 'SOC / Cyber Team' },
+  { id: 'executive', short: 'Exec',       long: 'Risk Manager / Exec' },
+]
 
 const SEVERITY_COLORS = {
   high:   'var(--danger)',
@@ -310,11 +326,35 @@ export default function ConceptSidebar({ open, conceptId, onClose }) {
  *   - Header: framework name + region pill, expand chevron
  *   - Body (when expanded): the per-framework summary, vintage tag if any,
  *     or the "v25.6 pending" placeholder for non-AASE entries.
+ *
+ * v25.6.2 (ISS-014): if framework.roleContent is present (CBEST in v25.6.2),
+ * the body renders four-lens tabs (teller / analyst / soc / executive) above
+ * the summary. The user's role-tab is marked with an accent dot and gets
+ * selected by default. The "summary" text in framework.summary stays as the
+ * neutral analyst-equivalent fallback, shown when on the analyst tab. The
+ * other three tabs render their roleContent.summary + keyPoints.
  */
 function FrameworkCard({ framework, defaultOpen, isUniversal }) {
   const [open, setOpen] = useState(defaultOpen)
   const isPending = framework.pending
   const hasContent = !isPending && framework.summary
+  const hasRoleContent = !isPending && framework.roleContent
+  const { effectiveRole } = useUser() || {}
+
+  // v25.6.2: lens state per card. Default to the user's role if it matches
+  // one of the four canonical values, otherwise analyst.
+  const initialLens = useMemo(() => {
+    if (effectiveRole && ROLE_TABS.find(t => t.id === effectiveRole)) return effectiveRole
+    return 'analyst'
+  }, [effectiveRole])
+  const [activeLens, setActiveLens] = useState(initialLens)
+  // Resync lens when the user changes role mid-session
+  useEffect(() => { setActiveLens(initialLens) }, [initialLens])
+
+  const lensContent = useMemo(() => {
+    if (!hasRoleContent) return null
+    return framework.roleContent[activeLens] || framework.roleContent.analyst || null
+  }, [hasRoleContent, framework.roleContent, activeLens])
 
   return (
     <div style={{
@@ -358,6 +398,19 @@ function FrameworkCard({ framework, defaultOpen, isUniversal }) {
             Pending
           </span>
         )}
+        {hasRoleContent && (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
+            textTransform: 'uppercase', fontWeight: 600,
+            padding: '2px 6px', borderRadius: 3,
+            border: '1px solid var(--accent)', color: 'var(--accent)',
+            marginLeft: 4,
+          }}
+          title="Four-lens role-conditional content available"
+          >
+            4 lenses
+          </span>
+        )}
         {framework.vintage && hasContent && (
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em',
@@ -395,10 +448,99 @@ function FrameworkCard({ framework, defaultOpen, isUniversal }) {
             }}>
               {hasContent ? (
                 <>
+                  {/* Always show the framework-level summary (the analyst lens
+                      content essentially — neutral framing). */}
                   <p style={{ margin: 0 }}>{framework.summary}</p>
+
+                  {/* v25.6.2: four-lens tabs only render when roleContent exists. */}
+                  {hasRoleContent && (
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+                        textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 8,
+                        fontWeight: 600,
+                      }}>
+                        How this concept lands for…
+                      </div>
+                      <div style={{
+                        display: 'flex', gap: 4, marginBottom: 12,
+                        borderBottom: '1px solid var(--rule)',
+                      }}>
+                        {ROLE_TABS.map(tab => {
+                          const isActive = activeLens === tab.id
+                          const isUserRole = effectiveRole === tab.id
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => setActiveLens(tab.id)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: isActive
+                                  ? '2px solid var(--accent)'
+                                  : '2px solid transparent',
+                                padding: '6px 10px', cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: 10.5,
+                                color: isActive ? 'var(--ink)' : 'var(--ink-soft)',
+                                fontWeight: isActive ? 600 : 500,
+                                letterSpacing: '0.06em',
+                                marginBottom: -1,
+                                transition: 'all var(--dur) ease',
+                              }}
+                              title={tab.long}
+                            >
+                              {tab.short}
+                              {isUserRole && (
+                                <span style={{
+                                  display: 'inline-block', marginLeft: 6,
+                                  width: 5, height: 5, borderRadius: '50%',
+                                  background: 'var(--accent)', verticalAlign: 'middle',
+                                }} aria-label="your current role" />
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {lensContent && (
+                        <motion.div
+                          key={activeLens}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.18 }}
+                        >
+                          <div style={{
+                            fontSize: 13, lineHeight: 1.55, color: 'var(--ink)',
+                            marginBottom: 10,
+                          }}>
+                            {lensContent.summary}
+                          </div>
+                          {lensContent.keyPoints && lensContent.keyPoints.length > 0 && (
+                            <ul style={{
+                              listStyle: 'none', padding: 0, margin: 0,
+                              display: 'flex', flexDirection: 'column', gap: 6,
+                            }}>
+                              {lensContent.keyPoints.map((kp, i) => (
+                                <li key={i} style={{
+                                  fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink)',
+                                  paddingLeft: 16, position: 'relative',
+                                }}>
+                                  <span style={{
+                                    position: 'absolute', left: 0, top: 8,
+                                    width: 7, height: 1, background: 'var(--accent)',
+                                  }} aria-hidden="true" />
+                                  {kp}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </motion.div>
+                      )}
+                    </div>
+                  )}
+
                   {framework.vintage && (
                     <div style={{
-                      marginTop: 10,
+                      marginTop: 14,
                       fontSize: 11, color: 'var(--ink-faint)',
                       fontStyle: 'italic',
                     }}>

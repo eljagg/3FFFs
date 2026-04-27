@@ -160,16 +160,22 @@ router.get('/concepts/:id', async (req, res, next) => {
     // Falls back to Concept.summary on the node when an edge has no summary
     // (defensive — shouldn't happen post-migration, but keeps the response
     // shape sane if the migration hasn't run yet).
+    // v25.6.2: now also returns roleContent — the OBS-018 four-lens content
+    // populated for CBEST edges by add-cbest-concept-summaries (ISS-014).
+    // Stored as JSON-stringified property on the edge; parsed back to an
+    // object before returning to the client. Null on edges that don't have
+    // it (AASE today; TIBER/iCAST always until later releases populate them).
     const rows = await runQuery(`
       MATCH (k:Concept {id: $id})
       OPTIONAL MATCH (k)-[r:APPEARS_IN_FRAMEWORK]->(f:Framework)
       WITH k, collect({
-        id:       f.id,
-        name:     f.name,
-        region:   f.region,
-        summary:  coalesce(r.summary, k.summary),
-        pending:  coalesce(r.pending, false),
-        vintage:  r.vintage
+        id:           f.id,
+        name:         f.name,
+        region:       f.region,
+        summary:      coalesce(r.summary, k.summary),
+        pending:      coalesce(r.pending, false),
+        vintage:      r.vintage,
+        roleContent:  r.roleContent
       }) AS frameworks
       RETURN k { .* } AS concept,
              [fw IN frameworks WHERE fw.id IS NOT NULL] AS frameworks
@@ -178,9 +184,18 @@ router.get('/concepts/:id', async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'Concept not found' })
 
     const r = rows[0]
+    // Parse roleContent JSON string per framework (null where unset)
+    const frameworks = (r.frameworks || []).map(fw => {
+      let roleContent = null
+      if (fw.roleContent) {
+        try { roleContent = JSON.parse(fw.roleContent) } catch { roleContent = null }
+      }
+      return { ...fw, roleContent }
+    })
+
     res.json({
       concept: parseJsonProps(r.concept, ['examples']),
-      frameworks: r.frameworks || [],
+      frameworks,
     })
   } catch (e) { next(e) }
 })

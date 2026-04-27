@@ -19,7 +19,8 @@
     "migrate:mitre-foundation": "node --env-file-if-exists=../.env src/seed/add-mitre-foundation.js",
     "migrate:sc013": "node --env-file-if-exists=../.env src/seed/add-sc013.js",
     "migrate:sc014": "node --env-file-if-exists=../.env src/seed/add-sc014.js",
-    "migrate:cbest-phases": "node --env-file-if-exists=../.env src/seed/add-cbest-phases.js"
+    "migrate:cbest-phases": "node --env-file-if-exists=../.env src/seed/add-cbest-phases.js",
+    "migrate:cbest-concept-summaries": "node --env-file-if-exists=../.env src/seed/add-cbest-concept-summaries.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
