@@ -65,20 +65,29 @@ export default function AdminUsers() {
       <div style={{ display: 'flex', gap: 6, marginBottom: 28, borderBottom: '1px solid var(--rule)' }}>
         <TabButton active={tab === 'users'}   onClick={() => setTab('users')}>Users</TabButton>
         <TabButton active={tab === 'invites'} onClick={() => setTab('invites')}>Invites</TabButton>
+        <TabButton active={tab === 'managers'} onClick={() => setTab('managers')}>Manager assignments</TabButton>
       </div>
 
       <AnimatePresence mode="wait">
-        {tab === 'users' ? (
+        {tab === 'users' && (
           <motion.div key="users"
             initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}>
             <UsersTab />
           </motion.div>
-        ) : (
+        )}
+        {tab === 'invites' && (
           <motion.div key="invites"
             initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}>
             <InvitesTab />
+          </motion.div>
+        )}
+        {tab === 'managers' && (
+          <motion.div key="managers"
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}>
+            <ManagersTab />
           </motion.div>
         )}
       </AnimatePresence>
@@ -598,4 +607,261 @@ const dangerLinkBtn = {
   background: 'transparent', border: 'none', color: 'var(--danger)',
   fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px',
   textDecoration: 'underline',
+}
+
+// ============================================================================
+// v25.7.0.1 (ISS-022): Manager assignments tab
+//
+// Admin-only UI for assigning a user with the manager role to manage one or
+// more reports. Drives the :MANAGES edge populated by POST /api/banks/me/manages.
+// Shows current bank members grouped by their manager(s); empty groups are
+// "unassigned"; admin clicks "Assign" on an unassigned user to pick a manager.
+// ============================================================================
+function ManagersTab() {
+  const [members, setMembers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+  const [assignFor, setAssignFor] = useState(null)  // user id we're assigning
+  const [toast, setToast]     = useState(null)
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      const d = await api.getMyBankMembers()
+      setMembers(d.members || [])
+    } catch (e) {
+      setError(e.message || 'Could not load members')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function handleAssign(managerId, reportId) {
+    try {
+      await api.assignManager(managerId, reportId)
+      setAssignFor(null)
+      setToast({ kind: 'success', text: 'Manager assigned.' })
+      load()
+    } catch (e) {
+      setToast({ kind: 'error', text: e.message || 'Assignment failed.' })
+    }
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  async function handleRevoke(managerId, reportId) {
+    if (!confirm('Revoke this manager assignment?')) return
+    try {
+      await api.revokeManager(managerId, reportId)
+      setToast({ kind: 'success', text: 'Assignment revoked.' })
+      load()
+    } catch (e) {
+      setToast({ kind: 'error', text: e.message || 'Revoke failed.' })
+    }
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  // Bucket members: those with the manager role, those without
+  const managers = useMemo(
+    () => members.filter(m => (m.roles || []).includes('manager')).sort((a, b) => (a.email || '').localeCompare(b.email || '')),
+    [members]
+  )
+  const reports = useMemo(
+    () => members.filter(m => !(m.roles || []).includes('manager') && !(m.roles || []).includes('admin')),
+    [members]
+  )
+
+  // Bucket reports by their assigned managers (or "unassigned")
+  const grouped = useMemo(() => {
+    const buckets = { unassigned: [] }
+    for (const r of reports) {
+      if (!r.managers || r.managers.length === 0) {
+        buckets.unassigned.push(r)
+      } else {
+        for (const m of r.managers) {
+          if (!buckets[m.id]) buckets[m.id] = { manager: m, reports: [] }
+          buckets[m.id].reports.push(r)
+        }
+      }
+    }
+    return buckets
+  }, [reports])
+
+  if (loading) return <div style={{ padding: 30, textAlign: 'center' }}>Loading members…</div>
+  if (error)   return <div style={{ padding: 30, color: 'var(--danger)' }}>Error: {error}</div>
+
+  return (
+    <div>
+      <InfoCallout>
+        Assignments here populate the <code style={codeStyle}>:MANAGES</code> graph
+        edge that powers manager-side views and progress access. A user must
+        have the <strong>manager</strong> role (set in Auth0) before they
+        can be selected as an assignee here.
+      </InfoCallout>
+
+      {toast && (
+        <div style={{
+          padding: '10px 14px', marginBottom: 12,
+          background: toast.kind === 'success' ? 'var(--success-bg, #e6f4ea)' : 'var(--danger-bg)',
+          color: toast.kind === 'success' ? 'var(--success)' : 'var(--danger)',
+          borderRadius: 6, fontSize: 13,
+        }}>{toast.text}</div>
+      )}
+
+      {/* Unassigned users — most actionable, surface first */}
+      <div style={{ marginBottom: 28 }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 500, margin: '0 0 12px' }}>
+          Unassigned users <span style={{ color: 'var(--ink-faint)', fontWeight: 400, fontSize: 13 }}>
+            ({grouped.unassigned.length})
+          </span>
+        </h3>
+        {grouped.unassigned.length === 0 ? (
+          <div style={{ padding: 14, color: 'var(--ink-soft)', fontSize: 13, fontStyle: 'italic' }}>
+            All users have at least one manager assignment.
+          </div>
+        ) : (
+          <div style={{ border: '1px solid var(--rule)', borderRadius: 8 }}>
+            {grouped.unassigned.map((u, i) => (
+              <UnassignedRow
+                key={u.id}
+                user={u}
+                managers={managers}
+                expanded={assignFor === u.id}
+                onToggle={() => setAssignFor(assignFor === u.id ? null : u.id)}
+                onAssign={(managerId) => handleAssign(managerId, u.id)}
+                isLast={i === grouped.unassigned.length - 1}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Manager → reports listing */}
+      <div>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 500, margin: '0 0 12px' }}>
+          Manager assignments <span style={{ color: 'var(--ink-faint)', fontWeight: 400, fontSize: 13 }}>
+            ({managers.length} manager{managers.length === 1 ? '' : 's'})
+          </span>
+        </h3>
+        {managers.length === 0 ? (
+          <div style={{ padding: 14, color: 'var(--ink-soft)', fontSize: 13, fontStyle: 'italic' }}>
+            No users with the manager role found in this bank. Assign the manager
+            role in Auth0 first.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {managers.map(m => {
+              const bucket = grouped[m.id]
+              return (
+                <ManagerCard
+                  key={m.id}
+                  manager={m}
+                  reports={bucket ? bucket.reports : []}
+                  onRevoke={(reportId) => handleRevoke(m.id, reportId)}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function UnassignedRow({ user, managers, expanded, onToggle, onAssign, isLast }) {
+  const [pickedMgr, setPickedMgr] = useState('')
+  return (
+    <div style={{ borderBottom: isLast ? 'none' : '1px solid var(--rule)' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 16,
+        padding: '12px 16px',
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 500, fontSize: 14 }}>{user.email}</div>
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontFamily: 'var(--font-mono)' }}>
+            {(user.roles || []).join(', ') || 'no roles'} · {user.bankName}
+          </div>
+        </div>
+        <button onClick={onToggle} style={secondaryBtn}>
+          {expanded ? 'Cancel' : 'Assign manager'}
+        </button>
+      </div>
+      {expanded && (
+        <div style={{
+          padding: '12px 16px 16px', background: 'var(--paper-dim)',
+          display: 'flex', gap: 12, alignItems: 'center',
+        }}>
+          <select
+            value={pickedMgr}
+            onChange={e => setPickedMgr(e.target.value)}
+            style={{ ...selectStyle, flex: 1 }}
+          >
+            <option value="">— Select a manager —</option>
+            {managers.map(m => (
+              <option key={m.id} value={m.id}>{m.email}</option>
+            ))}
+          </select>
+          <button
+            disabled={!pickedMgr}
+            onClick={() => { onAssign(pickedMgr); setPickedMgr('') }}
+            style={{
+              ...primaryBtn,
+              opacity: pickedMgr ? 1 : 0.5,
+              cursor: pickedMgr ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Confirm
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ManagerCard({ manager, reports, onRevoke }) {
+  return (
+    <div style={{
+      border: '1px solid var(--rule)', borderRadius: 8,
+      background: 'var(--paper-hi)',
+    }}>
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: reports.length > 0 ? '1px solid var(--rule)' : 'none',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 500, fontSize: 14 }}>{manager.email}</div>
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
+            {reports.length} direct report{reports.length === 1 ? '' : 's'}
+          </div>
+        </div>
+      </div>
+      {reports.length > 0 && (
+        <div>
+          {reports.map((r, i) => (
+            <div key={r.id} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '10px 16px',
+              borderBottom: i < reports.length - 1 ? '1px solid var(--rule)' : 'none',
+            }}>
+              <div style={{ flex: 1, fontSize: 13 }}>
+                {r.email}
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--ink-soft)' }}>
+                  ({(r.roles || []).join(', ')})
+                </span>
+              </div>
+              <button
+                onClick={() => onRevoke(r.id)}
+                style={dangerLinkBtn}
+              >
+                Revoke
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
