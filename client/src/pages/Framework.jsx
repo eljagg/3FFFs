@@ -198,45 +198,50 @@ export default function Framework() {
     tacticBodyVizSubtitle: {
       fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.5,
     },
-    // v25.7.0.2.2: when a tactic has visualizations attached but NONE
-    // target the current role, show a small affordance instead of
-    // silently falling back to single-column. Documents the OBS-018
-    // four-lens asymmetry to the user — without this, tellers seeing
-    // "no viz" on TA0043 would look identical to tellers seeing "no
-    // viz" on a tactic without any viz at all.
-    tacticBodyExcludedPanel: {
-      padding: '14px 16px',
+    // v25.7.0.2.2 (ISS-023 polish): "interactive content for other roles"
+    // affordance card. Appears in the right column when the tactic has
+    // viz attached but none target the current role. The OBS-018 four-
+    // lens discipline is documented in deploy notes; this is the user-
+    // facing manifestation of "no change for this lens" so the user
+    // doesn't experience the asymmetry as a missed deploy.
+    tacticBodyOtherRoleCard: {
+      minWidth: 0,
+      padding: '16px 18px',
       background: 'var(--paper)',
-      border: '1px dashed var(--rule-strong)',
+      border: '1px solid var(--rule)',
       borderRadius: 'var(--radius-lg)',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
     },
-    tacticBodyExcludedLabel: {
-      fontFamily: 'var(--font-mono)', fontSize: 10,
-      textTransform: 'uppercase', letterSpacing: '0.12em',
-      color: 'var(--accent)',
+    otherRoleCardLabel: {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em',
+      color: 'var(--accent)', marginBottom: 12,
     },
-    tacticBodyExcludedTitle: {
-      fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 500,
-      color: 'var(--ink)',
+    otherRoleCardEntry: {
+      paddingTop: 6,
     },
-    tacticBodyExcludedText: {
+    otherRoleCardTitle: {
+      fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 500,
+      color: 'var(--ink)', marginBottom: 8,
+    },
+    otherRoleCardBody: {
       fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.55,
+      marginBottom: 14,
     },
-    tacticBodyExcludedRoles: {
-      display: 'flex', gap: 4, flexWrap: 'wrap',
-      marginTop: 4,
+    otherRoleCardChips: {
+      display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6,
     },
-    tacticBodyExcludedRolePill: {
+    otherRoleCardChipsLabel: {
       fontFamily: 'var(--font-mono)', fontSize: 10,
-      padding: '2px 7px',
-      background: 'var(--paper-dim)',
+      textTransform: 'uppercase', letterSpacing: '0.1em',
+      color: 'var(--ink-faint)', marginRight: 4,
+    },
+    otherRoleCardChip: {
+      fontFamily: 'var(--font-mono)', fontSize: 11,
+      padding: '3px 8px',
+      background: 'var(--paper-hi)',
       border: '1px solid var(--rule-strong)',
       borderRadius: 3,
       color: 'var(--ink-soft)',
-      textTransform: 'capitalize',
     },
     description: {
       fontSize: 15, color: 'var(--ink-soft)', lineHeight: 1.6,
@@ -362,20 +367,15 @@ export default function Framework() {
               </button>
 
               {open && (() => {
-                // v25.7.0.2 (ISS-023) / v25.7.0.2.2 polish:
-                // Three layout states for the expanded body:
-                //   1. No viz at all attached to this tactic → single column
-                //   2. Viz attached but NONE for this role  → two-column with
-                //      a small "interactive content available for other roles"
-                //      affordance on the right (OBS-018 transparency)
-                //   3. Viz attached AND for this role        → two-column with
-                //      the rendered visualization on the right
+                // v25.7.0.2 (ISS-023): determine whether this tactic has any
+                // visualization that the current effective role should see.
+                // If yes, switch to two-column layout. If not, fall back to
+                // the original single-column body.
                 const allVizForTactic = tacticViz[t.id] || []
                 const visibleViz = allVizForTactic.filter(v =>
                   !v.roles || v.roles.length === 0 || v.roles.includes(effectiveRole)
                 )
-                const hasVizForRole       = visibleViz.length > 0
-                const hasVizForOtherRoles = !hasVizForRole && allVizForTactic.length > 0
+                const hasViz = visibleViz.length > 0
 
                 const textBody = (
                   <>
@@ -422,74 +422,63 @@ export default function Framework() {
                   </>
                 )
 
-                // State 1 — no viz at all. Single-column layout, identical
-                // to pre-v25.7.0.2 behaviour. No empty right pane.
-                if (!hasVizForRole && !hasVizForOtherRoles) {
-                  return (
-                    <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
-                      {textBody}
-                    </div>
+                if (!hasViz) {
+                  // v25.7.0.2.2: when a tactic has visualizations attached
+                  // but NONE target the current role, render a small
+                  // affordance card on the right. This makes the OBS-018
+                  // four-lens asymmetry legible to the user (otherwise
+                  // tellers viewing TA0043 see exactly what they saw
+                  // pre-spike, with no signal that anything changed).
+                  const hiddenViz = allVizForTactic.filter(v =>
+                    v.roles && v.roles.length > 0 && !v.roles.includes(effectiveRole)
                   )
-                }
 
-                // State 2 — viz attached but not for this role. Two-column
-                // layout with affordance panel on the right.
-                if (hasVizForOtherRoles) {
-                  // Aggregate the audience roles across all attached viz
-                  // so the affordance can list which roles WOULD see
-                  // something here.
-                  const otherRolesSet = new Set()
-                  allVizForTactic.forEach(v => {
-                    ;(v.roles || []).forEach(r => {
-                      if (r !== effectiveRole) otherRolesSet.add(r)
-                    })
-                  })
-                  const otherRoles = Array.from(otherRolesSet)
+                  if (hiddenViz.length === 0) {
+                    // No viz attached at all — original single-column layout
+                    return (
+                      <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
+                        {textBody}
+                      </div>
+                    )
+                  }
 
+                  // Viz exists for OTHER roles — show affordance on right
                   return (
                     <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
                       <div style={styles.tacticBodyTwoCol}>
                         <div style={styles.tacticBodyTextCol}>
                           {textBody}
                         </div>
-                        <div style={styles.tacticBodyExcludedPanel}>
-                          <div style={styles.tacticBodyExcludedLabel}>
+                        <div style={styles.tacticBodyOtherRoleCard}>
+                          <div style={styles.otherRoleCardLabel}>
                             Interactive content for other roles
                           </div>
-                          <div style={styles.tacticBodyExcludedTitle}>
-                            {allVizForTactic.length === 1
-                              ? allVizForTactic[0].title
-                              : `${allVizForTactic.length} interactive visualizations`}
-                          </div>
-                          <div style={styles.tacticBodyExcludedText}>
-                            This tactic has interactive content tuned for other
-                            roles. A version tuned for your role is on the
-                            v25.7.1 backlog — until then, the technique cards on
-                            the left cover the reference content.
-                          </div>
-                          {otherRoles.length > 0 && (
-                            <div style={styles.tacticBodyExcludedRoles}>
-                              <span style={{
-                                fontFamily: 'var(--font-mono)', fontSize: 10,
-                                color: 'var(--ink-faint)',
-                                letterSpacing: '0.08em', textTransform: 'uppercase',
-                                marginRight: 4,
-                              }}>
-                                Available for:
-                              </span>
-                              {otherRoles.map(r => (
-                                <span key={r} style={styles.tacticBodyExcludedRolePill}>{r}</span>
-                              ))}
+                          {hiddenViz.map(v => (
+                            <div key={v.id} style={styles.otherRoleCardEntry}>
+                              <div style={styles.otherRoleCardTitle}>{v.title}</div>
+                              <div style={styles.otherRoleCardBody}>
+                                This tactic has interactive content tuned for other roles.
+                                A version tuned for your role is on the v25.7.1 backlog —
+                                until then, the technique cards on the left cover the
+                                reference content.
+                              </div>
+                              <div style={styles.otherRoleCardChips}>
+                                <span style={styles.otherRoleCardChipsLabel}>Available for:</span>
+                                {(v.roles || []).map(r => (
+                                  <span key={r} style={styles.otherRoleCardChip}>
+                                    {r === 'soc' ? 'SOC' : r.charAt(0).toUpperCase() + r.slice(1)}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
-                          )}
+                          ))}
                         </div>
                       </div>
                     </div>
                   )
                 }
 
-                // State 3 — viz visible to this role. Two-column with the
-                // rendered visualization on the right.
+                // Two-column layout — text on left, viz panel on right
                 return (
                   <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
                     <div style={styles.tacticBodyTwoCol}>
