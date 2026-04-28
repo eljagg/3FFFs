@@ -18,6 +18,10 @@ import MyProgress from './pages/MyProgress.jsx'
 import SignalSort from './pages/SignalSort.jsx'
 import Debug from './pages/Debug.jsx'
 import AdminUsers from './pages/AdminUsers.jsx'
+// v25.7.0.2 (ISS-023): admin-only viz preview page — internal tool for
+// iterating on visualization components without going through the
+// Framework page expand-row flow.
+import AdminVisualizations from './pages/AdminVisualizations.jsx'
 import { useUser } from './lib/user.jsx'
 import { useAuth0 } from '@auth0/auth0-react'
 
@@ -66,6 +70,7 @@ export default function App() {
           <Route path="/team/:userId"           element={<ManagerRoute><Safe><TeamMember /></Safe></ManagerRoute>} />
           <Route path="/me/progress"            element={<Safe><MyProgress /></Safe>} />
           <Route path="/admin/users"            element={<AdminRoute><Safe><AdminUsers /></Safe></AdminRoute>} />
+          <Route path="/admin/visualizations"   element={<AdminRoute><Safe><AdminVisualizations /></Safe></AdminRoute>} />
           <Route path="/debug"                  element={<Safe><Debug /></Safe>} />
           <Route path="*"                       element={<Navigate to="/" replace />} />
         </Route>

@@ -16,6 +16,11 @@ import team from './routes/team.js'
 import games from './routes/games.js'
 import badges from './routes/badges.js'
 import admin from './routes/admin.js'
+// v25.7.0.2 (ISS-023): Visualization registry — split into a public router
+// for fetch endpoints and an authed router for the telemetry POST. The
+// reasoning is the same as /api/framework: read access to reference content
+// is public, but writes (user interaction events) require auth.
+import { publicRouter as visualizationsPublic, authedRouter as visualizationsAuthed } from './routes/visualizations.js'
 
 const app = express()
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true, credentials: true }))
@@ -41,6 +46,10 @@ app.use('/api/mitre', mitre)
 // v25.6.1: CBEST FrameworkPhase reference module (ISS-013). Same access
 // pattern — public reference content, no user data.
 app.use('/api/framework-phases', frameworkPhases)
+// v25.7.0.2 (ISS-023): public read endpoints for visualizations — same
+// access pattern as /api/framework and /api/mitre. The telemetry POST is
+// mounted separately below the auth wall.
+app.use('/api/visualizations', visualizationsPublic)
 app.use('/api/auth', authCheck)
 
 // ----------------------------------------------------------------------------
@@ -98,6 +107,11 @@ app.use('/api/banks', banks)
 app.use('/api/games', games)
 app.use('/api/badges', badges)
 app.use('/api/admin', admin)
+// v25.7.0.2 (ISS-023): authed telemetry endpoint for visualization events
+// (mounted at /api/visualizations so it shares the prefix with the public
+// fetch endpoints — Express dispatches based on method + path so the GETs
+// hit the public router and POSTs hit this one).
+app.use('/api/visualizations', visualizationsAuthed)
 
 // ============================================================================
 // DEBUG ROUTES — INLINED to bypass any build caching issues that were keeping

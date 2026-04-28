@@ -21,7 +21,8 @@
     "migrate:sc014": "node --env-file-if-exists=../.env src/seed/add-sc014.js",
     "migrate:cbest-phases": "node --env-file-if-exists=../.env src/seed/add-cbest-phases.js",
     "migrate:cbest-concept-summaries": "node --env-file-if-exists=../.env src/seed/add-cbest-concept-summaries.js",
-    "migrate:banks": "node --env-file-if-exists=../.env src/seed/add-banks.js"
+    "migrate:banks": "node --env-file-if-exists=../.env src/seed/add-banks.js",
+    "migrate:visualizations": "node --env-file-if-exists=../.env src/seed/add-visualizations.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

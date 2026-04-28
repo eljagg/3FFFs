@@ -118,4 +118,19 @@ export const api = {
   revokeManager: (managerId, reportId)  => request(`/api/banks/me/manages/${encodeURIComponent(reportId)}`, { method: 'DELETE', body: JSON.stringify({ managerId }) }),
   getThreatActors:     ()        => request('/api/frameworks/data/threat-actors'),
   recommendFrameworks: (regulatorId) => request(`/api/frameworks/data/recommend?regulator=${encodeURIComponent(regulatorId)}`),
+
+  // v25.7.0.2 (ISS-023): Visualization registry
+  // - listVisualizations: full registry, used by /admin/visualizations preview
+  // - getVisualizationsFor: visualizations attached to a given graph entity
+  //   (e.g. getVisualizationsFor('Tactic', 'TA0043'))
+  // - emitVizEvent: telemetry — fire-and-forget, the renderer wraps this so
+  //   each viz component doesn't have to know about the endpoint
+  listVisualizations:    ()                    => request('/api/visualizations'),
+  getVisualizationsFor:  (entityType, entityId) =>
+    request(`/api/visualizations/for/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`),
+  emitVizEvent:          (vizId, type)         =>
+    request(`/api/visualizations/${encodeURIComponent(vizId)}/event`, {
+      method: 'POST',
+      body: JSON.stringify({ type }),
+    }),
 }

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
+import { useUser } from '../lib/user.jsx'
+import { VisualizationRenderer } from '../components/visualizations/index.js'
 
 /* ─────────────────────────────────────────────────────────────────────────
    Executive takeaways — one per F3 tactic, keyed by the real F3 tactic ID.
@@ -40,6 +42,14 @@ export default function Framework() {
   const [query, setQuery]                 = useState('')
   const [searchResults, setSearchResults] = useState(null)
 
+  // v25.7.0.2 (ISS-023): visualizations attached to the currently expanded
+  // tactic. Cached per-tactic in `tacticViz` so re-expanding the same row
+  // doesn't re-fetch. The audience filter (which roles see which viz) is
+  // handled at the renderer wrapper layer, not here — this fetch returns
+  // every viz attached to the entity, role-agnostic.
+  const { effectiveRole } = useUser()
+  const [tacticViz, setTacticViz] = useState({})
+
   useEffect(() => {
     api.getTactics()
       .then((d) => setTactics(d.tactics || []))
@@ -56,6 +66,24 @@ export default function Framework() {
     }, 250)
     return () => clearTimeout(t)
   }, [query])
+
+  // v25.7.0.2 (ISS-023): when a tactic is expanded, fetch any visualizations
+  // attached to it (lazy — only on first expand of each tactic). Stash in
+  // `tacticViz[tacticId]` so subsequent expand/collapse reads from cache.
+  // Errors are swallowed silently — the page already renders cleanly
+  // without visualizations, so a fetch failure is non-fatal.
+  useEffect(() => {
+    if (!expanded) return
+    if (tacticViz[expanded] !== undefined) return  // already fetched (incl. empty)
+    api.getVisualizationsFor('Tactic', expanded)
+      .then(d => {
+        setTacticViz(prev => ({ ...prev, [expanded]: d.visualizations || [] }))
+      })
+      .catch(() => {
+        // Cache an empty array on failure so we don't retry every render.
+        setTacticViz(prev => ({ ...prev, [expanded]: [] }))
+      })
+  }, [expanded, tacticViz])
 
   // Dynamic count from data, not hardcoded. The previous lede said "22
   // observable techniques" — a legacy placeholder that was off by ~100
@@ -134,6 +162,41 @@ export default function Framework() {
     },
     tacticBody: {
       paddingTop: 16, paddingLeft: 84, paddingRight: 40, paddingBottom: 8,
+    },
+    // v25.7.0.2 (ISS-023): when a tactic has a visible visualization, the
+    // body becomes a two-column grid: textual content on the left, viz on
+    // the right. When no viz, the body collapses back to single-column
+    // (the right column simply isn't rendered) so layouts that pre-date
+    // visualizations stay unchanged.
+    tacticBodyTwoCol: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.05fr)',
+      gap: 32,
+      alignItems: 'start',
+    },
+    tacticBodyTextCol: {
+      minWidth: 0,
+    },
+    tacticBodyVizCol: {
+      minWidth: 0,
+      // The viz panel sits in a soft container so it reads as a discrete
+      // surface separate from the textual content.
+      padding: '14px 16px',
+      background: 'var(--paper)',
+      border: '1px solid var(--rule)',
+      borderRadius: 'var(--radius-lg)',
+    },
+    tacticBodyVizHeader: {
+      marginBottom: 12, paddingBottom: 10,
+      borderBottom: '1px solid var(--rule)',
+    },
+    tacticBodyVizTitle: {
+      fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 500,
+      color: 'var(--ink)',
+      marginBottom: 4,
+    },
+    tacticBodyVizSubtitle: {
+      fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.5,
     },
     description: {
       fontSize: 15, color: 'var(--ink-soft)', lineHeight: 1.6,
@@ -258,50 +321,97 @@ export default function Framework() {
                 </div>
               </button>
 
-              {open && (
-                <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
-                  {/* MITRE's own description — pulled from the F3 Excel */}
-                  {t.description && (
-                    <p style={styles.description}>{t.description}</p>
-                  )}
+              {open && (() => {
+                // v25.7.0.2 (ISS-023): determine whether this tactic has any
+                // visualization that the current effective role should see.
+                // If yes, switch to two-column layout. If not, fall back to
+                // the original single-column body.
+                const allVizForTactic = tacticViz[t.id] || []
+                const visibleViz = allVizForTactic.filter(v =>
+                  !v.roles || v.roles.length === 0 || v.roles.includes(effectiveRole)
+                )
+                const hasViz = visibleViz.length > 0
 
-                  {/* Hand-authored banker-focused interpretation */}
-                  {takeaway && (
-                    <div style={styles.takeaway}>
-                      <div style={styles.takeawayLabel}>Executive takeaway</div>
-                      <div style={styles.takeawayText}>{takeaway}</div>
-                    </div>
-                  )}
+                const textBody = (
+                  <>
+                    {/* MITRE's own description — pulled from the F3 Excel */}
+                    {t.description && (
+                      <p style={styles.description}>{t.description}</p>
+                    )}
 
-                  {/* All techniques in this tactic */}
-                  {Array.isArray(t.techniques) && t.techniques.length > 0 ? (
-                    <>
-                      <div style={styles.techSectionLabel}>
-                        {t.techniques.length} {t.techniques.length === 1 ? 'technique' : 'techniques'} and sub-techniques
+                    {/* Hand-authored banker-focused interpretation */}
+                    {takeaway && (
+                      <div style={styles.takeaway}>
+                        <div style={styles.takeawayLabel}>Executive takeaway</div>
+                        <div style={styles.takeawayText}>{takeaway}</div>
                       </div>
-                      <div style={styles.techList}>
-                        {t.techniques.map((tech) => (
-                          <div
-                            key={tech.id}
-                            style={styles.tech}
-                            title={tech.description}
-                          >
-                            <div style={styles.techId}>{tech.id}</div>
-                            <div style={styles.techName}>{tech.name}</div>
-                            {tech.description && (
-                              <div style={styles.techDesc}>{tech.description}</div>
-                            )}
+                    )}
+
+                    {/* All techniques in this tactic */}
+                    {Array.isArray(t.techniques) && t.techniques.length > 0 ? (
+                      <>
+                        <div style={styles.techSectionLabel}>
+                          {t.techniques.length} {t.techniques.length === 1 ? 'technique' : 'techniques'} and sub-techniques
+                        </div>
+                        <div style={styles.techList}>
+                          {t.techniques.map((tech) => (
+                            <div
+                              key={tech.id}
+                              style={styles.tech}
+                              title={tech.description}
+                            >
+                              <div style={styles.techId}>{tech.id}</div>
+                              <div style={styles.techName}>{tech.name}</div>
+                              {tech.description && (
+                                <div style={styles.techDesc}>{tech.description}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={styles.emptyTech}>
+                        No techniques currently indexed under this tactic.
+                      </div>
+                    )}
+                  </>
+                )
+
+                if (!hasViz) {
+                  // Single-column layout — preserves pre-v25.7.0.2 rendering
+                  // for any tactic without an attached visualization. No
+                  // empty right pane.
+                  return (
+                    <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
+                      {textBody}
+                    </div>
+                  )
+                }
+
+                // Two-column layout — text on left, viz panel on right
+                return (
+                  <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
+                    <div style={styles.tacticBodyTwoCol}>
+                      <div style={styles.tacticBodyTextCol}>
+                        {textBody}
+                      </div>
+                      <div style={styles.tacticBodyVizCol}>
+                        {visibleViz.map(viz => (
+                          <div key={viz.id}>
+                            <div style={styles.tacticBodyVizHeader}>
+                              <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
+                              {viz.subtitle && (
+                                <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
+                              )}
+                            </div>
+                            <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
                           </div>
                         ))}
                       </div>
-                    </>
-                  ) : (
-                    <div style={styles.emptyTech}>
-                      No techniques currently indexed under this tactic.
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )
+              })()}
             </div>
           )
         })}
