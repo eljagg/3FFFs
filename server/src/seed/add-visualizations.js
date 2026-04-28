@@ -95,14 +95,14 @@ async function main() {
     // Upsert the Visualization node
     await runQuery(
       `MERGE (v:Visualization {id: $id})
+       ON CREATE SET v.createdAt = timestamp()
        SET v.kind      = $kind,
            v.title     = $title,
            v.subtitle  = $subtitle,
            v.roles     = $roles,
            v.order     = $order,
            v.config    = $config,
-           v.updatedAt = timestamp()
-       ON CREATE SET v.createdAt = timestamp()`,
+           v.updatedAt = timestamp()`,
       {
         id:       viz.id,
         kind:     viz.kind,
