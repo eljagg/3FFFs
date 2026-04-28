@@ -1,0 +1,35 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=../.env src/index.js",
+    "start": "node --env-file-if-exists=../.env src/index.js",
+    "seed": "node --env-file-if-exists=../.env src/seed/run.js",
+    "migrate:caribbean": "node --env-file-if-exists=../.env src/seed/add-caribbean.js",
+    "migrate:admin": "node --env-file-if-exists=../.env src/seed/add-admin-schema.js",
+    "migrate:quizzes": "node --env-file-if-exists=../.env src/seed/add-quizzes.js",
+    "migrate:frameworks": "node --env-file-if-exists=../.env src/seed/add-frameworks.js",
+    "migrate:aase-scenario": "node --env-file-if-exists=../.env src/seed/add-aase-scenario.js",
+    "migrate:aase-execution-scenarios": "node --env-file-if-exists=../.env src/seed/add-aase-execution-scenarios.js",
+    "migrate:update-aase-roles": "node --env-file-if-exists=../.env src/seed/update-aase-scenario-roles.js",
+    "migrate:concept-summaries": "node --env-file-if-exists=../.env src/seed/add-concept-framework-summaries.js",
+    "migrate:mitre-foundation": "node --env-file-if-exists=../.env src/seed/add-mitre-foundation.js",
+    "migrate:sc013": "node --env-file-if-exists=../.env src/seed/add-sc013.js",
+    "migrate:sc014": "node --env-file-if-exists=../.env src/seed/add-sc014.js",
+    "migrate:cbest-phases": "node --env-file-if-exists=../.env src/seed/add-cbest-phases.js",
+    "migrate:cbest-concept-summaries": "node --env-file-if-exists=../.env src/seed/add-cbest-concept-summaries.js",
+    "migrate:banks": "node --env-file-if-exists=../.env src/seed/add-banks.js",
+    "migrate:visualizations": "node --env-file-if-exists=../.env src/seed/add-visualizations.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "express-oauth2-jwt-bearer": "^1.6.1",
+    "neo4j-driver": "^5.27.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}
