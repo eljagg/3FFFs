@@ -1,32 +1,30 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 /* ─────────────────────────────────────────────────────────────────────────
-   KillChainGrid — v25.7.0.2 (ISS-023)
+   KillChainGrid — v25.7.0.2.2 polish pass (ISS-023)
 
-   Reconnaissance-style kill-chain visualization. Three columns of nodes
-   left-to-right, defenses panel below. Two interaction primitives:
+   Changes from v25.7.0.2:
+     - Mitigated overlay is now opaque and actually covers the underlying
+       label/badge. Shield + label are the only thing visible on a mitigated
+       card. This was the single biggest "feels static" complaint — the
+       mitigation was happening but the user could barely see it because
+       the rgba(0,0,0,0.04) overlay was effectively transparent.
+     - framer-motion transitions on shield-in (mitigation), shield-out
+       (de-mitigation), defense-active badge, hint expansion, and
+       node-description disclosure. Cheap motion, big perceived liveliness.
+     - Visible SVG edges between connected nodes. The edge data has been
+       in config.edges since v25.7.0.2 but wasn't drawn. Without edges, a
+       "kill chain" reads as three disconnected columns — the user has to
+       infer the relationships. Edges fix that. Highlighted on selection,
+       dimmed when either endpoint is mitigated, dashed when broken.
+     - Hover state on un-mitigated cards (subtle elevation).
 
-     1. Click a node — highlights the selected node + its immediate parents
-        and children along the configured edges. Other nodes dim.
-     2. Toggle a defense — every node that defense claims to mitigate goes
-        grayscale and gains a shield overlay. The kill-chain visibly breaks.
-
-   The defense-toggle mechanic is the pedagogical commitment: the user can
-   render an attack non-viable through their input. If a future viz kind
-   loses this property, it is decoration with click handlers.
-
-   Props:
-     viz             — registry entry { id, title, subtitle, config, ... }
-     effectiveRole   — current user's effective role (passed through but
-                       not used at render time — the viz adapts itself
-                       at the renderer wrapper layer if needed)
-     onEvent(type)   — telemetry callback. Wrapper handles dispatch to API.
-
-   This component uses ONLY CSS variables for color so theme changes,
-   bank-color propagation, and dark mode all work without component edits.
-   The Gemini source we adapted from used Tailwind slate-* tokens; those
-   are not present in our build, and would not honor our --paper-hi /
-   --accent / --rule conventions.
+   Behaviour preserved:
+     - Click-to-trace path highlighting
+     - Defense-toggle as falsifiability hook
+     - onEvent contract — wrapper handles telemetry dispatch
+     - All CSS variables, no Tailwind, inline SVG icons
    ───────────────────────────────────────────────────────────────────────── */
 
 export default function KillChainGrid({ viz, onEvent }) {
@@ -40,8 +38,6 @@ export default function KillChainGrid({ viz, onEvent }) {
   const [activeNodeId, setActiveNodeId] = useState(null)
   const [activeDefenseIds, setActiveDefenseIds] = useState(() => new Set())
 
-  // Group nodes by phase index for column rendering. Memoised so we don't
-  // rebuild the bucketing on every state change.
   const nodesByPhase = useMemo(() => {
     const buckets = phases.map(() => [])
     nodes.forEach(n => {
@@ -51,7 +47,6 @@ export default function KillChainGrid({ viz, onEvent }) {
     return buckets
   }, [phases, nodes])
 
-  // Forward + reverse edge maps for path-tracing on selection.
   const { childMap, parentMap } = useMemo(() => {
     const childMap = new Map()
     const parentMap = new Map()
@@ -64,7 +59,6 @@ export default function KillChainGrid({ viz, onEvent }) {
     return { childMap, parentMap }
   }, [edges])
 
-  // Aggregate which nodes are mitigated under the current defense selection.
   const mitigatedNodeIds = useMemo(() => {
     const set = new Set()
     activeDefenseIds.forEach(defId => {
@@ -75,11 +69,9 @@ export default function KillChainGrid({ viz, onEvent }) {
     return set
   }, [activeDefenseIds, defenses])
 
-  // Highlight set: when no node is selected, every node is highlighted
-  // (i.e. nothing dims). When a node is selected, highlight the selection
-  // plus its immediate neighbours along the directed edges.
+  // null sentinel = no selection, everyone is bright
   const highlightedNodeIds = useMemo(() => {
-    if (!activeNodeId) return null  // null sentinel = "everyone is bright"
+    if (!activeNodeId) return null
     const set = new Set([activeNodeId])
     ;(childMap.get(activeNodeId) || []).forEach(c => set.add(c))
     ;(parentMap.get(activeNodeId) || []).forEach(p => set.add(p))
@@ -102,16 +94,77 @@ export default function KillChainGrid({ viz, onEvent }) {
     onEvent?.('defense_toggled')
   }
 
-  // Selected node detail — pulled out so the right-side context line at
-  // the top of the panel can read it.
   const selectedNode = activeNodeId ? nodes.find(n => n.id === activeNodeId) : null
 
+  // ──────────────────────────────────────────────────────────────────────
+  // Edge rendering plumbing
+  //
+  // We compute node-center coordinates from the live DOM after layout, so
+  // edges follow actual rendered positions regardless of label length or
+  // viewport width. ResizeObserver re-runs on container resize.
+  // The SVG sits behind the nodes (zIndex 0) and is pointer-events: none
+  // so it never intercepts clicks.
+  // ──────────────────────────────────────────────────────────────────────
+  const containerRef = useRef(null)
+  const nodeRefs = useRef({})
+  const [edgeGeometry, setEdgeGeometry] = useState({ width: 0, height: 0, lines: [] })
+
+  const setNodeRef = (nodeId) => (el) => {
+    if (el) nodeRefs.current[nodeId] = el
+    else delete nodeRefs.current[nodeId]
+  }
+
+  useLayoutEffect(() => {
+    if (!containerRef.current) return
+
+    function recompute() {
+      const container = containerRef.current
+      if (!container) return
+      const containerRect = container.getBoundingClientRect()
+      const lines = []
+
+      for (const edge of edges) {
+        const fromEl = nodeRefs.current[edge.from]
+        const toEl   = nodeRefs.current[edge.to]
+        if (!fromEl || !toEl) continue
+
+        const fromRect = fromEl.getBoundingClientRect()
+        const toRect   = toEl.getBoundingClientRect()
+
+        // Source: right edge, vertically centered.
+        // Target: left edge, vertically centered.
+        // Container-relative coordinates.
+        const x1 = fromRect.right - containerRect.left
+        const y1 = fromRect.top + fromRect.height / 2 - containerRect.top
+        const x2 = toRect.left - containerRect.left
+        const y2 = toRect.top + toRect.height / 2 - containerRect.top
+
+        lines.push({ id: `${edge.from}-${edge.to}`, from: edge.from, to: edge.to, x1, y1, x2, y2 })
+      }
+
+      setEdgeGeometry({
+        width: containerRect.width,
+        height: containerRect.height,
+        lines,
+      })
+    }
+
+    recompute()
+
+    const ro = new ResizeObserver(recompute)
+    ro.observe(containerRef.current)
+    window.addEventListener('resize', recompute)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', recompute)
+    }
+  }, [edges, nodes, mitigatedNodeIds, activeNodeId])
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Render
+  // ──────────────────────────────────────────────────────────────────────
   return (
     <div style={s.root}>
-      {/* Header: title + subtitle live in the calling panel; this component
-          handles only the body. We do render a small instruction line at
-          the top so the viz is self-documenting in isolation (the admin
-          preview page renders it without any wrapping prose). */}
       <div style={s.instructionRow}>
         <span style={s.instructionText}>
           {selectedNode
@@ -119,39 +172,96 @@ export default function KillChainGrid({ viz, onEvent }) {
             : <>Click any node to trace the attack path. Toggle defenses below to break the chain.</>
           }
         </span>
-        {activeDefenseIds.size > 0 && (
-          <span style={s.activeDefBadge}>
-            {activeDefenseIds.size} defense{activeDefenseIds.size === 1 ? '' : 's'} active
-          </span>
-        )}
+        <AnimatePresence>
+          {activeDefenseIds.size > 0 && (
+            <motion.span
+              key="def-badge"
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.85 }}
+              transition={{ duration: 0.18 }}
+              style={s.activeDefBadge}
+            >
+              {activeDefenseIds.size} defense{activeDefenseIds.size === 1 ? '' : 's'} active
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Phase columns */}
-      <div style={s.columnGrid}>
-        {phases.map((phase, idx) => (
-          <div key={phase.id} style={s.column}>
-            <div style={s.columnHeader}>
-              <span style={s.phaseNumber}>{idx + 1}</span>
-              <span style={s.phaseLabel}>{phase.label}</span>
+      {/* Phase columns + edge overlay */}
+      <div ref={containerRef} style={s.columnGridContainer}>
+        <svg
+          style={s.edgeSvg}
+          width={edgeGeometry.width}
+          height={edgeGeometry.height}
+        >
+          {edgeGeometry.lines.map(line => {
+            const fromMitigated = mitigatedNodeIds.has(line.from)
+            const toMitigated   = mitigatedNodeIds.has(line.to)
+            const eitherMitigated = fromMitigated || toMitigated
+
+            // Highlighted only when both endpoints are part of the active
+            // selection's parent/child set.
+            const highlighted = !!(
+              highlightedNodeIds &&
+              highlightedNodeIds.has(line.from) &&
+              highlightedNodeIds.has(line.to)
+            )
+
+            const dim = (highlightedNodeIds && !highlighted) || eitherMitigated
+
+            // Bezier curves bend through the gap between columns rather
+            // than through node bodies. Horizontal control points pulled
+            // halfway across produce a smooth S-curve.
+            const dx = line.x2 - line.x1
+            const cp1x = line.x1 + dx * 0.5
+            const cp1y = line.y1
+            const cp2x = line.x1 + dx * 0.5
+            const cp2y = line.y2
+
+            return (
+              <path
+                key={line.id}
+                d={`M ${line.x1} ${line.y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${line.x2} ${line.y2}`}
+                fill="none"
+                stroke={highlighted ? 'var(--accent)' : 'var(--rule-strong)'}
+                strokeWidth={highlighted ? 2 : 1}
+                strokeDasharray={eitherMitigated ? '4 4' : 'none'}
+                style={{
+                  opacity: dim ? 0.18 : (highlighted ? 0.95 : 0.42),
+                  transition: 'opacity 0.2s ease, stroke 0.2s ease, stroke-width 0.2s ease',
+                }}
+              />
+            )
+          })}
+        </svg>
+
+        <div style={s.columnGrid}>
+          {phases.map((phase, idx) => (
+            <div key={phase.id} style={s.column}>
+              <div style={s.columnHeader}>
+                <span style={s.phaseNumber}>{idx + 1}</span>
+                <span style={s.phaseLabel}>{phase.label}</span>
+              </div>
+              <div style={s.columnBody}>
+                {(nodesByPhase[idx] || []).map(node => (
+                  <NodeCard
+                    key={node.id}
+                    nodeRef={setNodeRef(node.id)}
+                    node={node}
+                    isSelected={activeNodeId === node.id}
+                    isHighlighted={highlightedNodeIds === null || highlightedNodeIds.has(node.id)}
+                    isMitigated={mitigatedNodeIds.has(node.id)}
+                    onToggle={() => toggleNode(node.id)}
+                  />
+                ))}
+              </div>
             </div>
-            <div style={s.columnBody}>
-              {(nodesByPhase[idx] || []).map(node => (
-                <NodeCard
-                  key={node.id}
-                  node={node}
-                  isSelected={activeNodeId === node.id}
-                  isHighlighted={highlightedNodeIds === null || highlightedNodeIds.has(node.id)}
-                  isMitigated={mitigatedNodeIds.has(node.id)}
-                  onToggle={() => toggleNode(node.id)}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Defense panel — the falsifiability hook. Each toggle visibly
-          breaks one or more nodes in the grid above. */}
+      {/* Defense panel */}
       <div style={s.defensePanel}>
         <div style={s.defensePanelHeader}>
           <span style={s.defensePanelTitle}>Active defenses</span>
@@ -181,28 +291,31 @@ export default function KillChainGrid({ viz, onEvent }) {
             )
           })}
         </div>
-        {/* When a defense is active, surface its hint inline so the user
-            understands WHY the toggle broke what it broke. Without this the
-            mitigation feels magical — "I clicked something and a node got
-            shielded" — and the lesson is lost. */}
-        {activeDefenseIds.size > 0 && (
-          <div style={s.defenseHints}>
-            {defenses
-              .filter(d => activeDefenseIds.has(d.id))
-              .map(d => (
-                <div key={d.id} style={s.defenseHint}>
-                  <span style={s.defenseHintLabel}>{d.label}:</span>{' '}
-                  <span style={s.defenseHintText}>{d.hint}</span>
-                </div>
-              ))
-            }
-          </div>
-        )}
+
+        <AnimatePresence>
+          {activeDefenseIds.size > 0 && (
+            <motion.div
+              key="def-hints"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22 }}
+              style={s.defenseHints}
+            >
+              {defenses
+                .filter(d => activeDefenseIds.has(d.id))
+                .map(d => (
+                  <div key={d.id} style={s.defenseHint}>
+                    <span style={s.defenseHintLabel}>{d.label}:</span>{' '}
+                    <span style={s.defenseHintText}>{d.hint}</span>
+                  </div>
+                ))
+              }
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Illustrative-content marker — flags that this viz is a teaching
-          abstraction, not a literal F3 graph render. Per the v25.7.0.2
-          content-model decision (Option A from planning). */}
       {illustrativeNote && (
         <div style={s.illustrativeNote}>{illustrativeNote}</div>
       )}
@@ -211,14 +324,12 @@ export default function KillChainGrid({ viz, onEvent }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// NodeCard — one node in the kill-chain grid
+// NodeCard
 // ────────────────────────────────────────────────────────────────────────
-function NodeCard({ node, isSelected, isHighlighted, isMitigated, onToggle }) {
-  // State precedence for visual treatment:
-  //   mitigated > selected > highlighted > dimmed
-  // Mitigated wins because the entire teaching moment is "this node is
-  // out of the picture once the defense fires" — selection inside a
-  // mitigated node would muddle that.
+function NodeCard({ node, nodeRef, isSelected, isHighlighted, isMitigated, onToggle }) {
+  const [hover, setHover] = useState(false)
+
+  // State precedence: mitigated > selected > highlighted > dimmed
   let cardStyle = { ...s.nodeCard }
   if (isMitigated) {
     cardStyle = { ...cardStyle, ...s.nodeCardMitigated }
@@ -226,42 +337,70 @@ function NodeCard({ node, isSelected, isHighlighted, isMitigated, onToggle }) {
     cardStyle = { ...cardStyle, ...s.nodeCardSelected }
   } else if (isHighlighted) {
     cardStyle = { ...cardStyle, ...s.nodeCardHighlighted }
+    if (hover) cardStyle = { ...cardStyle, ...s.nodeCardHover }
   } else {
     cardStyle = { ...cardStyle, ...s.nodeCardDimmed }
   }
 
   return (
     <button
+      ref={nodeRef}
       onClick={onToggle}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       disabled={isMitigated}
       style={cardStyle}
     >
-      {isMitigated && (
-        <div style={s.mitigatedOverlay}>
-          <ShieldIcon />
-          <span style={s.mitigatedLabel}>Mitigated</span>
+      {/* Underlying node content. When mitigated, the overlay below sits
+          on top of this and fully covers it. */}
+      <div style={s.nodeContent}>
+        <div style={s.nodeTopRow}>
+          <span style={s.nodeMitre}>{node.mitre}</span>
         </div>
-      )}
-      <div style={s.nodeTopRow}>
-        <span style={s.nodeMitre}>{node.mitre}</span>
+        <div style={s.nodeLabel}>{node.label}</div>
+        <AnimatePresence>
+          {isSelected && node.description && (
+            <motion.div
+              key="desc"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              style={s.nodeDescriptionWrap}
+            >
+              <div style={s.nodeDescription}>{node.description}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-      <div style={s.nodeLabel}>{node.label}</div>
-      {isSelected && node.description && (
-        <div style={s.nodeDescription}>{node.description}</div>
-      )}
+
+      {/* Mitigated overlay — OPAQUE, fully covers underlying content.
+          The fix from v25.7.0.2's bug. */}
+      <AnimatePresence>
+        {isMitigated && (
+          <motion.div
+            key="mit-overlay"
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.92 }}
+            transition={{ duration: 0.22 }}
+            style={s.mitigatedOverlay}
+          >
+            <ShieldIcon />
+            <span style={s.mitigatedLabel}>Mitigated</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </button>
   )
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// Inline icons — staying consistent with the rest of the codebase, which
-// uses inline SVG rather than lucide-react (see AppShell.jsx).
-// ────────────────────────────────────────────────────────────────────────
 function ShieldIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <polyline points="9 12 11 14 15 10"/>
     </svg>
   )
 }
@@ -275,7 +414,7 @@ function CheckMark() {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Styles — all CSS variables, no Tailwind. Matches Framework.jsx idioms.
+// Styles
 // ────────────────────────────────────────────────────────────────────────
 const s = {
   root: {
@@ -288,9 +427,11 @@ const s = {
     gap: 12, flexWrap: 'wrap',
     fontSize: 12.5, color: 'var(--ink-soft)',
     padding: '0 2px',
+    minHeight: 24,
   },
   instructionText: { lineHeight: 1.5 },
   activeDefBadge: {
+    display: 'inline-block',
     fontFamily: 'var(--font-mono)', fontSize: 10,
     textTransform: 'uppercase', letterSpacing: '0.1em',
     padding: '3px 8px',
@@ -299,10 +440,22 @@ const s = {
     borderRadius: 3,
   },
 
+  columnGridContainer: {
+    position: 'relative',
+    width: '100%',
+  },
+  edgeSvg: {
+    position: 'absolute', top: 0, left: 0,
+    pointerEvents: 'none',
+    zIndex: 0,
+    overflow: 'visible',
+  },
   columnGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 10,
+    gap: 18,
+    position: 'relative',
+    zIndex: 1,
   },
   column: {
     display: 'flex', flexDirection: 'column', gap: 8,
@@ -323,25 +476,37 @@ const s = {
     textTransform: 'uppercase', letterSpacing: '0.06em',
   },
   columnBody: {
-    display: 'flex', flexDirection: 'column', gap: 8,
+    display: 'flex', flexDirection: 'column', gap: 10,
   },
 
-  // Node card base — overridden by state-specific styles below
+  // Node card — base. Padding moves to nodeContent so the overlay can
+  // sit at the card edge without being inset by the padding.
   nodeCard: {
-    position: 'relative', overflow: 'hidden',
+    position: 'relative',
     width: '100%', textAlign: 'left',
-    padding: '10px 12px',
+    padding: 0,
     background: 'var(--paper)',
     border: '1px solid var(--rule)',
     borderRadius: 'var(--radius)',
     cursor: 'pointer',
-    transition: 'all var(--dur) ease',
+    transition: 'transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease',
     fontFamily: 'var(--font-body)',
     color: 'var(--ink)',
+    overflow: 'hidden',
+  },
+  nodeContent: {
+    padding: '10px 12px',
+    position: 'relative',
+    zIndex: 0,
   },
   nodeCardHighlighted: {
     background: 'var(--paper)',
     border: '1px solid var(--rule)',
+  },
+  nodeCardHover: {
+    transform: 'translateY(-1px)',
+    borderColor: 'var(--rule-strong)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
   },
   nodeCardSelected: {
     background: 'var(--paper-hi)',
@@ -355,24 +520,27 @@ const s = {
   },
   nodeCardMitigated: {
     background: 'var(--paper-dim)',
-    border: '1px dashed var(--rule)',
-    opacity: 0.55,
+    border: '1px solid var(--success)',
     cursor: 'not-allowed',
-    filter: 'grayscale(0.3)',
   },
 
+  // OPAQUE — fully covers nodeContent. This is the bug fix.
   mitigatedOverlay: {
-    position: 'absolute', inset: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    gap: 6,
-    background: 'rgba(0, 0, 0, 0.04)',
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    background: 'var(--success-bg)',
     color: 'var(--success)',
-    zIndex: 1,
+    zIndex: 2,
   },
   mitigatedLabel: {
     fontFamily: 'var(--font-mono)', fontSize: 10,
-    textTransform: 'uppercase', letterSpacing: '0.1em',
-    fontWeight: 600,
+    textTransform: 'uppercase', letterSpacing: '0.12em',
+    fontWeight: 700,
   },
 
   nodeTopRow: {
@@ -393,6 +561,7 @@ const s = {
     lineHeight: 1.25,
     color: 'var(--ink)',
   },
+  nodeDescriptionWrap: { overflow: 'hidden' },
   nodeDescription: {
     marginTop: 8, paddingTop: 8,
     borderTop: '1px solid var(--rule)',
@@ -435,7 +604,7 @@ const s = {
     fontSize: 12.5,
     color: 'var(--ink-soft)',
     textAlign: 'left',
-    transition: 'all var(--dur) ease',
+    transition: 'all 0.18s ease',
   },
   defenseChipActive: {
     background: 'var(--success-bg)',
@@ -448,6 +617,7 @@ const s = {
     border: '1.5px solid var(--ink-faint)',
     borderRadius: 2,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.18s ease',
   },
   defenseCheckboxActive: {
     background: 'var(--success)',
@@ -460,6 +630,7 @@ const s = {
     marginTop: 12, paddingTop: 12,
     borderTop: '1px solid var(--rule)',
     display: 'flex', flexDirection: 'column', gap: 6,
+    overflow: 'hidden',
   },
   defenseHint: {
     fontSize: 12, lineHeight: 1.5,
