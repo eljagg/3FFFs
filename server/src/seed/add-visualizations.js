@@ -92,17 +92,21 @@ async function main() {
       console.warn(`    ⚠️  ${viz.id} config is ${configJson.length} chars — exceeds 2 KB soft cap (8 KB hard cap not yet hit). Consider whether structural data should move into the graph.`)
     }
 
-    // Upsert the Visualization node
+    // Upsert the Visualization node.
+    // v25.7.0.3.1: clause order fixed per OBS-021 — Cypher requires
+    // MERGE → ON CREATE SET → ON MATCH SET → SET. The previous order
+    // (MERGE → SET → ON CREATE SET) was invalid Cypher and started
+    // failing with a parse error after a Neo4j Aura version bump.
     await runQuery(
       `MERGE (v:Visualization {id: $id})
-       SET v.kind      = $kind,
-           v.title     = $title,
-           v.subtitle  = $subtitle,
-           v.roles     = $roles,
-           v.order     = $order,
-           v.config    = $config,
-           v.updatedAt = timestamp()
-       ON CREATE SET v.createdAt = timestamp()`,
+         ON CREATE SET v.createdAt = timestamp()
+         SET v.kind      = $kind,
+             v.title     = $title,
+             v.subtitle  = $subtitle,
+             v.roles     = $roles,
+             v.order     = $order,
+             v.config    = $config,
+             v.updatedAt = timestamp()`,
       {
         id:       viz.id,
         kind:     viz.kind,
