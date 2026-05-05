@@ -21,6 +21,10 @@ import admin from './routes/admin.js'
 // reasoning is the same as /api/framework: read access to reference content
 // is public, but writes (user interaction events) require auth.
 import { publicRouter as visualizationsPublic, authedRouter as visualizationsAuthed } from './routes/visualizations.js'
+// v25.7.1 (ISS-024): engagement layer — Daily Signal, Review Queue,
+// Retrieval Practice, Certificates. Split into public + authed because
+// the certificate-verify endpoint is auditor-facing (no auth required).
+import { publicRouter as engagementPublic, authedRouter as engagementAuthed } from './routes/engagement.js'
 
 const app = express()
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true, credentials: true }))
@@ -51,6 +55,11 @@ app.use('/api/framework-phases', frameworkPhases)
 // mounted separately below the auth wall.
 app.use('/api/visualizations', visualizationsPublic)
 app.use('/api/auth', authCheck)
+// v25.7.1 (ISS-024): public-facing certificate verification endpoint
+//   GET /api/engagement/verify/:hash → { valid, scenarioTitle, scenarioId, issuedAt }
+// Mounted before requireAuth so a third-party auditor with only a hash can
+// confirm a 3fffs certificate without needing app credentials.
+app.use('/api/engagement', engagementPublic)
 
 // ----------------------------------------------------------------------------
 // AUTH wall. Everything below requires a valid Auth0 access token AND
@@ -112,6 +121,10 @@ app.use('/api/admin', admin)
 // fetch endpoints — Express dispatches based on method + path so the GETs
 // hit the public router and POSTs hit this one).
 app.use('/api/visualizations', visualizationsAuthed)
+// v25.7.1 (ISS-024): authed engagement endpoints — Daily Signal, Review
+// Queue, Retrieval Practice, Certificate generation. Mounted under the
+// requireAuth + syncUser middlewares (already applied at /api).
+app.use('/api/engagement', engagementAuthed)
 
 // ============================================================================
 // DEBUG ROUTES — INLINED to bypass any build caching issues that were keeping

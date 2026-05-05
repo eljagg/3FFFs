@@ -5,6 +5,9 @@ import { useAuth0 } from '@auth0/auth0-react'
 import Page from '../components/Page.jsx'
 import { useUser, ROLES } from '../lib/user.jsx'
 import { api } from '../lib/api.js'
+// v25.7.1: engagement-layer widgets
+import DailySignal from '../components/home/DailySignal.jsx'
+import ReviewQueue from '../components/home/ReviewQueue.jsx'
 
 export default function Home() {
   const { role } = useUser()
@@ -33,6 +36,9 @@ export default function Home() {
       title={firstName ? `Welcome back, ${firstName}.` : 'Welcome back.'}
       lede="Pick up where you left off — or start fresh with the scenarios most relevant to your role."
     >
+      {/* v25.7.1: Daily Signal — daily 30-second habit-loop widget */}
+      <DailySignal />
+
       {/* Progress at a glance */}
       <motion.div
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -64,6 +70,9 @@ export default function Home() {
           title="The graph"
           blurb="See the whole F3 framework as a living graph. Tactics, techniques, scenarios — all connected, all interactive." />
       </div>
+
+      {/* v25.7.1: Review queue — surfaces wrong answers older than the cooldown */}
+      <ReviewQueue />
 
       {/* Badges */}
       {badgeData && (

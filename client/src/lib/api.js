@@ -133,4 +133,62 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ type }),
     }),
+
+  // v25.7.1 (ISS-024): Engagement-layer endpoints — Daily Signal habit loop,
+  // wrong-answer Review Queue, post-scenario Retrieval Practice, and
+  // downloadable Completion Certificates with public verification.
+  //
+  // Daily Signal:
+  //   - getDailySignal: today's deterministically-picked stage + streak count
+  //   - answerDailySignal: submit pick, returns rationales for all 4 options
+  // Review Queue:
+  //   - getReviewQueue: wrong-answer stages older than the cooldown
+  // Retrieval Practice:
+  //   - getRetrievalPractice: 3 generated "did this signal appear?" questions
+  //   - answerRetrievalPractice: submit picks, returns per-question correctness
+  // Certificate:
+  //   - getCertificateUrl: returns the URL the browser can open/download from
+  //     (the endpoint streams a PDF directly — no JSON wrapper)
+  getDailySignal:        ()           => request('/api/engagement/daily-signal'),
+  answerDailySignal:     (stageId, optionIndex) =>
+    request('/api/engagement/daily-signal/answer', {
+      method: 'POST',
+      body: JSON.stringify({ stageId, optionIndex }),
+    }),
+  getReviewQueue:        ()           => request('/api/engagement/review-queue'),
+  getRetrievalPractice:  (scenarioId) => request(`/api/engagement/retrieval/${encodeURIComponent(scenarioId)}`),
+  answerRetrievalPractice: (scenarioId, challenge, answers) =>
+    request(`/api/engagement/retrieval/${encodeURIComponent(scenarioId)}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ challenge, answers }),
+    }),
+  // The certificate endpoint streams a PDF, so we can't go through `request`
+  // (which assumes JSON). Instead we fetch as a Blob with the auth header,
+  // then trigger a browser download via a transient blob URL.
+  downloadCertificate: async (scenarioId) => {
+    const headers = {}
+    if (tokenGetter) {
+      try {
+        const token = await tokenGetter()
+        if (token) headers.Authorization = `Bearer ${token}`
+      } catch {}
+    }
+    const res = await fetch(
+      `${BASE}/api/engagement/certificate/${encodeURIComponent(scenarioId)}`,
+      { headers }
+    )
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.error || `HTTP ${res.status}`)
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `3fffs-certificate-${scenarioId}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  },
 }

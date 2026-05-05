@@ -22,7 +22,8 @@
     "migrate:cbest-phases": "node --env-file-if-exists=../.env src/seed/add-cbest-phases.js",
     "migrate:cbest-concept-summaries": "node --env-file-if-exists=../.env src/seed/add-cbest-concept-summaries.js",
     "migrate:banks": "node --env-file-if-exists=../.env src/seed/add-banks.js",
-    "migrate:visualizations": "node --env-file-if-exists=../.env src/seed/add-visualizations.js"
+    "migrate:visualizations": "node --env-file-if-exists=../.env src/seed/add-visualizations.js",
+    "migrate:engagement-schema": "node --env-file-if-exists=../.env src/seed/add-engagement-schema.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
@@ -30,6 +31,7 @@
     "express": "^4.21.1",
     "express-oauth2-jwt-bearer": "^1.6.1",
     "neo4j-driver": "^5.27.0",
+    "pdfkit": "^0.15.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

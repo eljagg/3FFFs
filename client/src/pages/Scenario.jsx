@@ -10,6 +10,8 @@ import InlineTutor from '../components/scenario/InlineTutor.jsx'
 import ConceptSidebar from '../components/scenario/ConceptSidebar.jsx'
 import MitreTechniqueSidebar from '../components/scenario/MitreTechniqueSidebar.jsx'
 import FrameworkPhaseSidebar from '../components/scenario/FrameworkPhaseSidebar.jsx'
+// v25.7.1: post-completion retrieval-practice modal (testing effect)
+import RetrievalPractice from '../components/scenario/RetrievalPractice.jsx'
 
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }
 
@@ -559,6 +561,12 @@ export default function Scenario() {
           )
         })()}
       </AnimatePresence>
+
+      {/* v25.7.1: post-completion retrieval practice. Shows directly under the
+          CompletionPanel after a 600ms delay so the user reads the success
+          screen before being asked recall questions. Skippable; failure of the
+          retrieval API just hides this block. */}
+      {completed && <PostCompletionRetrieval scenarioId={scenario.id} />}
 
       <InlineTutor
         open={tutorOpen}
@@ -1265,6 +1273,35 @@ function StagePanel({ entry, answer, confidence, onConfidenceChange, onAnswer, o
   )
 }
 
+/**
+ * v25.7.1 — PostCompletionRetrieval. Owns the 600ms delay and the
+ * three-state lifecycle (waiting, active, dismissed) so CompletionPanel
+ * stays focused on its own concern. Mounting is conditional on completed=true
+ * upstream; this just handles the inner UX timing.
+ *
+ * Why a delay: showing two big panels at once feels noisy. Letting the user
+ * read the green "you finished cleanly" panel for 600ms before the recall
+ * check fades in feels paced and confident.
+ */
+function PostCompletionRetrieval({ scenarioId }) {
+  const [show, setShow]       = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setShow(true), 600)
+    return () => clearTimeout(t)
+  }, [scenarioId])
+
+  if (!show || dismissed) return null
+  return (
+    <RetrievalPractice
+      scenarioId={scenarioId}
+      onComplete={() => setDismissed(true)}
+      onSkip={() => setDismissed(true)}
+    />
+  )
+}
+
 function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allStages = {}, answers = {}, confidence = {}, nextScenario, onNext, onExit, onCoverage }) {
   const consequencesVisited = pathTaken.filter(id => allStages[id]?.stage?.type === 'consequence').length
 
@@ -1419,8 +1456,62 @@ function CompletionPanel({ scenario, tookConsequencePath, pathTaken = [], allSta
             borderRadius: 'var(--radius-lg)', cursor: 'pointer',
           }}
         >See my coverage</button>
+        {/* v25.7.1: certificate download — server streams a PDF with embedded
+            verification hash + technique list. Audit-friendly. */}
+        <CertificateButton scenarioId={scenario.id} />
       </div>
     </motion.div>
+  )
+}
+
+/**
+ * v25.7.1 — Certificate download button. Triggers the engagement endpoint
+ * which streams a PDF; client wraps it in a Blob URL + temporary <a download>
+ * to deliver the file to the user. Two-state UI: idle, generating.
+ */
+function CertificateButton({ scenarioId }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  async function download() {
+    setBusy(true); setErr(null)
+    try {
+      await api.downloadCertificate(scenarioId)
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+      <button
+        onClick={download}
+        disabled={busy}
+        style={{
+          padding: '12px 22px', fontSize: 14, fontWeight: 500,
+          background: 'transparent', color: 'var(--accent)',
+          border: '1px solid var(--accent)',
+          borderRadius: 'var(--radius-lg)',
+          cursor: busy ? 'wait' : 'pointer',
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        {busy ? 'Generating…' : 'Download certificate'}
+      </button>
+      {err && (
+        <div style={{ fontSize: 11, color: 'var(--danger)', maxWidth: 220, textAlign: 'center' }}>
+          {err}
+        </div>
+      )}
+    </div>
   )
 }
 
