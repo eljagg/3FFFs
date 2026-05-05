@@ -65,9 +65,13 @@ export const USER_PROGRESS_SUMMARY = `
   OPTIONAL MATCH (u:User {id: $userId})
   OPTIONAL MATCH (u)-[:COMPLETED]->(sc:Scenario)
   OPTIONAL MATCH (u)-[a:ANSWERED]->(q:Quiz)
+  // v25.7.2: count attempts (a), not distinct quizzes (q). Previously,
+  // count(DISTINCT q) gave us 1 when a user answered the same quiz 4 times
+  // while sum(a.correct) gave 4 — producing 400% accuracy. Both numerator
+  // and denominator must now be over the same set: relationship attempts.
   WITH u,
        count(DISTINCT sc) AS scenariosCompleted,
-       count(DISTINCT q)  AS quizzesAnswered,
+       count(a)           AS quizzesAnswered,
        sum(CASE WHEN a.correct THEN 1 ELSE 0 END) AS correctAnswers
   OPTIONAL MATCH (t:Technique)-[:PART_OF]->(:Tactic)
   WITH u, scenariosCompleted, quizzesAnswered, correctAnswers,

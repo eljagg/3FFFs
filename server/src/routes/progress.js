@@ -12,13 +12,17 @@ router.get('/', async (req, res, next) => {
     const rows = await runQuery(USER_PROGRESS_SUMMARY, { userId: user.id })
     const r = rows[0] || {
       scenariosCompleted: 0, quizzesAnswered: 0, correctAnswers: 0,
-      totalTechniques: 126, techniquesEncountered: 0,
+      // v25.7.2: 0, not 126. The 126 was a leftover from when F3 was
+      // estimated to have 126 techniques pre-launch; the real graph has
+      // 114, and either way a hardcoded fallback masks bugs in the query.
+      // The graph itself is now the source of truth via totalTechniques.
+      totalTechniques: 0, techniquesEncountered: 0,
     }
     res.json({ progress: r })
   } catch (e) { next(e) }
 })
 
-// GET /api/progress/coverage  — heatmap data across all 126 techniques
+// GET /api/progress/coverage  — heatmap data across all techniques in the graph
 router.get('/coverage', async (req, res, next) => {
   try {
     const user = getUser(req)

@@ -28,7 +28,7 @@ export default function Home() {
   const correct   = progress?.correctAnswers ?? 0
   const accuracy  = quizzes > 0 ? Math.round((correct / quizzes) * 100) : 0
   const covered   = progress?.techniquesEncountered ?? 0
-  const total     = progress?.totalTechniques ?? 126
+  const total     = progress?.totalTechniques ?? 0
 
   return (
     <Page
@@ -64,7 +64,9 @@ export default function Home() {
         <ActionCard to="/coverage"
           eyebrow="Measure"
           title="Your coverage map"
-          blurb="See which of the 126 F3 techniques you've mastered, and which are still ahead." />
+          blurb={total > 0
+            ? `See which of the ${total} F3 techniques you've mastered, and which are still ahead.`
+            : "See which F3 techniques you've mastered, and which are still ahead."} />
         <ActionCard to="/explorer"
           eyebrow="Explore"
           title="The graph"
