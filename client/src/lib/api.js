@@ -1,10 +1,52 @@
 const BASE = import.meta.env.VITE_API_URL || ''
 
 let tokenGetter = null
-export function setTokenGetter(fn) { tokenGetter = fn }
+// v25.7.1.2: pendingResolvers is populated by request() calls that arrive
+// before setTokenGetter() has been called. When the getter is finally wired,
+// we resolve all of them so they can fire their requests with a valid
+// Authorization header. Fixes a race where Home-page useEffects fired
+// api.getProgress() / api.getDailySignal() / api.getReviewQueue() before
+// AuthGate's wiring useEffect ran, producing 401s on first page load even
+// though the user was authenticated.
+let pendingResolvers = []
+export function setTokenGetter(fn) {
+  tokenGetter = fn
+  // Drain any callers that were waiting on us
+  const drain = pendingResolvers
+  pendingResolvers = []
+  for (const resolve of drain) resolve()
+}
+
+// Wait up to 3 seconds for setTokenGetter to be called. This is generous —
+// AuthGate's wiring effect runs within milliseconds of isAuthenticated
+// flipping true, so we're really waiting microseconds in practice. The
+// timeout exists only as a fallback so a misconfigured Auth0 setup
+// doesn't hang the UI forever — after 3s we just fire the request without
+// a token and let the server's 401 propagate as before.
+function waitForTokenGetter(timeoutMs = 3000) {
+  if (tokenGetter) return Promise.resolve()
+  return new Promise((resolve) => {
+    let settled = false
+    const t = setTimeout(() => {
+      if (settled) return
+      settled = true
+      const i = pendingResolvers.indexOf(resolve)
+      if (i >= 0) pendingResolvers.splice(i, 1)
+      resolve()
+    }, timeoutMs)
+    pendingResolvers.push(() => {
+      if (settled) return
+      settled = true
+      clearTimeout(t)
+      resolve()
+    })
+  })
+}
 
 async function request(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  // v25.7.1.2: wait for the token getter to be wired up before attaching auth.
+  await waitForTokenGetter()
   if (tokenGetter) {
     try {
       const token = await tokenGetter()
@@ -167,6 +209,8 @@ export const api = {
   // then trigger a browser download via a transient blob URL.
   downloadCertificate: async (scenarioId) => {
     const headers = {}
+    // v25.7.1.2: same race-condition fix as in request()
+    await waitForTokenGetter()
     if (tokenGetter) {
       try {
         const token = await tokenGetter()

@@ -51,7 +51,25 @@ export function AuthGate({ children }) {
   const { isLoading, isAuthenticated, getAccessTokenSilently, user, error } = useAuth0()
   const [showSplash, setShowSplash] = useState(false)
 
-  // Wire the token getter into the API client
+  // v25.7.1.2: Wire the token getter SYNCHRONOUSLY during render the moment
+  // we know the user is authenticated. The useEffect below is kept as a
+  // backstop, but the synchronous call here ensures that any child component
+  // mounting on the SAME render commit (e.g. Home.jsx's useEffect calling
+  // api.getProgress() / api.getDailySignal() / api.getReviewQueue()) finds
+  // tokenGetter already wired up.
+  //
+  // Calling setTokenGetter during render is normally a code smell (mutating
+  // module-level state outside an effect), but here it's idempotent — the
+  // setter just stores a reference — and it pairs with the wait-and-drain
+  // queue in api.js so even API calls that started BEFORE this point will
+  // be unblocked when this runs.
+  if (isAuthenticated) {
+    setTokenGetter(() => getAccessTokenSilently())
+  }
+
+  // Backstop: also wire on every isAuthenticated transition. This is what
+  // existed before v25.7.1.2; it's preserved for safety but should be a
+  // no-op now that the synchronous wiring above runs first.
   useEffect(() => {
     if (isAuthenticated) setTokenGetter(() => getAccessTokenSilently())
   }, [isAuthenticated, getAccessTokenSilently])
