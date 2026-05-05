@@ -138,6 +138,135 @@ const RECON_KILL_CHAIN_CONFIG = {
   illustrativeNote: 'Illustrative — adversary lifecycle for reconnaissance. The F3 techniques formally indexed for this tactic appear below.',
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * v25.7.0.3 — POSITIONING TIMELINE config (FA0001, F3-unique)
+ *
+ * Two examples drawn from existing scenarios:
+ *   - SC007: Account Rental — money mule onboarding pattern
+ *   - SC008: ATM Skimming — physical-access positioning
+ *
+ * Each example has four parallel arrays:
+ *   - attackerActions: what the attacker is doing on each day
+ *   - signals:         detection signals that appear, with stable IDs
+ *   - controls:        defender controls the user can toggle, each
+ *                      declaring which signal IDs would trigger it
+ *   - totalDays:       length of the positioning phase before execution
+ *
+ * The signals arrays mirror the actual signals in the scenario seed for
+ * SC007-S2 and SC008-S2, plus a few inferred-from-narrative ones to make
+ * the timeline more legible. Stage IDs used as signal-ID prefixes so an
+ * auditor can trace from viz back to scenario stage.
+ *
+ * controls.firesOnSignals tells the visualization which controls would
+ * activate on which signal days. The user toggles a control on; the viz
+ * looks up the earliest day any of that control's signals appears, and
+ * shows the control firing on that day.
+ * ─────────────────────────────────────────────────────────────────────── */
+const POSITIONING_TIMELINE_CONFIG = {
+  examples: [
+    {
+      scenarioId: 'SC007',
+      tabLabel: 'Account Rental',
+      scenarioTitle: 'Account Rental — the money mule pipeline',
+      totalDays: 30,
+      attackerActions: [
+        { day: 0,  label: 'Allison opens account' },
+        { day: 1,  label: 'Crew adds device to mobile banking' },
+        { day: 1,  label: 'Crew obtains creds + PIN from Allison' },
+        { day: 8,  label: 'E-delivery email changed to Gmail throwaway' },
+        { day: 11, label: 'First incoming transfer from unrelated party' },
+        { day: 14, label: '2nd, 3rd incoming transfers, no salary' },
+        { day: 28, label: 'Crew prepares onward outbound transfers' },
+        { day: 30, label: 'EXECUTION — outbound mule transfers begin' },
+      ],
+      signals: [
+        // Real signals from SC007-S2 with stable IDs the controls can target
+        { id: 'sig-edelivery-gmail',     day: 8,  severity: 'high',
+          text: 'E-delivery notification address changed to free-email domain within 10 days of account opening' },
+        { id: 'sig-device-fingerprint',  day: 1,  severity: 'high',
+          text: 'Mobile banking device fingerprint changes within 48 hours of account opening' },
+        { id: 'sig-no-salary-incoming',  day: 14, severity: 'medium',
+          text: 'First three transactions are all incoming transfers from unrelated parties — not salary, not family' },
+      ],
+      controls: [
+        {
+          id: 'ctrl-auto-freeze-edelivery-change',
+          shortLabel: 'Auto-freeze on early e-delivery change',
+          firesOnSignals: ['sig-edelivery-gmail'],
+        },
+        {
+          id: 'ctrl-device-velocity-alert',
+          shortLabel: 'Device velocity alert (new device <48h after open)',
+          firesOnSignals: ['sig-device-fingerprint'],
+        },
+        {
+          id: 'ctrl-incoming-pattern-anomaly',
+          shortLabel: 'Incoming-only pattern anomaly (no salary in 30d)',
+          firesOnSignals: ['sig-no-salary-incoming'],
+        },
+        {
+          id: 'ctrl-naive-sms',
+          shortLabel: 'SMS alert customer on every config change',
+          // Mule controls the device — the SMS reaches them, they ignore it.
+          // Empty firesOnSignals = the control "exists" but never catches anything.
+          firesOnSignals: [],
+        },
+      ],
+    },
+    {
+      scenarioId: 'SC008',
+      tabLabel: 'ATM Skimming',
+      scenarioTitle: 'ATM Skimming — Sam Sharpe Square tourist zone',
+      totalDays: 5,
+      attackerActions: [
+        { day: 0, label: 'Crew installs skimmer + pinhole camera' },
+        { day: 1, label: 'First card-PIN pairs captured' },
+        { day: 1, label: 'Nightly Bluetooth retrieval' },
+        { day: 2, label: '~140 cards/PINs captured' },
+        { day: 3, label: '~280 cards/PINs captured' },
+        { day: 3, label: '412 total card-PIN pairs captured' },
+        { day: 4, label: 'Skimmer moved to a different ATM 6 blocks away' },
+        { day: 5, label: 'EXECUTION — first cloned-card fraud complaints' },
+      ],
+      signals: [
+        // Real signals from SC008-S2
+        { id: 'sig-shared-atm-cluster',   day: 5,  severity: 'high',
+          text: 'Customer fraud complaints cluster around a single common ATM in past 72h' },
+        { id: 'sig-graph-shared-atm',     day: 5,  severity: 'high',
+          text: 'Graph analysis: fraud victims share a common ATM in 7 days prior' },
+        { id: 'sig-tourist-fraud-spike',  day: 4,  severity: 'medium',
+          text: 'Tourist-card dispute volume spikes >3x seasonal baseline' },
+      ],
+      controls: [
+        {
+          id: 'ctrl-graph-shared-atm-analytics',
+          shortLabel: 'Graph analytics — link victims by shared ATM use',
+          firesOnSignals: ['sig-graph-shared-atm', 'sig-shared-atm-cluster'],
+        },
+        {
+          id: 'ctrl-tourist-baseline-alert',
+          shortLabel: 'Tourist-zone fraud-volume baseline alert',
+          firesOnSignals: ['sig-tourist-fraud-spike'],
+        },
+        {
+          id: 'ctrl-naive-cctv',
+          shortLabel: 'Manually review CCTV at every ATM in MoBay',
+          // Cost-prohibitive and CCTV coverage is inconsistent — the
+          // signals exist in the timeline but this control never reaches
+          // them in time, modeled as no-op.
+          firesOnSignals: [],
+        },
+        {
+          id: 'ctrl-naive-customer-complaints',
+          shortLabel: 'Wait for formal customer complaints',
+          firesOnSignals: [],
+        },
+      ],
+    },
+  ],
+}
+
+
 export const VISUALIZATIONS = [
   {
     id:        'VIZ-RECON-KILLCHAIN',
@@ -153,5 +282,21 @@ export const VISUALIZATIONS = [
     // Which graph entity this viz attaches to. The seed migration will
     // create a (:Visualization)-[:VISUALIZES]->(<entityType>{id}) edge.
     attachedTo: { type: 'Tactic', id: 'TA0043' },
+  },
+
+  // v25.7.0.3 (FA0001): Positioning — F3-unique tactic. Two example scenarios
+  // (Account Rental, ATM Skimming). Audience includes tellers because
+  // positioning patterns (e-delivery changes, device fingerprint anomalies,
+  // incoming-only transaction patterns) are observable at the teller window
+  // — they're the lowest-friction signals in the timeline.
+  {
+    id:        'VIZ-POSITIONING-TIMELINE',
+    kind:      'positioning_timeline',
+    title:     'How attackers wait — and what makes them visible',
+    subtitle:  'Drag the timeline. Toggle controls. See how early each control would catch the attack.',
+    roles:     ['teller', 'analyst', 'soc', 'executive'],
+    order:     1,
+    config:    POSITIONING_TIMELINE_CONFIG,
+    attachedTo: { type: 'Tactic', id: 'FA0001' },
   },
 ]

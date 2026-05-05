@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { api } from '../../lib/api.js'
 import KillChainGrid from './KillChainGrid.jsx'
+// v25.7.0.3 (FA0001): Positioning timeline — F3-unique tactic visualization.
+// Scenario-aware: when rendered with a scenarioId, picks the matching example
+// from config.examples; falls back to the first example otherwise.
+import PositioningTimeline from './PositioningTimeline.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    VisualizationRenderer — v25.7.0.2 (ISS-023)
@@ -29,7 +33,7 @@ import KillChainGrid from './KillChainGrid.jsx'
    investigate, not a UX issue.
    ───────────────────────────────────────────────────────────────────────── */
 
-export default function VisualizationRenderer({ viz, effectiveRole }) {
+export default function VisualizationRenderer({ viz, effectiveRole, scenarioId }) {
   // Track the open-event firing once per (viz id, role) combination so a
   // role-switch on the same page emits a fresh open. The role context
   // matters for any future analytics that ask "do tellers and SOC users
@@ -66,6 +70,13 @@ export default function VisualizationRenderer({ viz, effectiveRole }) {
   switch (viz.kind) {
     case 'kill_chain_grid':
       return <KillChainGrid viz={viz} effectiveRole={effectiveRole} onEvent={onEvent} />
+
+    case 'positioning_timeline':
+      // v25.7.0.3: F3-unique Positioning tactic. scenarioId is forwarded so
+      // the timeline can pick the matching example when rendered inside a
+      // scenario page; on the Framework page (no scenarioId), it defaults
+      // to the first example.
+      return <PositioningTimeline viz={viz} effectiveRole={effectiveRole} onEvent={onEvent} scenarioId={scenarioId} />
 
     default:
       return <UnknownKindPlaceholder viz={viz} />
