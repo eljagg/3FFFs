@@ -169,9 +169,20 @@ async function main() {
   const postCounts = {}
   postSnapshot.forEach(r => { postCounts[r.label] = r.c })
 
-  const expectedVizDelta = (vizExisted > 0)
-    ? 0
-    : VISUALIZATIONS.length
+  // v25.7.0.3.2: corrected expected-delta formula. The previous formula
+  // assumed re-runs always have delta 0 — but that's only true when the
+  // VISUALIZATIONS seed array hasn't grown between runs. With v25.7.0.3
+  // adding VIZ-POSITIONING-TIMELINE alongside the existing
+  // VIZ-RECON-KILLCHAIN, a re-run legitimately creates one new node
+  // (delta +1) — which is the goal of the migration, not a preservation
+  // violation.
+  //
+  // Correct formula: expected delta = total seed entries − pre-existing
+  // Visualization nodes. Works for:
+  //   - First run:        N − 0 = +N     (creates all N)
+  //   - Idempotent re-run: N − N = 0     (nothing new to create)
+  //   - Seed-array growth: N − M = new   (creates the difference)
+  const expectedVizDelta = VISUALIZATIONS.length - vizExisted
   const expectedDeltas = { Visualization: expectedVizDelta }
 
   let preservationOK = true
