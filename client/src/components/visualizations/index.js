@@ -6,3 +6,5 @@ export { default as VisualizationRenderer } from './VisualizationRenderer.jsx'
 export { default as KillChainGrid }         from './KillChainGrid.jsx'
 // v25.7.0.3 (FA0001): Positioning timeline — F3-unique tactic visualization.
 export { default as PositioningTimeline }   from './PositioningTimeline.jsx'
+// v25.7.0.4 (FA0001): Positioning Two Views — disguise-reveal visualization.
+export { default as PositioningTwoViews }   from './PositioningTwoViews.jsx'

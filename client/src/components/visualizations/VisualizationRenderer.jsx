@@ -5,6 +5,10 @@ import KillChainGrid from './KillChainGrid.jsx'
 // Scenario-aware: when rendered with a scenarioId, picks the matching example
 // from config.examples; falls back to the first example otherwise.
 import PositioningTimeline from './PositioningTimeline.jsx'
+// v25.7.0.4 (FA0001): Positioning Two Views — disguise-reveal visualization.
+// Companion to PositioningTimeline; both render together when the user
+// expands the FA0001 tactic. Same scenario-awareness pattern.
+import PositioningTwoViews from './PositioningTwoViews.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    VisualizationRenderer — v25.7.0.2 (ISS-023)
@@ -77,6 +81,15 @@ export default function VisualizationRenderer({ viz, effectiveRole, scenarioId }
       // scenario page; on the Framework page (no scenarioId), it defaults
       // to the first example.
       return <PositioningTimeline viz={viz} effectiveRole={effectiveRole} onEvent={onEvent} scenarioId={scenarioId} />
+
+    case 'two_views':
+      // v25.7.0.4: Two Views disguise-reveal visualization. Companion to
+      // PositioningTimeline — same FA0001 tactic, different teaching frame.
+      // The two_views kind is intentionally generic so the same component
+      // can later be reused for Reconnaissance, Defense Evasion, and
+      // Monetization (all of which involve "what defender sees vs. what's
+      // really happening" patterns).
+      return <PositioningTwoViews viz={viz} effectiveRole={effectiveRole} onEvent={onEvent} scenarioId={scenarioId} />
 
     default:
       return <UnknownKindPlaceholder viz={viz} />

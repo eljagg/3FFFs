@@ -267,6 +267,122 @@ const POSITIONING_TIMELINE_CONFIG = {
 }
 
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * v25.7.0.4 — POSITIONING TWO VIEWS config (FA0001, second viz on this tactic)
+ *
+ * Disguise-reveal visualization — companion to the PositioningTimeline
+ * shipped in v25.7.0.3. Same tactic (FA0001), different teaching frame:
+ *
+ *   - Timeline emphasizes WHEN signals appear (temporal axis)
+ *   - Two Views emphasizes WHAT'S HIDDEN vs WHAT'S VISIBLE (disguise axis)
+ *
+ * Both render together when the user expands FA0001 on the Framework page.
+ * Empirical question for v25.7.x: which one users engage with more.
+ * Telemetry on viz events (already shipped) gives us the answer.
+ *
+ * The kind is `two_views` (not `positioning_two_views`) because the same
+ * component generalizes to Reconnaissance ("what we see in the OSINT trail
+ * vs what the attacker has compiled"), Defense Evasion ("the cover story
+ * vs the action"), and Monetization ("the wire transfers vs the cashout
+ * structure"). Future v25.7.0.x releases reuse this kind with new content.
+ *
+ * v25.7.0.4 ships ONE example: SC007 Account Rental. SC008 ATM Skimming
+ * is a candidate for the next release once we've verified the SC007 frame
+ * works in production.
+ * ─────────────────────────────────────────────────────────────────────── */
+const POSITIONING_TWO_VIEWS_CONFIG = {
+  examples: [
+    {
+      scenarioId: 'SC007',
+      tabLabel: 'Account Rental',
+      scenarioTitle: 'Account Rental — the money mule pipeline',
+
+      customer: {
+        initial: 'A',
+        name:    'Allison Brown',
+        id:      'AB204481',
+        tenure:  'Customer for 30 days',
+      },
+
+      quickStats: [
+        { label: 'KYC',           value: 'Verified · in person', success: true },
+        { label: 'Channels',      value: 'Branch + Mobile' },
+        { label: 'Last activity', value: '2 hours ago' },
+        { label: 'Open cases',    value: 'None' },
+      ],
+
+      activity: [
+        { id: 'open',         day: 0,  desc: 'Account opened in branch', counterparty: '—',          amount: '—',           status: 'verified', revealedBy: null },
+        { id: 'firstdeposit', day: 0,  desc: 'First deposit · cash',     counterparty: 'In branch',  amount: '$50.00',      status: 'cleared', revealedBy: null },
+        { id: 'incoming1',    day: 11, desc: 'Incoming transfer',        counterparty: 'External · J.M.', amount: '$1,840.00', status: 'cleared',
+          truth: "Funds from crew's established mule. Not salary. Not family. First test transfer.",
+          revealedBy: 'ctrl-incoming-anomaly' },
+        { id: 'incoming2',    day: 12, desc: 'Incoming transfer',        counterparty: 'External · K.W.', amount: '$2,200.00', status: 'cleared',
+          truth: 'Second crew test. Confirms account is operational under their control.',
+          revealedBy: 'ctrl-incoming-anomaly' },
+        { id: 'incoming3',    day: 14, desc: 'Incoming transfer',        counterparty: 'External · D.H.', amount: '$4,500.00', status: 'cleared',
+          truth: 'Larger crew transfer. Pattern: 3 incoming, no salary, no family. Mule live.',
+          revealedBy: 'ctrl-incoming-anomaly' },
+      ],
+
+      settings: [
+        { id: 'addr',   key: 'Mailing address',        value: '14 Hope Rd, Kingston 6', when: 'D0', whenPill: false, revealedBy: null },
+        { id: 'phone',  key: 'Mobile number',          value: '+1 876 555 0142',         when: 'D0', whenPill: false, revealedBy: null },
+        { id: 'email',  key: 'E-delivery email',       value: 'a.brown.kgn@gmail.com',   when: 'D8', whenPill: true,
+          truth: 'Throwaway Gmail registered by crew. Real email is allison.brown@scotia.com.jm.',
+          revealedBy: 'ctrl-edelivery' },
+        { id: 'device', key: 'Mobile banking device',  value: 'iPhone 14 · iOS 17.4',    when: 'D1', whenPill: true,
+          truth: "Crew's device. Allison was already enrolled on her own phone before this was added.",
+          revealedBy: 'ctrl-device-velocity' },
+      ],
+
+      actor: {
+        label: 'ACTOR · MULE OPERATOR',
+        name:  'Money mule crew',
+        meta:  "3+ devices · operating Allison's account · pre-execution stage",
+      },
+
+      hiddenSignals: [
+        { id: 'sig-device', day: 'D1',  tag: 'CREW · CFG', tagClass: 'cfg',
+          text: "Crew's device. Allison was already enrolled on her own phone before this was added.",
+          revealedBy: 'ctrl-device-velocity' },
+        { id: 'sig-email',  day: 'D8',  tag: 'CREW · CFG', tagClass: 'cfg',
+          text: 'Throwaway Gmail registered by crew. Real email is allison.brown@scotia.com.jm.',
+          revealedBy: 'ctrl-edelivery' },
+        { id: 'sig-tx1',    day: 'D11', tag: 'CREW · TXN', tagClass: 'act',
+          text: "Funds from crew's established mule. Not salary. Not family. First test transfer.",
+          revealedBy: 'ctrl-incoming-anomaly' },
+        { id: 'sig-tx2',    day: 'D12', tag: 'CREW · TXN', tagClass: 'act',
+          text: 'Second crew test. Confirms account is operational under their control.',
+          revealedBy: 'ctrl-incoming-anomaly' },
+        { id: 'sig-tx3',    day: 'D14', tag: 'CREW · TXN', tagClass: 'act',
+          text: 'Larger crew transfer. Pattern: 3 incoming, no salary, no family. Mule live.',
+          revealedBy: 'ctrl-incoming-anomaly' },
+      ],
+
+      controls: [
+        { id: 'ctrl-edelivery',
+          label: 'Auto-freeze on early e-delivery change',
+          meta:  'Reveals: throwaway email',
+          naive: false },
+        { id: 'ctrl-device-velocity',
+          label: 'Device velocity alert (<48h after open)',
+          meta:  'Reveals: crew device',
+          naive: false },
+        { id: 'ctrl-incoming-anomaly',
+          label: 'Incoming-only pattern anomaly (no salary in 30d)',
+          meta:  'Reveals: 3 crew transfers',
+          naive: false },
+        { id: 'ctrl-naive-sms',
+          label: 'SMS customer on every config change',
+          meta:  'No match · mule controls the device',
+          naive: true },
+      ],
+    },
+  ],
+}
+
+
 export const VISUALIZATIONS = [
   {
     id:        'VIZ-RECON-KILLCHAIN',
@@ -297,6 +413,23 @@ export const VISUALIZATIONS = [
     roles:     ['teller', 'analyst', 'soc', 'executive'],
     order:     1,
     config:    POSITIONING_TIMELINE_CONFIG,
+    attachedTo: { type: 'Tactic', id: 'FA0001' },
+  },
+
+  // v25.7.0.4 (FA0001): Positioning — Two Views disguise-reveal. Companion
+  // viz to the timeline above; both render together when FA0001 is expanded.
+  // Same audience (all four roles). Lower order (2) so the timeline renders
+  // first on the page, the two-views second — but both visible. Telemetry
+  // will tell us which one users engage with more, informing whether v25.7.x
+  // expands or consolidates.
+  {
+    id:        'VIZ-POSITIONING-TWO-VIEWS',
+    kind:      'two_views',
+    title:     'The disguise — what your bank sees vs. what is actually happening',
+    subtitle:  'Toggle detection controls. Each one surfaces a hidden signal in the bank-side view.',
+    roles:     ['teller', 'analyst', 'soc', 'executive'],
+    order:     2,
+    config:    POSITIONING_TWO_VIEWS_CONFIG,
     attachedTo: { type: 'Tactic', id: 'FA0001' },
   },
 ]
