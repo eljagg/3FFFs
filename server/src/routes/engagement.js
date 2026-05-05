@@ -633,7 +633,14 @@ publicRouter.get('/verify/:hash', (req, res, next) => verifyHandler(req, res, ne
 
 async function verifyHandler(req, res, next) {
   try {
-    const { hash } = req.params
+    // v25.7.1.3: normalize the incoming hash to lowercase before lookup.
+    // The hash is stored lowercase in Neo4j (because crypto.digest('hex')
+    // returns lowercase), but the PDF certificate displays it UPPERCASE
+    // for visual readability (less ambiguity between 0/o, 1/l, etc.).
+    // Auditors who type the hash from the readable display were getting
+    // false negatives. Lowercasing on the server side fixes this without
+    // changing the PDF's readable display.
+    const hash = (req.params.hash || '').toLowerCase()
     const rows = await runQuery(`
       MATCH (u:User)-[ce:CERTIFICATE_ISSUED]->(sc:Scenario)
       WHERE ce.hash = $hash
