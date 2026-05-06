@@ -186,6 +186,22 @@ export default function Framework() {
       border: '1px solid var(--rule)',
       borderRadius: 'var(--radius-lg)',
     },
+    // v25.7.0.4.1: wide visualizations container — renders below the
+    // two-column body, full body width. Used by visualizations whose
+    // own internal layout needs the full horizontal real estate
+    // (e.g. Two Views, with its banking-dashboard / threat-panel split).
+    tacticBodyWideViz: {
+      marginTop: 24,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 24,
+    },
+    wideVizCard: {
+      padding: '14px 16px',
+      background: 'var(--paper)',
+      border: '1px solid var(--rule)',
+      borderRadius: 'var(--radius-lg)',
+    },
     tacticBodyVizHeader: {
       marginBottom: 12, paddingBottom: 10,
       borderBottom: '1px solid var(--rule)',
@@ -478,16 +494,55 @@ export default function Framework() {
                   )
                 }
 
-                // Two-column layout — text on left, viz panel on right
+                // v25.7.0.4.1: split visualizations into "compact" (fit in
+                // the right-column viz panel) and "wide" (need full body
+                // width because they contain their own internal multi-column
+                // layout). Two Views in particular has a banking-dashboard
+                // / threat-panel split inside it that doesn't survive being
+                // squeezed into half a page. Compact viz render in the
+                // right column as before; wide ones render full-width below
+                // the two-column body.
+                const WIDE_VIZ_KINDS = new Set(['two_views'])
+                const compactViz = visibleViz.filter(v => !WIDE_VIZ_KINDS.has(v.kind))
+                const wideViz    = visibleViz.filter(v =>  WIDE_VIZ_KINDS.has(v.kind))
+
+                // Two-column layout — text on left, compact viz panel on right.
+                // If there are no compact viz (only wide ones), drop the right
+                // column entirely — text takes full width above, wide viz
+                // renders full-width below.
+                const hasCompact = compactViz.length > 0
                 return (
                   <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
-                    <div style={styles.tacticBodyTwoCol}>
-                      <div style={styles.tacticBodyTextCol}>
-                        {textBody}
+                    {hasCompact ? (
+                      <div style={styles.tacticBodyTwoCol}>
+                        <div style={styles.tacticBodyTextCol}>
+                          {textBody}
+                        </div>
+                        <div style={styles.tacticBodyVizCol}>
+                          {compactViz.map(viz => (
+                            <div key={viz.id}>
+                              <div style={styles.tacticBodyVizHeader}>
+                                <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
+                                {viz.subtitle && (
+                                  <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
+                                )}
+                              </div>
+                              <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div style={styles.tacticBodyVizCol}>
-                        {visibleViz.map(viz => (
-                          <div key={viz.id}>
+                    ) : (
+                      <div>{textBody}</div>
+                    )}
+
+                    {/* v25.7.0.4.1: wide visualizations render full-width
+                        below the two-column body. They get the same header
+                        treatment but unconstrained horizontal space. */}
+                    {wideViz.length > 0 && (
+                      <div style={styles.tacticBodyWideViz}>
+                        {wideViz.map(viz => (
+                          <div key={viz.id} style={styles.wideVizCard}>
                             <div style={styles.tacticBodyVizHeader}>
                               <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
                               {viz.subtitle && (
@@ -498,7 +553,7 @@ export default function Framework() {
                           </div>
                         ))}
                       </div>
-                    </div>
+                    )}
                   </div>
                 )
               })()}
