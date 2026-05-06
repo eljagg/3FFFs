@@ -383,6 +383,148 @@ const POSITIONING_TWO_VIEWS_CONFIG = {
 }
 
 
+/* ────────────────────────────────────────────────────────────────────
+ * v25.7.0.7 (TA0005): Defense Evasion two_views config.
+ *
+ * REUSES the PositioningTwoViews React component — same disguise-reveal
+ * pattern, applied at a different phase of the kill chain. Positioning
+ * showed disguise BEFORE the attack (account configured to look normal);
+ * Defense Evasion shows disguise DURING the attack (transactions
+ * structured to dodge fraud-monitoring controls).
+ *
+ * Same SC007 Allison Brown account — but at the EXECUTION phase
+ * (Days 15–25), picking up where Positioning left off (Day 14, account
+ * "ready to cash out" with $8,540 incoming).
+ *
+ * Pedagogical insight: each "casual-looking" outgoing transaction in
+ * the bank-CRM view is actually an exact-arithmetic move tuned against
+ * a specific control. Toggle controls to see which evasion each
+ * transaction was designed to dodge.
+ *
+ * Five evasion techniques across 6 transactions; five toggleable
+ * detection controls. With ALL controls active, every evasion is
+ * caught at least once. With NONE active, $18K out the door.
+ *
+ * Component reuse note: column labels ("What your bank sees" / "What's
+ * actually happening") are hardcoded in PositioningTwoViews.jsx and
+ * apply naturally to any fraud-defender disguise-reveal viz. No
+ * component change needed — this release is pure content authoring.
+ * ──────────────────────────────────────────────────────────────────── */
+const DEFENSE_EVASION_TWO_VIEWS_CONFIG = {
+  examples: [
+    {
+      scenarioId: 'SC007',
+      tabLabel: 'Account Rental · Execution',
+      scenarioTitle: 'Account Rental — execution-phase evasion',
+
+      customer: {
+        initial: 'A',
+        name:    'Allison Brown',
+        id:      'AB204481',
+        tenure:  'Customer for 55 days',
+      },
+
+      quickStats: [
+        { label: 'KYC',           value: 'Verified · in person', success: true },
+        { label: 'Channels',      value: 'Branch + Mobile' },
+        { label: 'Last activity', value: '12 minutes ago' },
+        { label: 'Open cases',    value: 'None' },
+      ],
+
+      // Outgoing-side activity. Each transaction LOOKS individually fine.
+      // Every entry with a `truth` is hidden to the bank by default and
+      // revealed only when the matching control is toggled on.
+      activity: [
+        { id: 'in1', day: 11, desc: 'Incoming transfer',  counterparty: 'External · J.M.', amount: '$1,840.00', status: 'cleared', revealedBy: null },
+        { id: 'in2', day: 12, desc: 'Incoming transfer',  counterparty: 'External · K.W.', amount: '$2,200.00', status: 'cleared', revealedBy: null },
+        { id: 'in3', day: 14, desc: 'Incoming transfer',  counterparty: 'External · D.H.', amount: '$4,500.00', status: 'cleared', revealedBy: null },
+
+        { id: 'out1', day: 17, desc: 'Outgoing transfer', counterparty: 'External · R.B.', amount: '$1,950.00', status: 'cleared',
+          truth: 'Sub-threshold structuring. SAR threshold is $2,000 — this is exactly $50 under. Then $2,400 the next day, splitting what would have been a single $4,350 outbound.',
+          revealedBy: 'ctrl-sub-threshold' },
+
+        { id: 'out2', day: 18, desc: 'Outgoing transfer', counterparty: 'External · R.B.', amount: '$2,400.00', status: 'cleared',
+          truth: 'Same counterparty as yesterday. Combined outbound to R.B. in 48h: $4,350 — would have triggered velocity-burst if monitored.',
+          revealedBy: 'ctrl-velocity-burst' },
+
+        { id: 'atm1', day: 20, desc: 'ATM withdrawal × 4',  counterparty: 'Half-Way Tree ATM', amount: '$1,760.00', status: 'cleared',
+          truth: 'Four pulls of $440 each, 11 minutes apart. ATM daily cap is $500 — each individual pull just under cap. Total in one location, one hour: $1,760.',
+          revealedBy: 'ctrl-atm-substructuring' },
+
+        { id: 'out3', day: 22, desc: 'Outgoing transfer', counterparty: 'New beneficiary · M.W.', amount: '$4,800.00', status: 'cleared',
+          truth: 'Beneficiary "Mary Wilson" added Day 21, used Day 22. New-beneficiary cool-down would have held this transaction 48h; that delay would have given the next control time to surface the pattern.',
+          revealedBy: 'ctrl-beneficiary-velocity' },
+
+        { id: 'atm2', day: 25, desc: 'ATM withdrawal × 5', counterparty: 'New Kingston ATM',    amount: '$2,400.00', status: 'cleared',
+          truth: 'Five pulls of $480 each at New Kingston — 18km from the Day 20 Half-Way Tree pulls. Same card, non-adjacent locations, 5 days. Geo-rotation pattern designed to avoid same-ATM frequency flags.',
+          revealedBy: 'ctrl-atm-georotation' },
+      ],
+
+      // Account settings stay unchanged from the Positioning phase. The
+      // crew set things up in Positioning; in Execution they don't need
+      // to change anything — they just operate the configured account.
+      settings: [
+        { id: 'addr',   key: 'Mailing address',        value: '14 Hope Rd, Kingston 6',  when: 'D0',  whenPill: false, revealedBy: null },
+        { id: 'phone',  key: 'Mobile number',          value: '+1 876 555 0142',          when: 'D0',  whenPill: false, revealedBy: null },
+        { id: 'email',  key: 'E-delivery email',       value: 'a.brown.kgn@gmail.com',    when: 'D8',  whenPill: true,  revealedBy: null },
+        { id: 'device', key: 'Mobile banking device',  value: 'iPhone 14 · iOS 17.4',     when: 'D1',  whenPill: true,  revealedBy: null },
+      ],
+
+      actor: {
+        label: 'ACTOR · MULE OPERATOR',
+        name:  'Money mule crew',
+        meta:  '$18,650 cashed out across 6 transactions · Days 17–25',
+      },
+
+      hiddenSignals: [
+        { id: 'sig-sub',     day: 'D17', tag: 'CREW · TXN', tagClass: 'act',
+          text: 'Sub-threshold structuring. SAR threshold is $2,000 — this is exactly $50 under. Splits a $4,350 outbound into two days.',
+          revealedBy: 'ctrl-sub-threshold' },
+        { id: 'sig-velocity', day: 'D18', tag: 'CREW · TXN', tagClass: 'act',
+          text: 'Velocity burst masked by the daily split. Same counterparty 48h running, total $4,350. No single transaction trips on its own.',
+          revealedBy: 'ctrl-velocity-burst' },
+        { id: 'sig-atm-sub', day: 'D20', tag: 'CREW · TXN', tagClass: 'act',
+          text: 'ATM substructuring. Four $440 pulls within 11 minutes at Half-Way Tree — each individually under the $500 cap.',
+          revealedBy: 'ctrl-atm-substructuring' },
+        { id: 'sig-bene',    day: 'D22', tag: 'CREW · CFG', tagClass: 'cfg',
+          text: 'New beneficiary used <48h after add. Cool-down period would have held this transaction long enough for other patterns to surface.',
+          revealedBy: 'ctrl-beneficiary-velocity' },
+        { id: 'sig-georot',  day: 'D25', tag: 'CREW · TXN', tagClass: 'act',
+          text: 'Geo-rotation: same card used at non-adjacent ATMs 5 days apart. Designed to evade same-ATM frequency monitoring.',
+          revealedBy: 'ctrl-atm-georotation' },
+      ],
+
+      controls: [
+        { id: 'ctrl-sub-threshold',
+          label: 'Sub-threshold pattern detection',
+          meta:  'Reveals: $1,950 transfer (SAR-$50)',
+          naive: false },
+        { id: 'ctrl-velocity-burst',
+          label: 'Velocity-burst detection (>2 outgoing in 48h)',
+          meta:  'Reveals: same-counterparty splitting',
+          naive: false },
+        { id: 'ctrl-atm-substructuring',
+          label: 'ATM substructuring (multi-pull, single-location)',
+          meta:  'Reveals: 4× $440 pulls in 11 min',
+          naive: false },
+        { id: 'ctrl-beneficiary-velocity',
+          label: 'New-beneficiary cool-down (48h hold)',
+          meta:  'Reveals: M.W. used <24h after add',
+          naive: false },
+        { id: 'ctrl-atm-georotation',
+          label: 'ATM geo-rotation (non-adjacent locations, 5d window)',
+          meta:  'Reveals: Half-Way Tree → New Kingston',
+          naive: false },
+        { id: 'ctrl-naive-daily-tx',
+          label: 'SMS customer when daily transactions exceed 5',
+          meta:  'No match · mule controls the device',
+          naive: true },
+      ],
+    },
+  ],
+}
+
+
 export const VISUALIZATIONS = [
   {
     id:        'VIZ-RECON-KILLCHAIN',
@@ -431,5 +573,23 @@ export const VISUALIZATIONS = [
     order:     2,
     config:    POSITIONING_TWO_VIEWS_CONFIG,
     attachedTo: { type: 'Tactic', id: 'FA0001' },
+  },
+
+  // v25.7.0.7 (TA0005): Defense Evasion — REUSES the two_views component
+  // with new content. Same SC007 Allison Brown account, but execution
+  // phase (Days 17-25) instead of positioning phase (Days 0-14). Each
+  // outgoing transaction is structured against a specific control.
+  // First reuse of the two_views pattern across tactics — validates that
+  // the disguise-reveal frame works as a general defender skill, not a
+  // Positioning-specific gimmick.
+  {
+    id:        'VIZ-DEFENSE-EVASION-TWO-VIEWS',
+    kind:      'two_views',
+    title:     'How attackers dodge the controls — and what catches them anyway',
+    subtitle:  "Allison's account, execution phase. Each outgoing transaction is calibrated against a specific control. Toggle controls to see which evasion each was tuned against.",
+    roles:     ['teller', 'analyst', 'soc', 'executive'],
+    order:     1,
+    config:    DEFENSE_EVASION_TWO_VIEWS_CONFIG,
+    attachedTo: { type: 'Tactic', id: 'TA0005' },
   },
 ]
