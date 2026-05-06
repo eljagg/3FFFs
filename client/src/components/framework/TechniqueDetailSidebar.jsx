@@ -2,6 +2,21 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../../lib/api.js'
+// v25.7.0.9: process-animation engine + scene data per technique.
+// ANIMATION_MAP routes a technique ID to its scene data; if absent,
+// the sidebar falls back to the placeholder. New animations are added
+// by importing a new scene-data file and adding a map entry — no
+// changes to the engine itself.
+import ProcessAnimation from './animations/ProcessAnimation.jsx'
+import ivrDiscoveryScenes from './animations/ivrDiscoveryScenes.js'
+
+const ANIMATION_MAP = {
+  'F1073': ivrDiscoveryScenes,  // IVR Discovery (TA0043 Reconnaissance)
+  // Future:
+  //   'F1008.001': eDeliverySilentAlarmScenes,
+  //   'F1097': cardBypassScenes (3DS Bypass)
+  //   ...
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    TechniqueDetailSidebar — v25.7.0.8
@@ -157,11 +172,16 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
             transition={{ type: 'tween', duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
             style={{
               position: 'fixed', top: 0, right: 0, bottom: 0,
-              width: '100%', maxWidth: 600,
+              // v25.7.0.9: wider (800) when an animation is registered
+              // for this technique. Animation needs three-zone room.
+              // Narrower (600) for techniques without animation.
+              width: '100%',
+              maxWidth: technique && ANIMATION_MAP[technique.id] ? 820 : 600,
               background: 'var(--paper)', zIndex: 201,
               display: 'flex', flexDirection: 'column',
               boxShadow: '-8px 0 30px rgba(0,0,0,0.15)',
               borderLeft: '1px solid var(--rule)',
+              transition: 'max-width 200ms',
             }}
             role="dialog"
             aria-label={technique ? `Technique: ${technique.name}` : 'Technique'}
@@ -285,16 +305,25 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                     </Placeholder>
                   </Section>
 
-                  {/* Animation — placeholder for v25.7.0.9+ */}
+                  {/* v25.7.0.9: Animation — renders ProcessAnimation if
+                      scene data is registered for this technique in
+                      ANIMATION_MAP. Otherwise falls back to placeholder.
+                      First animation shipped: F1073 IVR Discovery. */}
                   <Section title="How this technique works">
-                    <Placeholder>
-                      Interactive animation showing the technique's
-                      step-by-step process is planned for v25.7.0.9+. Top
-                      candidates: F1008.001 e-delivery silent-alarm,
-                      F1067 OSINT data sweep, 3DS Bypass MITM flow,
-                      sub-threshold structuring threshold-relative
-                      pattern, mule-pipeline cross-bank funds flow.
-                    </Placeholder>
+                    {ANIMATION_MAP[technique.id] ? (
+                      <ProcessAnimation scenes={ANIMATION_MAP[technique.id]} />
+                    ) : (
+                      <Placeholder>
+                        Interactive animation showing the technique's
+                        step-by-step process is planned for v25.7.0.9+.
+                        First animation shipped: F1073 IVR Discovery
+                        (TA0043 Reconnaissance). Future candidates:
+                        F1008.001 e-delivery silent-alarm, F1067 OSINT
+                        data sweep, F1097 3DS Bypass MITM flow,
+                        sub-threshold structuring threshold-relative
+                        pattern, mule-pipeline cross-bank funds flow.
+                      </Placeholder>
+                    )}
                   </Section>
 
                   {/* Demonstrated in — scenarios */}
