@@ -116,33 +116,47 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
   // changes still take effect via the useEffect dependency.
   const effectiveTechId = internalTechId || techniqueId
 
-  // v25.7.0.9.2: collapsibility state for Description and "How this
-  // technique works" (animation) sections. Both default to expanded
-  // — first-time users need to read the description, see the animation.
-  // Collapse state RESETS on technique change (each new technique
-  // starts fresh).
+  // v25.7.0.9.2 + v25.7.0.9.3: collapsibility state.
   //
-  // animationPauseSignal: a counter that bumps every time the
-  // animation section is collapsed. ProcessAnimation watches this
-  // prop and pauses when it changes. Counter (vs. boolean) so that
-  // re-collapsing re-triggers the pause if user expanded → played →
-  // collapsed again.
-  const [descriptionExpanded, setDescriptionExpanded] = useState(true)
-  const [animationExpanded, setAnimationExpanded] = useState(true)
+  // v25.7.0.9.2 made Description and Animation collapsible.
+  // v25.7.0.9.3 extends to all content-heavy sections:
+  //   description, mitigation, animation, crossrefs, subtechniques, siblings
+  // (Roles stays always-visible — it's a chip row, no value in collapsing.)
+  //
+  // collapsedSections: Set of section IDs that are currently COLLAPSED.
+  // Membership = collapsed; absence = expanded. Default state is empty
+  // Set (everything expanded). State resets on technique change.
+  //
+  // Why Set instead of object-of-booleans: easier to add/remove section
+  // IDs, easier to reason about ("is X collapsed? collapsedSections.has(X)").
+  // Re-renders are still O(1) on toggle.
+  //
+  // animationPauseSignal: a counter that bumps every time the animation
+  // section is collapsed. ProcessAnimation watches this prop and pauses
+  // when it changes. Counter (vs. boolean) so re-collapsing re-pauses
+  // even if user expanded → played → collapsed again.
+  const [collapsedSections, setCollapsedSections] = useState(() => new Set())
   const [animationPauseSignal, setAnimationPauseSignal] = useState(0)
 
-  function toggleDescription() {
-    setDescriptionExpanded(e => !e)
+  function isExpanded(sectionId) {
+    return !collapsedSections.has(sectionId)
   }
-  function toggleAnimation() {
-    setAnimationExpanded(prev => {
-      // If we're collapsing, bump the pause signal so the animation
-      // pauses. If expanding, no signal — animation stays paused at
-      // whatever stage it was on; user clicks Play to resume.
-      if (prev) {
-        setAnimationPauseSignal(c => c + 1)
+
+  function toggleSection(sectionId) {
+    setCollapsedSections(prev => {
+      const next = new Set(prev)
+      const wasCollapsed = next.has(sectionId)
+      if (wasCollapsed) {
+        next.delete(sectionId) // expand
+      } else {
+        next.add(sectionId)    // collapse
+        // Special case: if the animation section is collapsing, bump
+        // the pause signal so the animation pauses
+        if (sectionId === 'animation') {
+          setAnimationPauseSignal(c => c + 1)
+        }
       }
-      return !prev
+      return next
     })
   }
 
@@ -179,17 +193,16 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
   // for a new technique from the grid)
   useEffect(() => {
     setInternalTechId(null)
-    // v25.7.0.9.2: reset collapse state — each new technique starts
-    // fresh with description + animation expanded
-    setDescriptionExpanded(true)
-    setAnimationExpanded(true)
+    // v25.7.0.9.2 + v25.7.0.9.3: reset all collapse state — each new
+    // technique starts fresh with every section expanded
+    setCollapsedSections(new Set())
   }, [techniqueId])
 
-  // v25.7.0.9.2: also reset collapse state when user navigates
-  // laterally within the sidebar (sibling/parent/child link click).
+  // v25.7.0.9.2 + v25.7.0.9.3: also reset collapse state when user
+  // navigates laterally within the sidebar (sibling/parent/child link
+  // click). Each navigation = fresh start.
   useEffect(() => {
-    setDescriptionExpanded(true)
-    setAnimationExpanded(true)
+    setCollapsedSections(new Set())
   }, [internalTechId])
 
   function navigateInternal(newId) {
@@ -333,13 +346,14 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
               {!loading && technique && (
                 <>
                   {/* Description — v25.7.0.9.2: collapsible. Default
-                      expanded; user can collapse once read. */}
+                      expanded; user can collapse once read.
+                      v25.7.0.9.3: uses Set-based collapse state. */}
                   {technique.description && (
                     <Section
                       title="Description"
                       collapsible
-                      expanded={descriptionExpanded}
-                      onToggleExpand={toggleDescription}
+                      expanded={isExpanded('description')}
+                      onToggleExpand={() => toggleSection('description')}
                     >
                       <p style={proseStyle}>{technique.description}</p>
                     </Section>
@@ -350,8 +364,14 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                     <RoleChips roles={technique.roles} />
                   </Section>
 
-                  {/* Mitigation guidance — placeholder for v25.7.0.8 */}
-                  <Section title="Mitigation guidance">
+                  {/* Mitigation guidance — placeholder for v25.7.0.8.
+                      v25.7.0.9.3: collapsible. */}
+                  <Section
+                    title="Mitigation guidance"
+                    collapsible
+                    expanded={isExpanded('mitigation')}
+                    onToggleExpand={() => toggleSection('mitigation')}
+                  >
                     <Placeholder>
                       Per-role mitigation guidance — what each role should
                       look for, ask, or do when this technique is suspected
@@ -367,12 +387,14 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                       First animation shipped: F1073 IVR Discovery.
                       v25.7.0.9.2: collapsible. When collapsed, animation
                       auto-pauses (via externalPauseSignal counter) but
-                      retains its current stage. User clicks Play to resume. */}
+                      retains its current stage. User clicks Play to resume.
+                      v25.7.0.9.3: uses Set-based collapse state; pause
+                      side-effect handled inside toggleSection. */}
                   <Section
                     title="How this technique works"
                     collapsible
-                    expanded={animationExpanded}
-                    onToggleExpand={toggleAnimation}
+                    expanded={isExpanded('animation')}
+                    onToggleExpand={() => toggleSection('animation')}
                   >
                     {ANIMATION_MAP[technique.id] ? (
                       <ProcessAnimation
@@ -393,9 +415,14 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                     )}
                   </Section>
 
-                  {/* Demonstrated in — scenarios */}
+                  {/* Demonstrated in — scenarios. v25.7.0.9.3: collapsible. */}
                   {crossRefs.scenarios.length > 0 && (
-                    <Section title={`Demonstrated in ${crossRefs.scenarios.length} ${crossRefs.scenarios.length === 1 ? 'scenario' : 'scenarios'}`}>
+                    <Section
+                      title={`Demonstrated in ${crossRefs.scenarios.length} ${crossRefs.scenarios.length === 1 ? 'scenario' : 'scenarios'}`}
+                      collapsible
+                      expanded={isExpanded('scenarios')}
+                      onToggleExpand={() => toggleSection('scenarios')}
+                    >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {crossRefs.scenarios.map(s => (
                           <CrossRefRow
@@ -410,9 +437,14 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                     </Section>
                   )}
 
-                  {/* Demonstrated in — storyboard beats */}
+                  {/* Demonstrated in — storyboard beats. v25.7.0.9.3: collapsible. */}
                   {crossRefs.beats.length > 0 && (
-                    <Section title={`Featured in ${crossRefs.beats.length} storyboard ${crossRefs.beats.length === 1 ? 'beat' : 'beats'}`}>
+                    <Section
+                      title={`Featured in ${crossRefs.beats.length} storyboard ${crossRefs.beats.length === 1 ? 'beat' : 'beats'}`}
+                      collapsible
+                      expanded={isExpanded('beats')}
+                      onToggleExpand={() => toggleSection('beats')}
+                    >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {crossRefs.beats.map(b => (
                           <BeatRow
@@ -429,7 +461,12 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                   )}
 
                   {crossRefs.scenarios.length === 0 && crossRefs.beats.length === 0 && (
-                    <Section title="Cross-references">
+                    <Section
+                      title="Cross-references"
+                      collapsible
+                      expanded={isExpanded('crossrefs-empty')}
+                      onToggleExpand={() => toggleSection('crossrefs-empty')}
+                    >
                       <Placeholder>
                         This technique isn't currently demonstrated in any
                         authored scenario or storyboard beat. Scenario
@@ -439,9 +476,14 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                     </Section>
                   )}
 
-                  {/* Sub-techniques (if parent) */}
+                  {/* Sub-techniques (if parent). v25.7.0.9.3: collapsible. */}
                   {technique.children && technique.children.length > 0 && (
-                    <Section title={`${technique.children.length} sub-${technique.children.length === 1 ? 'technique' : 'techniques'}`}>
+                    <Section
+                      title={`${technique.children.length} sub-${technique.children.length === 1 ? 'technique' : 'techniques'}`}
+                      collapsible
+                      expanded={isExpanded('subtechniques')}
+                      onToggleExpand={() => toggleSection('subtechniques')}
+                    >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {technique.children.map(c => (
                           <button
@@ -464,9 +506,14 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                     </Section>
                   )}
 
-                  {/* Siblings (if sub-technique) */}
+                  {/* Siblings (if sub-technique). v25.7.0.9.3: collapsible. */}
                   {technique.siblings && technique.siblings.length > 0 && (
-                    <Section title="Sibling sub-techniques">
+                    <Section
+                      title="Sibling sub-techniques"
+                      collapsible
+                      expanded={isExpanded('siblings')}
+                      onToggleExpand={() => toggleSection('siblings')}
+                    >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {technique.siblings.map(s => (
                           <button
