@@ -63,6 +63,7 @@ export default function Coverage() {
 
   return (
     <Page
+      wide
       eyebrow="My Coverage"
       title="Your F3 mastery map."
       lede="Every cell is a technique from the MITRE Fight Fraud Framework. As you complete scenarios, cells turn green."

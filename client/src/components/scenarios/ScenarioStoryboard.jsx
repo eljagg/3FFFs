@@ -12,6 +12,10 @@ import { api } from '../../lib/api.js'
      defaultScenarioId — initial scenario ID to load (default 'SC007')
      compact            — if true, renders without internal padding (the
                           host page provides the surrounding chrome)
+     hidePicker         — if true, the scenario picker tabs are not
+                          rendered. Use when embedded on a page that's
+                          already scoped to a specific scenario, so the
+                          picker would be redundant noise. (v25.7.0.6)
 
    Pedagogical insight (OBS-027):
      The storyboard exists to bind technique IDs to scenario beats so that
@@ -31,7 +35,7 @@ import { api } from '../../lib/api.js'
    informational, signaling that more scenarios are coming.
    ───────────────────────────────────────────────────────────────────── */
 
-export default function ScenarioStoryboard({ defaultScenarioId = 'SC007' }) {
+export default function ScenarioStoryboard({ defaultScenarioId = 'SC007', hidePicker = false }) {
   const [scenarioList, setScenarioList] = useState([])
   const [scenarioListError, setScenarioListError] = useState(null)
   const [selectedId, setSelectedId] = useState(defaultScenarioId)
@@ -734,7 +738,7 @@ export default function ScenarioStoryboard({ defaultScenarioId = 'SC007' }) {
 
   return (
     <div style={styles.wrap}>
-      <ScenarioTabs />
+      {!hidePicker && <ScenarioTabs />}
 
       {scenarioError && (
         <div style={{

@@ -12,6 +12,11 @@ import MitreTechniqueSidebar from '../components/scenario/MitreTechniqueSidebar.
 import FrameworkPhaseSidebar from '../components/scenario/FrameworkPhaseSidebar.jsx'
 // v25.7.1: post-completion retrieval-practice modal (testing effect)
 import RetrievalPractice from '../components/scenario/RetrievalPractice.jsx'
+// v25.7.0.6: storyboard view of the scenario, embedded as a collapsible
+// section above the decision walkthrough. Only rendered for scenarios
+// that have authored beats. Picker is hidden — the section is already
+// scoped to the current scenario.
+import ScenarioStoryboard from '../components/scenarios/ScenarioStoryboard.jsx'
 
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' }
 
@@ -75,6 +80,29 @@ export default function Scenario() {
   // attempt stays in the graph (server records each attempt as a separate
   // edge with attempt:N).
   const [tryAgainOffered, setTryAgainOffered] = useState({})
+
+  // v25.7.0.6: storyboard view of THIS scenario, available as a collapsible
+  // section above the decision walkthrough. `hasStoryboardBeats` is null
+  // until we've checked the API; once known, becomes true (storyboard
+  // available, render the toggle) or false (no beats authored, suppress
+  // the toggle entirely).
+  const [storyboardExpanded, setStoryboardExpanded] = useState(false)
+  const [hasStoryboardBeats, setHasStoryboardBeats] = useState(null)
+
+  useEffect(() => {
+    if (!id) return
+    api.getStoryboardScenarios()
+      .then(d => {
+        const found = (d.scenarios || []).find(s => s.id === id)
+        setHasStoryboardBeats(!!(found && found.hasBeats))
+      })
+      .catch(() => {
+        // Silent fall-back — decision walkthrough still works without
+        // storyboard. Storyboard endpoints might not be deployed in
+        // every environment.
+        setHasStoryboardBeats(false)
+      })
+  }, [id])
 
   useEffect(() => {
     api.listScenarios().then(r => setAllScenarios(r.scenarios || [])).catch(() => {})
@@ -247,7 +275,7 @@ export default function Scenario() {
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 28px 80px' }}>
+    <div style={{ maxWidth: 1500, margin: '0 auto', padding: '32px 28px 80px' }}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <ScenarioNav
           scenario={scenario}
@@ -391,6 +419,87 @@ export default function Scenario() {
       </motion.div>
 
       <ScenarioArt scenarioId={scenario.id} />
+
+      {/* v25.7.0.6: Read-the-case-file storyboard. Collapsible section
+          appears only for scenarios that have authored beats (currently
+          SC007). Default state: collapsed — first-time users land on the
+          decision walkthrough they came here for. Expanding gives them
+          the day-by-day timeline narrative as a complement to the quiz. */}
+      {hasStoryboardBeats && (
+        <div style={{
+          marginBottom: 32,
+          borderTop: '1px solid var(--rule)',
+          borderBottom: '1px solid var(--rule)',
+        }}>
+          <button
+            onClick={() => setStoryboardExpanded(s => !s)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+              width: '100%',
+              padding: '20px 0',
+              cursor: 'pointer',
+              background: 'transparent',
+              border: 'none',
+              textAlign: 'left',
+              color: 'inherit',
+              font: 'inherit',
+              transition: 'background 200ms',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <div style={{ flex: 1 }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                color: 'var(--accent)',
+                fontWeight: 600,
+                marginBottom: 6,
+              }}>
+                Read the case file
+              </div>
+              <div style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 20,
+                fontWeight: 500,
+                letterSpacing: '-0.01em',
+                lineHeight: 1.2,
+                marginBottom: 4,
+                color: 'var(--ink)',
+              }}>
+                Day-by-day timeline of this scenario
+              </div>
+              <div style={{
+                fontSize: 14,
+                color: 'var(--ink-soft)',
+                lineHeight: 1.5,
+              }}>
+                A narrative complement to the decision walkthrough below.
+                Each beat is a technique used at a specific moment, with
+                the context that gives it meaning.
+              </div>
+            </div>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 22,
+              color: 'var(--ink-faint)',
+              transform: storyboardExpanded ? 'rotate(90deg)' : 'none',
+              transition: 'transform 200ms',
+              flexShrink: 0,
+              paddingTop: 4,
+            }}>→</span>
+          </button>
+          {storyboardExpanded && (
+            <div style={{ paddingTop: 8, paddingBottom: 32 }}>
+              <ScenarioStoryboard defaultScenarioId={id} hidePicker />
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ marginBottom: 32 }}>
         <AttackPath

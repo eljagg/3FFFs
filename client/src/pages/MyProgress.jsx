@@ -79,7 +79,7 @@ export default function MyProgress({ userIdOverride = null, viewerMode = 'self' 
   if (!data)   return <div style={{ padding: 40 }}>No progress data found.</div>
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 80px' }}>
+    <div style={{ maxWidth: 1500, margin: '0 auto', padding: '32px 24px 80px' }}>
       <Header
         user={data.user}
         viewerMode={viewerMode}

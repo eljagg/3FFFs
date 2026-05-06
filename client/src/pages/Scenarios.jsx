@@ -5,6 +5,10 @@ import { motion } from 'framer-motion'
 import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
 import { useUser, ROLES } from '../lib/user.jsx'
+// v25.7.0.6: storyboard view (Design C, ported from F3 Framework integration
+// in v25.7.0.5). Available as a toggle on the Scenarios page when at least
+// one scenario has authored beats. Defaults to the existing card gallery.
+import ScenarioStoryboard from '../components/scenarios/ScenarioStoryboard.jsx'
 
 const NAMESPACE = 'https://3fffs.app'
 
@@ -47,6 +51,14 @@ export default function Scenarios() {
   const [error, setError]         = useState(null)
   const [filterMeta, setFilterMeta] = useState({})  // v25.3.1: server-returned filter context
 
+  // v25.7.0.6: storyboard view toggle. Default 'cards' preserves existing
+  // gallery UX. 'storyboard' renders the Design C scenario timeline view
+  // for whichever scenario the user picks inside ScenarioStoryboard.
+  // The toggle is only RENDERED if at least one scenario has authored
+  // beats — otherwise there's nothing to switch to.
+  const [view, setView] = useState('cards')
+  const [hasAuthoredStoryboard, setHasAuthoredStoryboard] = useState(false)
+
   useEffect(() => {
     setLoading(true)
     api.listScenarios(role, simulateRole)
@@ -63,6 +75,23 @@ export default function Scenarios() {
       .finally(() => setLoading(false))
   }, [role, simulateRole])
 
+  // v25.7.0.6: cheap one-shot fetch of the storyboard scenario list to
+  // determine whether to render the view toggle at all. If the API call
+  // fails (e.g. the storyboard endpoints aren't yet deployed in this
+  // environment), silently fall back to cards-only — the page still
+  // works without the toggle.
+  useEffect(() => {
+    api.getStoryboardScenarios()
+      .then(d => {
+        const authored = (d.scenarios || []).filter(s => s.hasBeats)
+        setHasAuthoredStoryboard(authored.length > 0)
+      })
+      .catch(() => {
+        // Silent fail — cards view still works without storyboard
+        setHasAuthoredStoryboard(false)
+      })
+  }, [])
+
   const { completedCount, totalCount, completedPct } = useMemo(() => {
     const completed = scenarios.filter(s => s.completed).length
     const total = scenarios.length
@@ -78,6 +107,7 @@ export default function Scenarios() {
 
   return (
     <Page
+      wide
       eyebrow="Scenarios"
       title="Walk through the attacks."
       lede="Each scenario is a real attack pattern drawn from the F3 framework. You'll navigate the attacker's path stage by stage, spot the signals, and pick the right controls."
@@ -91,7 +121,58 @@ export default function Scenarios() {
         scenarioCount={totalCount}
       />
 
-      {/* Progress summary — always visible, no trip to Home needed */}
+      {/* v25.7.0.6: view toggle (cards ↔ storyboard). Only rendered when
+          at least one scenario has authored beats. Same visual pattern as
+          a segmented control: two pills inside a paper-hi container. */}
+      {hasAuthoredStoryboard && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 16,
+          marginBottom: 24, flexWrap: 'wrap',
+        }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            letterSpacing: '0.14em', textTransform: 'uppercase',
+            color: 'var(--ink-faint)',
+          }}>
+            View
+          </div>
+          <div style={{
+            display: 'flex', gap: 4,
+            background: 'var(--paper-hi)',
+            border: '1px solid var(--rule)',
+            borderRadius: 6,
+            padding: 4,
+          }}>
+            <ViewPill active={view === 'cards'} onClick={() => setView('cards')}>
+              Cards
+            </ViewPill>
+            <ViewPill active={view === 'storyboard'} onClick={() => setView('storyboard')}>
+              Storyboard
+            </ViewPill>
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            color: 'var(--ink-faint)',
+            fontStyle: 'italic',
+          }}>
+            {view === 'cards'
+              ? 'Browse and pick a scenario to walk through.'
+              : 'Read the day-by-day timeline of an authored case.'}
+          </div>
+        </div>
+      )}
+
+      {/* Storyboard view — renders the Design C component. Self-contained:
+          its own picker, summary card, timeline, detail panel. */}
+      {view === 'storyboard' && hasAuthoredStoryboard && (
+        <ScenarioStoryboard defaultScenarioId="SC007" />
+      )}
+
+      {/* Cards view — the original gallery (preserved unchanged). Wrapped
+          in a fragment that renders only when view==='cards' so toggling
+          doesn't unmount/remount the storyboard's internal state. */}
+      {view === 'cards' && (
+        <>
       {totalCount > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
@@ -157,7 +238,44 @@ export default function Scenarios() {
           No scenarios match your role yet. Check back soon.
         </div>
       )}
+        </>
+      )}
     </Page>
+  )
+}
+
+/**
+ * v25.7.0.6 — ViewPill
+ *
+ * Segmented-control pill button for the cards/storyboard view toggle.
+ * Active variant uses the accent fill + paper text (same pattern as the
+ * scenario picker tabs in ScenarioStoryboard, kept consistent).
+ */
+function ViewPill({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '8px 16px',
+        background: active ? 'var(--accent)' : 'transparent',
+        border: 'none',
+        color: active ? 'var(--paper)' : 'var(--ink-soft)',
+        fontFamily: 'var(--font-body)',
+        fontSize: 13,
+        fontWeight: active ? 600 : 500,
+        cursor: 'pointer',
+        borderRadius: 4,
+        transition: 'all 150ms',
+      }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.color = 'var(--ink)'
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.color = 'var(--ink-soft)'
+      }}
+    >
+      {children}
+    </button>
   )
 }
 

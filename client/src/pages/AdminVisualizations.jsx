@@ -46,6 +46,7 @@ export default function AdminVisualizations() {
 
   return (
     <Page
+      wide
       eyebrow="Admin · Internal"
       title="Visualization registry"
       lede={`${vizList.length} visualization${vizList.length === 1 ? '' : 's'} registered. Click into any to preview against the live graph. Role override per-viz lets you check audience gating without changing your global role.`}

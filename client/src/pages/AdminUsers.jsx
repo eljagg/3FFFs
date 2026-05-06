@@ -58,6 +58,7 @@ export default function AdminUsers() {
 
   return (
     <Page
+      wide
       eyebrow="Admin"
       title="Users & invites"
       lede="Manage who has access to 3fffs. All domain-allowlisted users appear here automatically. Use the Invites tab to grant access to reviewers or partners whose email domain isn't on the allowlist."

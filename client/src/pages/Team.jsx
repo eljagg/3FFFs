@@ -106,6 +106,7 @@ export default function Team() {
 
   return (
     <Page
+      wide
       eyebrow="Team"
       title="How your team is doing."
       lede="See who's active, where your coverage gaps are, and who may need a nudge toward a specific tactic."

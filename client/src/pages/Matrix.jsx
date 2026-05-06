@@ -236,6 +236,7 @@ export default function Matrix() {
     <>
       <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
       <Page
+        wide
         eyebrow="F3 Matrix"
         title="The full framework at a glance."
         lede="All 7 F3 tactics and 126 techniques, loaded from MITRE's authoritative export. Click any cell to explore. Search to filter."
