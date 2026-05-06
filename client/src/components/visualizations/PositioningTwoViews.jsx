@@ -558,14 +558,13 @@ function Pill({ kind, children }) {
  * Styles object — centralized so the JSX above stays readable.
  * ───────────────────────────────────────────────────────────────────────── */
 const S = {
-  // v25.7.0.4.2: stage no longer has rounded corners / outer border
-  // because the component now renders full-bleed (edge to viewport
-  // edge) inside the Framework page. Rounded corners floating at the
-  // viewport edge look broken. Top + bottom hairlines mark the
-  // visualization's boundary against surrounding page content.
+  // v25.7.0.4.5: stage has its outer border + radius restored, since
+  // the visualization now renders at page-content-width inside the
+  // Framework page (not full viewport bleed). Rounded corners look
+  // correct at this width.
   stage: {
-    borderTop: '1px solid var(--rule)',
-    borderBottom: '1px solid var(--rule)',
+    border: '1px solid var(--rule)',
+    borderRadius: 'var(--radius-lg, 10px)',
     overflow: 'hidden',
     background: BANK.paper,
   },

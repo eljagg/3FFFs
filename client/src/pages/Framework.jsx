@@ -200,49 +200,33 @@ export default function Framework() {
       border: '1px solid var(--rule)',
       borderRadius: 'var(--radius-lg)',
     },
-    // v25.7.0.4.4: wide visualizations container — FULL-BLEED edge-to-edge.
-    // Uses position+transform instead of margin math. This is more
-    // reliable across nested-padding scenarios — the element is positioned
-    // at exactly 50% of its parent's width, then translated back by 50% of
-    // its own width (which is 100vw). End result: element occupies the
-    // viewport width, regardless of parent's padding/margin chain.
+    // v25.7.0.4.5: wide visualizations container — fills the PAGE
+    // CONTENT width (the "OM avatar alignment line"), not the full
+    // viewport. The Page wrapper already constrains content to 1100px
+    // max with auto centering. We just need this container to fill
+    // that width and NOT be subject to tacticBody's nested 84/40 padding.
     //
-    // Why this approach over `calc(50% - 50vw)`: the calc-based approach
-    // requires the parent chain to have ZERO padding between the bleed
-    // element and the centered max-width container. Even one level of
-    // nested padding throws off the math by exactly that amount, and
-    // debugging it is annoying.
-    //
-    // The Page wrapper's outer div has overflow-x:hidden so the 100vw
-    // width doesn't trigger horizontal scrollbars on browsers where
-    // the viewport math includes scrollbar width.
+    // Achieved by rendering this element as a SIBLING of tacticBody
+    // (inside the Page wrapper directly). No margin tricks, no
+    // transforms, no bleed.
     tacticBodyWideViz: {
-      position: 'relative',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: '100vw',
-      maxWidth: '100vw',
+      width: '100%',
       display: 'flex',
       flexDirection: 'column',
       gap: 24,
       marginTop: 0,
       marginBottom: 0,
     },
-    // The wide-viz card itself has no outer chrome (no border / radius)
-    // because edge-to-edge cards with rounded corners look broken at
-    // the viewport edge. The visualization component owns its own
-    // container styling.
+    // The wide-viz card itself — no outer chrome (no border/radius)
+    // because the visualization component owns its own container styling
+    // (top + bottom hairlines, full background).
     wideVizCard: {
       background: 'var(--paper)',
     },
-    // The header for a wide viz lives INSIDE the card but is constrained
-    // back to the page max-width so titles align with the rest of the
-    // page content above. Without this, the title would float at the
-    // viewport edge.
+    // Header for a wide viz — simple padding since the card already
+    // fills the page content width (no nested re-centering needed).
     wideVizHeader: {
-      maxWidth: 1100,
-      margin: '0 auto',
-      padding: '20px 28px 14px',
+      padding: '20px 0 14px',
       borderBottom: '1px solid var(--rule)',
       marginBottom: 16,
     },
