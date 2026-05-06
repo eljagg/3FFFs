@@ -30,10 +30,15 @@ const router = Router()
 // Mirrors STORYBOARD_STUBS in seed/data/scenario-beats.js. Hardcoded
 // here to avoid requiring a graph round-trip just to render disabled
 // tabs. When a stub graduates to authored, remove its entry here.
+//
+// v25.7.0.6.1 — bumped planned releases by one. v25.7.0.6 ended up
+// shipping system-wide layout work + storyboard integration, NOT the
+// SC008 beats originally planned for that slot. Each subsequent
+// scenario shifted one release later.
 const STUBS = [
-  { id: 'SC008', name: 'ATM Skimming',  plannedRelease: 'v25.7.0.6' },
-  { id: 'SC011', name: 'Romance Scam',  plannedRelease: 'v25.7.0.7' },
-  { id: 'SC013', name: 'Wire Fraud',    plannedRelease: 'v25.7.0.8' },
+  { id: 'SC008', name: 'ATM Skimming',  plannedRelease: 'v25.7.0.7' },
+  { id: 'SC011', name: 'Romance Scam',  plannedRelease: 'v25.7.0.8' },
+  { id: 'SC013', name: 'Wire Fraud',    plannedRelease: 'v25.7.0.9' },
 ]
 
 function safeParse(json, fallback) {

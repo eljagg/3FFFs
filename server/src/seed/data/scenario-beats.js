@@ -176,18 +176,18 @@ export const SCENARIO_BEATS = {
   ],
 
   /* ────────────────────────────────────────────────────────────────────
-   * SC008 — ATM Skimming (stub for v25.7.0.6)
+   * SC008 — ATM Skimming (stub for v25.7.0.7)
    * ──────────────────────────────────────────────────────────────────── */
-  // Beats not yet authored — will be populated in v25.7.0.6 from the
+  // Beats not yet authored — will be populated in v25.7.0.7 from the
   // existing SC008 stages + Caribbean ATM-skim retros sourced via
   // advisor recruitment.
 
   /* ────────────────────────────────────────────────────────────────────
-   * SC011 — Romance Scam (stub for v25.7.0.7)
+   * SC011 — Romance Scam (stub for v25.7.0.8)
    * ──────────────────────────────────────────────────────────────────── */
 
   /* ────────────────────────────────────────────────────────────────────
-   * SC013 — Wire Fraud (stub for v25.7.0.8)
+   * SC013 — Wire Fraud (stub for v25.7.0.9)
    * ──────────────────────────────────────────────────────────────────── */
 }
 
@@ -198,11 +198,16 @@ export const SCENARIO_BEATS = {
  * The display content (id, name, plannedRelease) is what shows in the
  * disabled picker tab. Once the beats are authored for that scenario,
  * its entry moves out of STUBS and into SCENARIO_BEATS keyed by ID.
+ *
+ * v25.7.0.6.1 — bumped planned releases by one. v25.7.0.6 ended up
+ * shipping the system-wide layout + storyboard integration work, NOT
+ * SC008 beats. Each subsequent scenario is now one release later than
+ * originally planned.
  */
 export const STORYBOARD_STUBS = [
-  { id: 'SC008', name: 'ATM Skimming',  plannedRelease: 'v25.7.0.6' },
-  { id: 'SC011', name: 'Romance Scam',  plannedRelease: 'v25.7.0.7' },
-  { id: 'SC013', name: 'Wire Fraud',    plannedRelease: 'v25.7.0.8' },
+  { id: 'SC008', name: 'ATM Skimming',  plannedRelease: 'v25.7.0.7' },
+  { id: 'SC011', name: 'Romance Scam',  plannedRelease: 'v25.7.0.8' },
+  { id: 'SC013', name: 'Wire Fraud',    plannedRelease: 'v25.7.0.9' },
 ]
 
 /**
