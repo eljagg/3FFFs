@@ -3,6 +3,11 @@ import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
 import { useUser } from '../lib/user.jsx'
 import { VisualizationRenderer } from '../components/visualizations/index.js'
+// v25.7.0.5: Scenario storyboard view (Design C). Renders as a collapsible
+// section between the search results and the tactic list. Page-level peer
+// of the tactics list, NOT a per-tactic visualization — scenarios cross
+// multiple tactics so they don't fit under any one tactic's section.
+import ScenarioStoryboard from '../components/scenarios/ScenarioStoryboard.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    Executive takeaways — one per F3 tactic, keyed by the real F3 tactic ID.
@@ -89,6 +94,12 @@ export default function Framework() {
       return next
     })
   }
+
+  // v25.7.0.5: scenario storyboard section is collapsed by default. The
+  // storyboard is a peer of the tactic list — page-level scenario index,
+  // not nested inside a tactic. Toggle is independent of all other
+  // collapse state.
+  const [storyboardExpanded, setStoryboardExpanded] = useState(false)
 
   useEffect(() => {
     api.getTactics()
@@ -444,6 +455,66 @@ export default function Framework() {
       fontSize: 13, color: 'var(--ink-faint)',
       fontStyle: 'italic', padding: '12px 0',
     },
+
+    // v25.7.0.5: Scenario storyboard section — page-level collapse,
+    // rendered between search results and the tactic list. Toggle styling
+    // mirrors the per-tactic visualization toggle but slightly more
+    // prominent because it's a page-level peer of the tactic list.
+    storyboardSection: {
+      marginBottom: 32,
+      borderTop:    '1px solid var(--rule)',
+      borderBottom: '1px solid var(--rule)',
+    },
+    storyboardToggle: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      width: '100%',
+      padding: '24px 0 22px',
+      cursor: 'pointer',
+      background: 'transparent',
+      border: 'none',
+      transition: 'background 200ms',
+      textAlign: 'left',
+      color: 'inherit',
+      font: 'inherit',
+    },
+    storyboardToggleEyebrow: {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 11,
+      letterSpacing: '0.18em',
+      textTransform: 'uppercase',
+      color: 'var(--accent)',
+      fontWeight: 600,
+      marginBottom: 6,
+    },
+    storyboardToggleTitle: {
+      fontFamily: 'var(--font-display)',
+      fontSize: 22,
+      fontWeight: 500,
+      letterSpacing: '-0.01em',
+      lineHeight: 1.2,
+      marginBottom: 6,
+      color: 'var(--ink)',
+    },
+    storyboardToggleSubtitle: {
+      fontSize: 14,
+      color: 'var(--ink-soft)',
+      lineHeight: 1.55,
+      maxWidth: 880,
+    },
+    storyboardToggleChevron: {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 22,
+      color: 'var(--ink-faint)',
+      transition: 'transform 200ms',
+      flexShrink: 0,
+      paddingTop: 4,
+    },
+    storyboardBody: {
+      paddingTop: 8,
+      paddingBottom: 32,
+    },
   }
 
   if (loading) return <Page><div style={{ padding: 40, color: 'var(--ink-faint)' }}>Loading framework…</div></Page>
@@ -488,6 +559,35 @@ export default function Framework() {
           )}
         </div>
       )}
+
+      {/* v25.7.0.5: Scenario storyboard (Design C) — collapsed by default.
+          Renders the scenario index (SC007 fully authored, SC008/SC011/SC013
+          stubs visible in the picker). Click the heading to expand. */}
+      <div style={styles.storyboardSection}>
+        <button
+          onClick={() => setStoryboardExpanded(s => !s)}
+          style={styles.storyboardToggle}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+        >
+          <div style={{ flex: 1, textAlign: 'left' }}>
+            <div style={styles.storyboardToggleEyebrow}>Scenarios</div>
+            <div style={styles.storyboardToggleTitle}>How techniques actually play out</div>
+            <div style={styles.storyboardToggleSubtitle}>
+              Walk through real-world fraud scenarios beat-by-beat. Each beat is a technique used at a specific moment, with the narrative that gives it meaning.
+            </div>
+          </div>
+          <span style={{
+            ...styles.storyboardToggleChevron,
+            transform: storyboardExpanded ? 'rotate(90deg)' : 'none',
+          }}>→</span>
+        </button>
+        {storyboardExpanded && (
+          <div style={styles.storyboardBody}>
+            <ScenarioStoryboard defaultScenarioId="SC007" />
+          </div>
+        )}
+      </div>
 
       <div style={styles.tacticList}>
         {tactics.map((t) => {

@@ -89,6 +89,12 @@ export const api = {
     return request(`/api/scenarios${qs ? `?${qs}` : ''}`)
   },
   getScenario:     (id)      => request(`/api/scenarios/${id}`),
+
+  // v25.7.0.5: F3 Framework scenario storyboard (Design C). Public endpoints,
+  // no auth required — same access pattern as getTactics().
+  getStoryboardScenarios: ()   => request('/api/storyboard/scenarios'),
+  getStoryboardScenario:  (id) => request(`/api/storyboard/scenarios/${encodeURIComponent(id)}`),
+
   getScenarioPath: (id)      => request(`/api/scenarios/${id}/path`),
   submitStage:     (id, b)   => request(`/api/scenarios/${id}/submit`, { method: 'POST', body: JSON.stringify(b) }),
   completeScenario:(id)      => request(`/api/scenarios/${id}/complete`, { method: 'POST' }),

@@ -6,6 +6,9 @@ import framework from './routes/framework.js'
 import frameworks from './routes/frameworks.js'
 import mitre from './routes/mitre.js'
 import frameworkPhases from './routes/framework-phases.js'
+// v25.7.0.5: F3 Framework scenario storyboard (Design C). Public reference
+// content like the rest of the framework module; same access pattern.
+import storyboard from './routes/storyboard.js'
 import banks from './routes/banks.js'
 import authCheck from './routes/auth-check.js'
 import scenarios from './routes/scenarios.js'
@@ -50,6 +53,8 @@ app.use('/api/mitre', mitre)
 // v25.6.1: CBEST FrameworkPhase reference module (ISS-013). Same access
 // pattern — public reference content, no user data.
 app.use('/api/framework-phases', frameworkPhases)
+// v25.7.0.5: scenario storyboard read endpoints — public reference data.
+app.use('/api/storyboard', storyboard)
 // v25.7.0.2 (ISS-023): public read endpoints for visualizations — same
 // access pattern as /api/framework and /api/mitre. The telemetry POST is
 // mounted separately below the auth wall.
