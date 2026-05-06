@@ -174,6 +174,22 @@ export default function Framework() {
       color: 'var(--ink-faint)',
       transition: 'transform var(--dur) ease',
     },
+    // v25.7.0.4.7: header section uses a two-column grid for
+    // description (left) + executive takeaway (right). Both columns
+    // get equal width because both are short prose blocks of similar
+    // length. Replaces the previous tacticBodyTwoCol pattern (text
+    // left, viz right) which created dead-space when the text was
+    // shorter than the viz.
+    tacticHeaderTwoCol: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+      gap: 32,
+      alignItems: 'start',
+    },
+    tacticHeaderCol: {
+      minWidth: 0,
+    },
+
     tacticBody: {
       paddingTop: 16, paddingLeft: 84, paddingRight: 40, paddingBottom: 8,
     },
@@ -451,20 +467,26 @@ export default function Framework() {
                 )
                 const hasViz = visibleViz.length > 0
 
+                // v25.7.0.4.7: split into separate description + takeaway
+                // blocks so they can render side-by-side in the top section.
+                // Previously they stacked vertically in a single column.
+                const descriptionBlock = t.description ? (
+                  <p style={styles.description}>{t.description}</p>
+                ) : null
+
+                const takeawayBlock = takeaway ? (
+                  <div style={styles.takeaway}>
+                    <div style={styles.takeawayLabel}>Executive takeaway</div>
+                    <div style={styles.takeawayText}>{takeaway}</div>
+                  </div>
+                ) : null
+
+                // Kept for fallback paths (no viz / hidden viz) that still
+                // want the original single-block body structure.
                 const textBodyLede = (
                   <>
-                    {/* MITRE's own description — pulled from the F3 Excel */}
-                    {t.description && (
-                      <p style={styles.description}>{t.description}</p>
-                    )}
-
-                    {/* Hand-authored banker-focused interpretation */}
-                    {takeaway && (
-                      <div style={styles.takeaway}>
-                        <div style={styles.takeawayLabel}>Executive takeaway</div>
-                        <div style={styles.takeawayText}>{takeaway}</div>
-                      </div>
-                    )}
+                    {descriptionBlock}
+                    {takeawayBlock}
                   </>
                 )
 
@@ -528,30 +550,55 @@ export default function Framework() {
                 if (!hasViz) {
                   // v25.7.0.2.2: when a tactic has visualizations attached
                   // but NONE target the current role, render a small
-                  // affordance card on the right. This makes the OBS-018
-                  // four-lens asymmetry legible to the user (otherwise
-                  // tellers viewing TA0043 see exactly what they saw
-                  // pre-spike, with no signal that anything changed).
+                  // affordance card on the right.
                   const hiddenViz = allVizForTactic.filter(v =>
                     v.roles && v.roles.length > 0 && !v.roles.includes(effectiveRole)
                   )
 
                   if (hiddenViz.length === 0) {
-                    // No viz attached at all — original single-column layout
+                    // No viz attached at all — universal layout but with
+                    // just the header section (description + takeaway) and
+                    // techniques. No visualizations between.
                     return (
-                      <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
-                        {textBody}
-                      </div>
+                      <>
+                        <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
+                          {(descriptionBlock || takeawayBlock) ? (
+                            <div style={styles.tacticHeaderTwoCol}>
+                              <div style={styles.tacticHeaderCol}>
+                                {descriptionBlock}
+                              </div>
+                              <div style={styles.tacticHeaderCol}>
+                                {takeawayBlock}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                        <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', paddingTop: 24 }}>
+                          {techniquesBlock}
+                        </div>
+                      </>
                     )
                   }
 
-                  // Viz exists for OTHER roles — show affordance on right
+                  // Viz exists for OTHER roles — header section, then a
+                  // full-width "available for other roles" affordance card,
+                  // then techniques. Same shape as a tactic with viz, but
+                  // the viz slot is replaced by the affordance.
                   return (
-                    <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
-                      <div style={styles.tacticBodyTwoCol}>
-                        <div style={styles.tacticBodyTextCol}>
-                          {textBody}
-                        </div>
+                    <>
+                      <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
+                        {(descriptionBlock || takeawayBlock) ? (
+                          <div style={styles.tacticHeaderTwoCol}>
+                            <div style={styles.tacticHeaderCol}>
+                              {descriptionBlock}
+                            </div>
+                            <div style={styles.tacticHeaderCol}>
+                              {takeawayBlock}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div style={styles.tacticBodyWideViz}>
                         <div style={styles.tacticBodyOtherRoleCard}>
                           <div style={styles.otherRoleCardLabel}>
                             Interactive content for other roles
@@ -562,8 +609,7 @@ export default function Framework() {
                               <div style={styles.otherRoleCardBody}>
                                 This tactic has interactive content tuned for other roles.
                                 A version tuned for your role is on the v25.7.1 backlog —
-                                until then, the technique cards on the left cover the
-                                reference content.
+                                until then, the technique cards below cover the reference content.
                               </div>
                               <div style={styles.otherRoleCardChips}>
                                 <span style={styles.otherRoleCardChipsLabel}>Available for:</span>
@@ -577,62 +623,57 @@ export default function Framework() {
                           ))}
                         </div>
                       </div>
-                    </div>
+                      <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', paddingTop: 24 }}>
+                        {techniquesBlock}
+                      </div>
+                    </>
                   )
                 }
 
-                // v25.7.0.4.1: split visualizations into "compact" (fit in
-                // the right-column viz panel) and "wide" (need full body
-                // width because they contain their own internal multi-column
-                // layout). Two Views in particular has a banking-dashboard
-                // / threat-panel split inside it that doesn't survive being
-                // squeezed into half a page. Compact viz render in the
-                // right column as before; wide ones render full-width below
-                // the two-column body.
-                const WIDE_VIZ_KINDS = new Set(['two_views'])
-                const compactViz = visibleViz.filter(v => !WIDE_VIZ_KINDS.has(v.kind))
-                const wideViz    = visibleViz.filter(v =>  WIDE_VIZ_KINDS.has(v.kind))
-
-                // v25.7.0.4.3: ordered sections with proper full-bleed
-                //   1. Two-column inside tacticBody: lede+takeaway (left) | compact viz (right)
-                //   2. Wide viz — SIBLING of tacticBody, escapes the
-                //      tacticBody padding so calc(50% - 50vw) only has to
-                //      escape the page wrapper's max-width centering
-                //   3. Techniques — back inside tacticBody for normal padding
-                const hasCompact = compactViz.length > 0
+                // v25.7.0.4.7: UNIFIED LAYOUT for all F3 tactics.
+                //
+                // Replaces the previous compact/wide visualization split.
+                // Every tactic now has the same structure:
+                //
+                //   1. Header section — description (left col) + executive
+                //      takeaway (right col), side-by-side
+                //   2. Each visualization renders full-width below the header,
+                //      stacked vertically with consistent spacing
+                //   3. Techniques list — collapsed by default
+                //
+                // Why unified: previously some viz were "compact" (kill_chain_grid,
+                // positioning_timeline) and squeezed into a half-width column
+                // alongside the text, while others were "wide" (two_views) and
+                // ran full width. This created visual inconsistency between
+                // tactics. Now every viz gets the full page-content-width to
+                // breathe — kill chain grid at 1500px just has more horizontal
+                // room than at 750px, which is strictly better.
+                //
+                // Side benefit: removes the dead-space problem where the left
+                // text column would be ~5 lines tall while the right viz column
+                // was ~30 lines tall, leaving 25 lines of empty dark space on
+                // the left.
                 return (
                   <>
+                    {/* Header section — description + takeaway side-by-side */}
                     <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
-                      {hasCompact ? (
-                        <div style={styles.tacticBodyTwoCol}>
-                          <div style={styles.tacticBodyTextCol}>
-                            {textBodyLede}
+                      {(descriptionBlock || takeawayBlock) ? (
+                        <div style={styles.tacticHeaderTwoCol}>
+                          <div style={styles.tacticHeaderCol}>
+                            {descriptionBlock}
                           </div>
-                          <div style={styles.tacticBodyVizCol}>
-                            {compactViz.map(viz => (
-                              <div key={viz.id}>
-                                <div style={styles.tacticBodyVizHeader}>
-                                  <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
-                                  {viz.subtitle && (
-                                    <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
-                                  )}
-                                </div>
-                                <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
-                              </div>
-                            ))}
+                          <div style={styles.tacticHeaderCol}>
+                            {takeawayBlock}
                           </div>
                         </div>
-                      ) : (
-                        <div>{textBodyLede}</div>
-                      )}
+                      ) : null}
                     </div>
 
-                    {/* Wide viz — sibling of tacticBody so it can break out
-                        cleanly to viewport edges. Background extends to
-                        viewport edges via the bleed. */}
-                    {wideViz.length > 0 && (
+                    {/* All visualizations — render full page-content-width,
+                        stacked vertically. No more compact/wide distinction. */}
+                    {visibleViz.length > 0 && (
                       <div style={styles.tacticBodyWideViz}>
-                        {wideViz.map(viz => (
+                        {visibleViz.map(viz => (
                           <div key={viz.id} style={styles.wideVizCard}>
                             <div style={styles.wideVizHeader}>
                               <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
@@ -646,8 +687,7 @@ export default function Framework() {
                       </div>
                     )}
 
-                    {/* Techniques after wide viz — back inside tacticBody
-                        for consistent left padding with the rest of page. */}
+                    {/* Techniques — collapsed by default, click to expand. */}
                     <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', paddingTop: 24 }}>
                       {techniquesBlock}
                     </div>
