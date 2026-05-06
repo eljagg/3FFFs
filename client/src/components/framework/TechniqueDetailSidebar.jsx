@@ -116,6 +116,36 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
   // changes still take effect via the useEffect dependency.
   const effectiveTechId = internalTechId || techniqueId
 
+  // v25.7.0.9.2: collapsibility state for Description and "How this
+  // technique works" (animation) sections. Both default to expanded
+  // — first-time users need to read the description, see the animation.
+  // Collapse state RESETS on technique change (each new technique
+  // starts fresh).
+  //
+  // animationPauseSignal: a counter that bumps every time the
+  // animation section is collapsed. ProcessAnimation watches this
+  // prop and pauses when it changes. Counter (vs. boolean) so that
+  // re-collapsing re-triggers the pause if user expanded → played →
+  // collapsed again.
+  const [descriptionExpanded, setDescriptionExpanded] = useState(true)
+  const [animationExpanded, setAnimationExpanded] = useState(true)
+  const [animationPauseSignal, setAnimationPauseSignal] = useState(0)
+
+  function toggleDescription() {
+    setDescriptionExpanded(e => !e)
+  }
+  function toggleAnimation() {
+    setAnimationExpanded(prev => {
+      // If we're collapsing, bump the pause signal so the animation
+      // pauses. If expanding, no signal — animation stays paused at
+      // whatever stage it was on; user clicks Play to resume.
+      if (prev) {
+        setAnimationPauseSignal(c => c + 1)
+      }
+      return !prev
+    })
+  }
+
   // Re-fetch when internal nav happens
   useEffect(() => {
     if (!open || !internalTechId) return
@@ -149,7 +179,18 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
   // for a new technique from the grid)
   useEffect(() => {
     setInternalTechId(null)
+    // v25.7.0.9.2: reset collapse state — each new technique starts
+    // fresh with description + animation expanded
+    setDescriptionExpanded(true)
+    setAnimationExpanded(true)
   }, [techniqueId])
+
+  // v25.7.0.9.2: also reset collapse state when user navigates
+  // laterally within the sidebar (sibling/parent/child link click).
+  useEffect(() => {
+    setDescriptionExpanded(true)
+    setAnimationExpanded(true)
+  }, [internalTechId])
 
   function navigateInternal(newId) {
     setInternalTechId(newId)
@@ -291,9 +332,15 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
 
               {!loading && technique && (
                 <>
-                  {/* Description */}
+                  {/* Description — v25.7.0.9.2: collapsible. Default
+                      expanded; user can collapse once read. */}
                   {technique.description && (
-                    <Section title="Description">
+                    <Section
+                      title="Description"
+                      collapsible
+                      expanded={descriptionExpanded}
+                      onToggleExpand={toggleDescription}
+                    >
                       <p style={proseStyle}>{technique.description}</p>
                     </Section>
                   )}
@@ -317,10 +364,21 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                   {/* v25.7.0.9: Animation — renders ProcessAnimation if
                       scene data is registered for this technique in
                       ANIMATION_MAP. Otherwise falls back to placeholder.
-                      First animation shipped: F1073 IVR Discovery. */}
-                  <Section title="How this technique works">
+                      First animation shipped: F1073 IVR Discovery.
+                      v25.7.0.9.2: collapsible. When collapsed, animation
+                      auto-pauses (via externalPauseSignal counter) but
+                      retains its current stage. User clicks Play to resume. */}
+                  <Section
+                    title="How this technique works"
+                    collapsible
+                    expanded={animationExpanded}
+                    onToggleExpand={toggleAnimation}
+                  >
                     {ANIMATION_MAP[technique.id] ? (
-                      <ProcessAnimation scenes={ANIMATION_MAP[technique.id]} />
+                      <ProcessAnimation
+                        scenes={ANIMATION_MAP[technique.id]}
+                        externalPauseSignal={animationPauseSignal}
+                      />
                     ) : (
                       <Placeholder>
                         Interactive animation showing the technique's
@@ -441,19 +499,65 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
 }
 
 /* ─── Section wrapper ─────────────────────────────────────────────── */
-function Section({ title, children }) {
+/* ─── Section wrapper ─────────────────────────────────────────────
+   v25.7.0.9.2: now supports optional collapsibility. Non-collapsible
+   call sites (Roles, Mitigation, Cross-refs, Sub-techniques, Siblings)
+   pass no `collapsible` prop — behavior unchanged. Description and
+   "How this technique works" pass `collapsible` + controlled state
+   so the sidebar can drive collapse/expand and pause animation when
+   the animation section collapses.
+   ──────────────────────────────────────────────────────────────── */
+function Section({ title, children, collapsible, expanded, onToggleExpand }) {
+  const headerCommonStyle = {
+    fontFamily: 'var(--font-mono)', fontSize: 11.5,
+    letterSpacing: '0.16em', textTransform: 'uppercase',
+    color: 'var(--ink-faint)', fontWeight: 600,
+    marginBottom: 10,
+    paddingBottom: 6, borderBottom: '1px solid var(--rule)',
+  }
+  if (!collapsible) {
+    return (
+      <div style={{ marginBottom: 24 }}>
+        <div style={headerCommonStyle}>{title}</div>
+        {children}
+      </div>
+    )
+  }
+  // Collapsible variant
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{
-        fontFamily: 'var(--font-mono)', fontSize: 11.5,
-        letterSpacing: '0.16em', textTransform: 'uppercase',
-        color: 'var(--ink-faint)', fontWeight: 600,
-        marginBottom: 10,
-        paddingBottom: 6, borderBottom: '1px solid var(--rule)',
-      }}>
-        {title}
-      </div>
-      {children}
+      <button
+        type="button"
+        onClick={onToggleExpand}
+        style={{
+          ...headerCommonStyle,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          borderBottom: '1px solid var(--rule)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          cursor: 'pointer',
+          textAlign: 'left',
+          padding: 0,
+          paddingBottom: 6,
+          // header text inherits from common style
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-faint)' }}
+        aria-expanded={expanded}
+      >
+        <span>{title}</span>
+        <span style={{
+          fontSize: 13,
+          transition: 'transform 200ms',
+          transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+          display: 'inline-block',
+          marginLeft: 8,
+        }}>→</span>
+      </button>
+      {expanded && children}
     </div>
   )
 }

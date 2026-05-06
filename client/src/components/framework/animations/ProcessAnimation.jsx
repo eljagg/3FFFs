@@ -43,13 +43,22 @@ import { motion, AnimatePresence } from 'framer-motion'
      state of the defender zone + show "would have flagged X of Y" callouts
    ───────────────────────────────────────────────────────────────────── */
 
-export default function ProcessAnimation({ scenes }) {
+export default function ProcessAnimation({ scenes, externalPauseSignal }) {
   const { meta, stages, controls, signals, ivrMenu } = scenes
 
   const [currentStageIdx, setCurrentStageIdx] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeControls, setActiveControls] = useState(() => new Set())
+
+  // v25.7.0.9.2: external pause hook. When the parent (sidebar) collapses
+  // the animation section, it bumps externalPauseSignal — animation pauses
+  // but retains its current stage. User clicks Play to resume.
+  useEffect(() => {
+    if (externalPauseSignal != null) {
+      setIsPlaying(false)
+    }
+  }, [externalPauseSignal])
 
   const currentStage = stages[currentStageIdx]
   const isAtEnd = currentStageIdx >= stages.length - 1
@@ -514,14 +523,14 @@ function ZoneFrame({ title, children, isFocal, accentColor, cream }) {
     <motion.div
       animate={{
         // v25.7.0.9.1: brighter focal-zone signaling per testing feedback.
-        // Was: 1.005 scale + 2px border + faint shadow.
-        // Now: 1.015 scale + 3px border + outer glow + inner accent tint.
-        // Still subtle (no strobe, no jarring bounce) but actually visible.
-        scale: isFocal ? 1.015 : 1,
+        // v25.7.0.9.2: slightly brighter still per follow-up — scale 1.020,
+        // outer glow opacity 60 (was 40). Border stays 3px, pulse stays
+        // at 1.6s, ACTIVE label stays. Subtle bump, not a redesign.
+        scale: isFocal ? 1.020 : 1,
         boxShadow: isFocal
           ? `0 0 0 3px ${accentColor},
-             0 0 24px ${accentColor}40,
-             inset 0 0 0 1px ${accentColor}33,
+             0 0 28px ${accentColor}60,
+             inset 0 0 0 1px ${accentColor}40,
              0 4px 16px rgba(0, 0, 0, 0.2)`
           : '0 0 0 1px var(--rule)',
       }}
