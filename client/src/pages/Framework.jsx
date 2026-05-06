@@ -162,6 +162,10 @@ export default function Framework() {
     },
     tacticBody: {
       paddingTop: 16, paddingLeft: 84, paddingRight: 40, paddingBottom: 8,
+      // v25.7.0.4.2: contain the full-bleed wide-viz section so its
+      // 100vw width doesn't trigger a horizontal scrollbar from the
+      // browser's scrollbar-inclusive viewport math.
+      overflowX: 'hidden',
     },
     // v25.7.0.2 (ISS-023): when a tactic has a visible visualization, the
     // body becomes a two-column grid: textual content on the left, viz on
@@ -186,21 +190,51 @@ export default function Framework() {
       border: '1px solid var(--rule)',
       borderRadius: 'var(--radius-lg)',
     },
-    // v25.7.0.4.1: wide visualizations container — renders below the
-    // two-column body, full body width. Used by visualizations whose
-    // own internal layout needs the full horizontal real estate
-    // (e.g. Two Views, with its banking-dashboard / threat-panel split).
+    // v25.7.0.4.2: wide visualizations container — FULL-BLEED edge-to-edge.
+    // Uses the standard CSS trick `margin-left: calc(50% - 50vw)` to break
+    // out of the page's max-width container AND the tactic body's padding.
+    // The element ends up spanning the full viewport width regardless of
+    // how deep in the layout tree it sits.
+    //
+    // Why: Two Views internally has a banking-dashboard + threat-panel
+    // two-column layout that needs ~1100px+ to render comfortably. Even
+    // at the page's max content width (1100px - 56px padding = 1044px)
+    // it was tight. Going edge-to-edge gives the visualization the room
+    // it was designed for and makes it feel like a hero section rather
+    // than a sidebar widget.
     tacticBodyWideViz: {
-      marginTop: 24,
+      marginTop: 28,
+      marginBottom: 8,
+      marginLeft: 'calc(50% - 50vw)',
+      marginRight: 'calc(50% - 50vw)',
+      width: '100vw',
       display: 'flex',
       flexDirection: 'column',
       gap: 24,
     },
+    // The wide-viz card itself has no outer chrome (no border / radius)
+    // because edge-to-edge cards with rounded corners look broken at
+    // the viewport edge. The visualization component owns its own
+    // container styling.
     wideVizCard: {
-      padding: '14px 16px',
       background: 'var(--paper)',
-      border: '1px solid var(--rule)',
-      borderRadius: 'var(--radius-lg)',
+    },
+    // The header for a wide viz lives INSIDE the card but is constrained
+    // back to the page max-width so titles align with the rest of the
+    // page content above. Without this, the title would float at the
+    // viewport edge.
+    wideVizHeader: {
+      maxWidth: 1100,
+      margin: '0 auto',
+      padding: '20px 28px 14px',
+      borderBottom: '1px solid var(--rule)',
+      marginBottom: 16,
+    },
+    // Techniques list rendered AFTER the wide viz, full body width,
+    // re-aligned with the page padding. Resets any margins from the
+    // viz section above.
+    techniquesAfterViz: {
+      marginTop: 28,
     },
     tacticBodyVizHeader: {
       marginBottom: 12, paddingBottom: 10,
@@ -393,7 +427,7 @@ export default function Framework() {
                 )
                 const hasViz = visibleViz.length > 0
 
-                const textBody = (
+                const textBodyLede = (
                   <>
                     {/* MITRE's own description — pulled from the F3 Excel */}
                     {t.description && (
@@ -407,7 +441,11 @@ export default function Framework() {
                         <div style={styles.takeawayText}>{takeaway}</div>
                       </div>
                     )}
+                  </>
+                )
 
+                const techniquesBlock = (
+                  <>
                     {/* All techniques in this tactic */}
                     {Array.isArray(t.techniques) && t.techniques.length > 0 ? (
                       <>
@@ -435,6 +473,15 @@ export default function Framework() {
                         No techniques currently indexed under this tactic.
                       </div>
                     )}
+                  </>
+                )
+
+                // Combined for fallback paths (no viz / hidden viz) that
+                // still want the original single-block body structure.
+                const textBody = (
+                  <>
+                    {textBodyLede}
+                    {techniquesBlock}
                   </>
                 )
 
@@ -506,17 +553,21 @@ export default function Framework() {
                 const compactViz = visibleViz.filter(v => !WIDE_VIZ_KINDS.has(v.kind))
                 const wideViz    = visibleViz.filter(v =>  WIDE_VIZ_KINDS.has(v.kind))
 
-                // Two-column layout — text on left, compact viz panel on right.
-                // If there are no compact viz (only wide ones), drop the right
-                // column entirely — text takes full width above, wide viz
-                // renders full-width below.
+                // v25.7.0.4.2: ordered sections
+                //   1. Two-column: lede+takeaway (left) | compact viz (right)
+                //   2. Wide visualizations — full bleed, breaks out of page container
+                //   3. Techniques list — full width, below wide viz
+                // Why this order: users see the cream Two Views immediately
+                // after reading the description, while context is fresh.
+                // Previously the wide viz lived at the bottom after the
+                // techniques list, making it easy to miss.
                 const hasCompact = compactViz.length > 0
                 return (
                   <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
                     {hasCompact ? (
                       <div style={styles.tacticBodyTwoCol}>
                         <div style={styles.tacticBodyTextCol}>
-                          {textBody}
+                          {textBodyLede}
                         </div>
                         <div style={styles.tacticBodyVizCol}>
                           {compactViz.map(viz => (
@@ -533,17 +584,19 @@ export default function Framework() {
                         </div>
                       </div>
                     ) : (
-                      <div>{textBody}</div>
+                      <div>{textBodyLede}</div>
                     )}
 
-                    {/* v25.7.0.4.1: wide visualizations render full-width
-                        below the two-column body. They get the same header
-                        treatment but unconstrained horizontal space. */}
+                    {/* Wide visualizations — full-bleed, edge-to-edge.
+                        Uses the calc(50% - 50vw) trick to break out of the
+                        page's max-width container and span the viewport.
+                        This makes the cream Two Views feel like a hero
+                        section rather than a sidebar widget. */}
                     {wideViz.length > 0 && (
                       <div style={styles.tacticBodyWideViz}>
                         {wideViz.map(viz => (
                           <div key={viz.id} style={styles.wideVizCard}>
-                            <div style={styles.tacticBodyVizHeader}>
+                            <div style={styles.wideVizHeader}>
                               <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
                               {viz.subtitle && (
                                 <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
@@ -554,6 +607,13 @@ export default function Framework() {
                         ))}
                       </div>
                     )}
+
+                    {/* Techniques list — full width below the wide viz.
+                        Reads as the technical reference following the
+                        narrative content above. */}
+                    <div style={styles.techniquesAfterViz}>
+                      {techniquesBlock}
+                    </div>
                   </div>
                 )
               })()}
