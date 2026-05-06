@@ -64,6 +64,32 @@ export default function Framework() {
     })
   }
 
+  // v25.7.0.4.8: per-visualization expand/collapse state. Set holds the
+  // viz IDs whose state is the OPPOSITE of their default. Defaults are
+  // determined per visualization kind:
+  //   - positioning_timeline, kill_chain_grid → expanded by default
+  //     (these are the primary teaching visualizations for their tactics)
+  //   - two_views → collapsed by default (it's a deep-dive companion;
+  //     the user expands it after engaging with the timeline)
+  // Storing "deviations from default" rather than absolute open/closed
+  // means new visualizations get sensible defaults without backfill.
+  const VIZ_DEFAULTS = { two_views: 'collapsed' } // anything else → 'expanded'
+  const isVizDefaultExpanded = (kind) => VIZ_DEFAULTS[kind] !== 'collapsed'
+  const [vizToggleOverrides, setVizToggleOverrides] = useState(() => new Set())
+  const isVizExpanded = (viz) => {
+    const overridden = vizToggleOverrides.has(viz.id)
+    const defaultExpanded = isVizDefaultExpanded(viz.kind)
+    return overridden ? !defaultExpanded : defaultExpanded
+  }
+  const toggleViz = (vizId) => {
+    setVizToggleOverrides(prev => {
+      const next = new Set(prev)
+      if (next.has(vizId)) next.delete(vizId)
+      else next.add(vizId)
+      return next
+    })
+  }
+
   useEffect(() => {
     api.getTactics()
       .then((d) => setTactics(d.tactics || []))
@@ -251,12 +277,12 @@ export default function Framework() {
       borderBottom: '1px solid var(--rule)',
     },
     tacticBodyVizTitle: {
-      fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 500,
+      fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500,
       color: 'var(--ink)',
       marginBottom: 4,
     },
     tacticBodyVizSubtitle: {
-      fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.5,
+      fontSize: 13, color: 'var(--ink-faint)', lineHeight: 1.5,
     },
     // v25.7.0.2.2 (ISS-023 polish): "interactive content for other roles"
     // affordance card. Appears in the right column when the tactic has
@@ -304,7 +330,7 @@ export default function Framework() {
       color: 'var(--ink-soft)',
     },
     description: {
-      fontSize: 15, color: 'var(--ink-soft)', lineHeight: 1.6,
+      fontSize: 17, color: 'var(--ink-soft)', lineHeight: 1.6,
       marginBottom: 16, maxWidth: 720,
     },
     takeaway: {
@@ -316,10 +342,10 @@ export default function Framework() {
     },
     takeawayLabel: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em',
+      fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em',
       color: 'var(--accent)', marginBottom: 6,
     },
-    takeawayText: { fontSize: 14, lineHeight: 1.55 },
+    takeawayText: { fontSize: 16, lineHeight: 1.55 },
     techSectionLabel: {
       fontFamily: 'var(--font-mono)',
       fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em',
@@ -383,6 +409,36 @@ export default function Framework() {
       fontSize: 14,
       color: 'var(--ink-faint)',
       transition: 'transform 200ms',
+    },
+    // v25.7.0.4.8: per-visualization expand/collapse toggle. The viz
+    // title/subtitle becomes a clickable header that toggles the
+    // visualization body below it. Larger and more prominent than
+    // the techniques toggle because each viz is a major section.
+    vizCollapseToggle: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      width: '100%',
+      padding: '20px 0 14px',
+      cursor: 'pointer',
+      background: 'transparent',
+      borderTop: 'none',
+      borderLeft: 'none',
+      borderRight: 'none',
+      borderBottom: '1px solid var(--rule)',
+      marginBottom: 16,
+      transition: 'background 200ms',
+    },
+    vizCollapseChevron: {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 18,
+      color: 'var(--ink-faint)',
+      transition: 'transform 200ms',
+      flexShrink: 0,
+    },
+    vizCollapseBody: {
+      // Container for the visualization itself once expanded.
+      // No extra padding — the visualization owns its own internal padding.
     },
     emptyTech: {
       fontSize: 13, color: 'var(--ink-faint)',
@@ -670,20 +726,40 @@ export default function Framework() {
                     </div>
 
                     {/* All visualizations — render full page-content-width,
-                        stacked vertically. No more compact/wide distinction. */}
+                        stacked vertically. Each one has its own click-to-
+                        toggle header. Defaults vary by viz kind:
+                        timeline+kill-chain expanded; two-views collapsed. */}
                     {visibleViz.length > 0 && (
                       <div style={styles.tacticBodyWideViz}>
-                        {visibleViz.map(viz => (
-                          <div key={viz.id} style={styles.wideVizCard}>
-                            <div style={styles.wideVizHeader}>
-                              <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
-                              {viz.subtitle && (
-                                <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
+                        {visibleViz.map(viz => {
+                          const expanded = isVizExpanded(viz)
+                          return (
+                            <div key={viz.id} style={styles.wideVizCard}>
+                              <button
+                                onClick={() => toggleViz(viz.id)}
+                                style={styles.vizCollapseToggle}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                              >
+                                <div style={{ flex: 1, textAlign: 'left' }}>
+                                  <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
+                                  {viz.subtitle && (
+                                    <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
+                                  )}
+                                </div>
+                                <span style={{
+                                  ...styles.vizCollapseChevron,
+                                  transform: expanded ? 'rotate(90deg)' : 'none',
+                                }}>→</span>
+                              </button>
+                              {expanded && (
+                                <div style={styles.vizCollapseBody}>
+                                  <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
+                                </div>
                               )}
                             </div>
-                            <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
 
