@@ -162,10 +162,6 @@ export default function Framework() {
     },
     tacticBody: {
       paddingTop: 16, paddingLeft: 84, paddingRight: 40, paddingBottom: 8,
-      // v25.7.0.4.2: contain the full-bleed wide-viz section so its
-      // 100vw width doesn't trigger a horizontal scrollbar from the
-      // browser's scrollbar-inclusive viewport math.
-      overflowX: 'hidden',
     },
     // v25.7.0.2 (ISS-023): when a tactic has a visible visualization, the
     // body becomes a two-column grid: textual content on the left, viz on
@@ -190,21 +186,19 @@ export default function Framework() {
       border: '1px solid var(--rule)',
       borderRadius: 'var(--radius-lg)',
     },
-    // v25.7.0.4.2: wide visualizations container — FULL-BLEED edge-to-edge.
-    // Uses the standard CSS trick `margin-left: calc(50% - 50vw)` to break
-    // out of the page's max-width container AND the tactic body's padding.
-    // The element ends up spanning the full viewport width regardless of
-    // how deep in the layout tree it sits.
+    // v25.7.0.4.3: wide visualizations container — FULL-BLEED edge-to-edge.
+    // This element renders as a SIBLING of tacticBody (not a child) so the
+    // calc(50% - 50vw) math only has to escape the Page wrapper's centered
+    // max-width container, not also the tacticBody's nested padding chain.
+    // The previous v25.7.0.4.2 attempt rendered this inside tacticBody with
+    // overflow:hidden, which clipped the bleed instead of allowing it.
     //
-    // Why: Two Views internally has a banking-dashboard + threat-panel
-    // two-column layout that needs ~1100px+ to render comfortably. Even
-    // at the page's max content width (1100px - 56px padding = 1044px)
-    // it was tight. Going edge-to-edge gives the visualization the room
-    // it was designed for and makes it feel like a hero section rather
-    // than a sidebar widget.
+    // The Page wrapper has overflow-x:hidden on its outer container so the
+    // 100vw width doesn't trigger horizontal scrollbars on browsers where
+    // the viewport math includes scrollbar width.
     tacticBodyWideViz: {
-      marginTop: 28,
-      marginBottom: 8,
+      marginTop: 0,
+      marginBottom: 0,
       marginLeft: 'calc(50% - 50vw)',
       marginRight: 'calc(50% - 50vw)',
       width: '100vw',
@@ -229,12 +223,6 @@ export default function Framework() {
       padding: '20px 28px 14px',
       borderBottom: '1px solid var(--rule)',
       marginBottom: 16,
-    },
-    // Techniques list rendered AFTER the wide viz, full body width,
-    // re-aligned with the page padding. Resets any margins from the
-    // viz section above.
-    techniquesAfterViz: {
-      marginTop: 28,
     },
     tacticBodyVizHeader: {
       marginBottom: 12, paddingBottom: 10,
@@ -317,33 +305,42 @@ export default function Framework() {
     },
 
     techList: {
+      // v25.7.0.4.3: compact dense grid — more columns, less per-card
+      // height. Description hidden by default (visible on hover via the
+      // title attribute). Reduces vertical scrolling significantly:
+      // 25 techniques in ~5 rows instead of ~13.
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-      gap: 10,
-      maxWidth: 900,
+      gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+      gap: 8,
+      maxWidth: 'none',
     },
     tech: {
-      padding: '14px 18px',
+      // v25.7.0.4.3: compact card — minimal padding, two-line content
+      // (ID on first line, name on second), no description.
+      padding: '8px 12px',
       background: 'var(--paper)',
       border: '1px solid var(--rule)',
       borderRadius: 'var(--radius)',
+      cursor: 'help', // hover reveals description via title attribute
+      transition: 'border-color 200ms',
     },
     techId: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 10, color: 'var(--ink-faint)',
-      marginBottom: 4, letterSpacing: '0.06em',
+      fontSize: 9.5, color: 'var(--ink-faint)',
+      marginBottom: 2, letterSpacing: '0.06em',
     },
     techName: {
-      fontFamily: 'var(--font-display)',
-      fontSize: 15, fontWeight: 500, marginBottom: 6,
-    },
-    techDesc: {
-      fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5,
-      // Clamp long technique descriptions so the grid stays scannable —
-      // the full text is visible on hover via the title attribute, and
-      // will appear on a future per-technique detail view.
-      display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical',
+      fontFamily: 'var(--font-body)',
+      fontSize: 13, fontWeight: 500, marginBottom: 0,
+      lineHeight: 1.3,
+      // Clamp very long technique names to 2 lines max
+      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
       overflow: 'hidden',
+    },
+    // techDesc is no longer rendered in the compact view — description
+    // is available on hover via the parent <div title={...}> attribute.
+    techDesc: {
+      display: 'none',
     },
     emptyTech: {
       fontSize: 13, color: 'var(--ink-faint)',
@@ -553,45 +550,43 @@ export default function Framework() {
                 const compactViz = visibleViz.filter(v => !WIDE_VIZ_KINDS.has(v.kind))
                 const wideViz    = visibleViz.filter(v =>  WIDE_VIZ_KINDS.has(v.kind))
 
-                // v25.7.0.4.2: ordered sections
-                //   1. Two-column: lede+takeaway (left) | compact viz (right)
-                //   2. Wide visualizations — full bleed, breaks out of page container
-                //   3. Techniques list — full width, below wide viz
-                // Why this order: users see the cream Two Views immediately
-                // after reading the description, while context is fresh.
-                // Previously the wide viz lived at the bottom after the
-                // techniques list, making it easy to miss.
+                // v25.7.0.4.3: ordered sections with proper full-bleed
+                //   1. Two-column inside tacticBody: lede+takeaway (left) | compact viz (right)
+                //   2. Wide viz — SIBLING of tacticBody, escapes the
+                //      tacticBody padding so calc(50% - 50vw) only has to
+                //      escape the page wrapper's max-width centering
+                //   3. Techniques — back inside tacticBody for normal padding
                 const hasCompact = compactViz.length > 0
                 return (
-                  <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
-                    {hasCompact ? (
-                      <div style={styles.tacticBodyTwoCol}>
-                        <div style={styles.tacticBodyTextCol}>
-                          {textBodyLede}
-                        </div>
-                        <div style={styles.tacticBodyVizCol}>
-                          {compactViz.map(viz => (
-                            <div key={viz.id}>
-                              <div style={styles.tacticBodyVizHeader}>
-                                <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
-                                {viz.subtitle && (
-                                  <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
-                                )}
+                  <>
+                    <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
+                      {hasCompact ? (
+                        <div style={styles.tacticBodyTwoCol}>
+                          <div style={styles.tacticBodyTextCol}>
+                            {textBodyLede}
+                          </div>
+                          <div style={styles.tacticBodyVizCol}>
+                            {compactViz.map(viz => (
+                              <div key={viz.id}>
+                                <div style={styles.tacticBodyVizHeader}>
+                                  <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
+                                  {viz.subtitle && (
+                                    <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
+                                  )}
+                                </div>
+                                <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
                               </div>
-                              <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div>{textBodyLede}</div>
-                    )}
+                      ) : (
+                        <div>{textBodyLede}</div>
+                      )}
+                    </div>
 
-                    {/* Wide visualizations — full-bleed, edge-to-edge.
-                        Uses the calc(50% - 50vw) trick to break out of the
-                        page's max-width container and span the viewport.
-                        This makes the cream Two Views feel like a hero
-                        section rather than a sidebar widget. */}
+                    {/* Wide viz — sibling of tacticBody so it can break out
+                        cleanly to viewport edges. Background extends to
+                        viewport edges via the bleed. */}
                     {wideViz.length > 0 && (
                       <div style={styles.tacticBodyWideViz}>
                         {wideViz.map(viz => (
@@ -608,13 +603,12 @@ export default function Framework() {
                       </div>
                     )}
 
-                    {/* Techniques list — full width below the wide viz.
-                        Reads as the technical reference following the
-                        narrative content above. */}
-                    <div style={styles.techniquesAfterViz}>
+                    {/* Techniques after wide viz — back inside tacticBody
+                        for consistent left padding with the rest of page. */}
+                    <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', paddingTop: 24 }}>
                       {techniquesBlock}
                     </div>
-                  </div>
+                  </>
                 )
               })()}
             </div>
