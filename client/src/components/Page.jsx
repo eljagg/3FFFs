@@ -1,14 +1,12 @@
-export default function Page({ eyebrow, title, lede, children }) {
+export default function Page({ eyebrow, title, lede, children, wide }) {
+  // v25.7.0.4.6: optional `wide` prop bumps the max-width from 1100 to
+  // 1500. Pages that have wide content (data tables, side-by-side
+  // visualizations, full-width dashboards) opt into this; default
+  // editorial/marketing pages keep the 1100 reading-friendly width.
+  const maxWidth = wide ? 1500 : 1100
+
   const styles = {
-    // v25.7.0.4.3: outer container handles overflow-x containment so
-    // full-bleed visualizations (which use calc(50% - 50vw) to escape
-    // the max-width centering) don't trigger a horizontal scrollbar
-    // from the browser's scrollbar-inclusive 100vw math.
-    outer: {
-      overflowX: 'hidden',
-      width: '100%',
-    },
-    wrap: { maxWidth: 1100, margin: '0 auto', padding: '40px 28px 80px' },
+    wrap: { maxWidth, margin: '0 auto', padding: '40px 28px 80px' },
     eyebrow: {
       fontFamily: 'var(--font-mono)',
       fontSize: 11,
@@ -36,13 +34,11 @@ export default function Page({ eyebrow, title, lede, children }) {
   }
 
   return (
-    <div style={styles.outer}>
-      <div style={styles.wrap}>
-        {eyebrow && <div style={styles.eyebrow} className="fade-up">{eyebrow}</div>}
-        {title && <h1 style={styles.title} className="fade-up-1">{title}</h1>}
-        {lede && <p style={styles.lede} className="fade-up-2">{lede}</p>}
-        <div className="fade-up-3">{children}</div>
-      </div>
+    <div style={styles.wrap}>
+      {eyebrow && <div style={styles.eyebrow} className="fade-up">{eyebrow}</div>}
+      {title && <h1 style={styles.title} className="fade-up-1">{title}</h1>}
+      {lede && <p style={styles.lede} className="fade-up-2">{lede}</p>}
+      <div className="fade-up-3">{children}</div>
     </div>
   )
 }

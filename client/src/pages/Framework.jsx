@@ -381,6 +381,7 @@ export default function Framework() {
 
   return (
     <Page
+      wide
       eyebrow="Encyclopedia"
       title="The MITRE F3 framework."
       lede={`Seven tactics covering the full fraud lifecycle, with ${totalTechniques || 'many'} techniques and sub-techniques drawn from real-world incidents. Positioning and Monetization are unique to F3 — they don't exist in ATT&CK.`}
