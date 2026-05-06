@@ -95,6 +95,12 @@ export const api = {
   getStoryboardScenarios: ()   => request('/api/storyboard/scenarios'),
   getStoryboardScenario:  (id) => request(`/api/storyboard/scenarios/${encodeURIComponent(id)}`),
 
+  // v25.7.0.8: techniques grid foundation. Three endpoints powering the
+  // hierarchical, clickable techniques grid + its sidebar detail view.
+  getTechniquesTree:    (tacticId) => request(`/api/framework/tactics/${encodeURIComponent(tacticId)}/techniques-tree`),
+  getTechnique:         (techId)   => request(`/api/framework/techniques/${encodeURIComponent(techId)}`),
+  getTechniqueCrossRefs:(techId)   => request(`/api/framework/techniques/${encodeURIComponent(techId)}/cross-refs`),
+
   getScenarioPath: (id)      => request(`/api/scenarios/${id}/path`),
   submitStage:     (id, b)   => request(`/api/scenarios/${id}/submit`, { method: 'POST', body: JSON.stringify(b) }),
   completeScenario:(id)      => request(`/api/scenarios/${id}/complete`, { method: 'POST' }),

@@ -3,6 +3,10 @@ import cors from 'cors'
 import { verifyConnection, runQuery } from './lib/neo4j.js'
 import { requireAuth, syncUser, getUser } from './lib/auth.js'
 import framework from './routes/framework.js'
+// v25.7.0.8: techniques grid foundation — three new public endpoints
+// for the redesigned hierarchical/clickable techniques grid. Sits
+// alongside the existing /api/framework routes.
+import frameworkTechniques from './routes/framework-techniques.js'
 import frameworks from './routes/frameworks.js'
 import mitre from './routes/mitre.js'
 import frameworkPhases from './routes/framework-phases.js'
@@ -46,6 +50,10 @@ app.get('/health', async (_req, res) => {
 //                   via an `x-invite-secret` header, not a JWT.
 // ----------------------------------------------------------------------------
 app.use('/api/framework', framework)
+// v25.7.0.8: mount techniques-tree / single-technique / cross-refs
+// endpoints under /api/framework — same access pattern as the rest
+// of /api/framework (public reference content, no auth wall).
+app.use('/api/framework', frameworkTechniques)
 app.use('/api/frameworks', frameworks)
 // v25.5: MITRE ATT&CK reference module. Like frameworks/, this is public —
 // reference content only, no user data, no permissions to check.

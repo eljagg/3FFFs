@@ -8,6 +8,12 @@ import { VisualizationRenderer } from '../components/visualizations/index.js'
 // of the tactics list, NOT a per-tactic visualization — scenarios cross
 // multiple tactics so they don't fit under any one tactic's section.
 import ScenarioStoryboard from '../components/scenarios/ScenarioStoryboard.jsx'
+// v25.7.0.8: redesigned techniques grid (two-tier hierarchy + clickable
+// cards + sidebar detail + role gating). Replaces the v25.7.0.4.4 flat
+// grid that lived inline in this file. Sidebar opens at page level when
+// any technique card is clicked.
+import TechniquesTree from '../components/framework/TechniquesTree.jsx'
+import TechniqueDetailSidebar from '../components/framework/TechniqueDetailSidebar.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    Executive takeaways — one per F3 tactic, keyed by the real F3 tactic ID.
@@ -100,6 +106,13 @@ export default function Framework() {
   // not nested inside a tactic. Toggle is independent of all other
   // collapse state.
   const [storyboardExpanded, setStoryboardExpanded] = useState(false)
+
+  // v25.7.0.8: technique detail sidebar state. Page-level so it overlays
+  // the entire page (not nested inside any tactic's expanded section).
+  // Single sidebar, swaps techniqueId when a different technique is clicked.
+  const [techSidebar, setTechSidebar] = useState({ open: false, techniqueId: null })
+  const openTechSidebar = (techId) => setTechSidebar({ open: true, techniqueId: techId })
+  const closeTechSidebar = () => setTechSidebar(s => ({ ...s, open: false }))
 
   useEffect(() => {
     api.getTactics()
@@ -523,6 +536,7 @@ export default function Framework() {
   const uniqueCount = tactics.filter(t => t.uniqueToF3).length
 
   return (
+    <>
     <Page
       wide
       eyebrow="Encyclopedia"
@@ -669,20 +683,18 @@ export default function Framework() {
                           }}>→</span>
                         </button>
                         {expandedTechniques.has(t.id) && (
-                          <div style={styles.techList}>
-                            {t.techniques.map((tech) => (
-                              <div
-                                key={tech.id}
-                                style={styles.tech}
-                                title={tech.description}
-                              >
-                                <div style={styles.techId}>{tech.id}</div>
-                                <div style={styles.techName}>{tech.name}</div>
-                                {tech.description && (
-                                  <div style={styles.techDesc}>{tech.description}</div>
-                                )}
-                              </div>
-                            ))}
+                          // v25.7.0.8: replaces the v25.7.0.4.4 flat grid
+                          // with the hierarchical TechniquesTree component.
+                          // Tree fetches its own data from the new
+                          // /api/framework/tactics/:id/techniques-tree
+                          // endpoint. Card click → opens the page-level
+                          // TechniqueDetailSidebar (state owned by this page).
+                          <div style={{ marginTop: 14 }}>
+                            <TechniquesTree
+                              tacticId={t.id}
+                              role={effectiveRole}
+                              onTechniqueClick={openTechSidebar}
+                            />
                           </div>
                         )}
                       </>
@@ -886,5 +898,16 @@ export default function Framework() {
         </div>
       )}
     </Page>
+
+    {/* v25.7.0.8: page-level technique detail sidebar. Renders as a
+        fixed slide-over when a technique card in any tactic's
+        TechniquesTree is clicked. Single sidebar instance — clicking
+        a different technique swaps content without closing/reopening. */}
+    <TechniqueDetailSidebar
+      open={techSidebar.open}
+      techniqueId={techSidebar.techniqueId}
+      onClose={closeTechSidebar}
+    />
+    </>
   )
 }
