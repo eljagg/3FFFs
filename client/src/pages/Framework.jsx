@@ -50,6 +50,20 @@ export default function Framework() {
   const { effectiveRole } = useUser()
   const [tacticViz, setTacticViz] = useState({})
 
+  // v25.7.0.4.4: collapsed-by-default techniques sections per tactic.
+  // Set holds tactic IDs whose techniques section is EXPANDED. Default
+  // is empty (= all collapsed). Users click the section header to open.
+  // This fixes the long-scroll problem on tactics with 20+ techniques.
+  const [expandedTechniques, setExpandedTechniques] = useState(() => new Set())
+  const toggleTechniques = (tacticId) => {
+    setExpandedTechniques(prev => {
+      const next = new Set(prev)
+      if (next.has(tacticId)) next.delete(tacticId)
+      else next.add(tacticId)
+      return next
+    })
+  }
+
   useEffect(() => {
     api.getTactics()
       .then((d) => setTactics(d.tactics || []))
@@ -186,25 +200,33 @@ export default function Framework() {
       border: '1px solid var(--rule)',
       borderRadius: 'var(--radius-lg)',
     },
-    // v25.7.0.4.3: wide visualizations container — FULL-BLEED edge-to-edge.
-    // This element renders as a SIBLING of tacticBody (not a child) so the
-    // calc(50% - 50vw) math only has to escape the Page wrapper's centered
-    // max-width container, not also the tacticBody's nested padding chain.
-    // The previous v25.7.0.4.2 attempt rendered this inside tacticBody with
-    // overflow:hidden, which clipped the bleed instead of allowing it.
+    // v25.7.0.4.4: wide visualizations container — FULL-BLEED edge-to-edge.
+    // Uses position+transform instead of margin math. This is more
+    // reliable across nested-padding scenarios — the element is positioned
+    // at exactly 50% of its parent's width, then translated back by 50% of
+    // its own width (which is 100vw). End result: element occupies the
+    // viewport width, regardless of parent's padding/margin chain.
     //
-    // The Page wrapper has overflow-x:hidden on its outer container so the
-    // 100vw width doesn't trigger horizontal scrollbars on browsers where
+    // Why this approach over `calc(50% - 50vw)`: the calc-based approach
+    // requires the parent chain to have ZERO padding between the bleed
+    // element and the centered max-width container. Even one level of
+    // nested padding throws off the math by exactly that amount, and
+    // debugging it is annoying.
+    //
+    // The Page wrapper's outer div has overflow-x:hidden so the 100vw
+    // width doesn't trigger horizontal scrollbars on browsers where
     // the viewport math includes scrollbar width.
     tacticBodyWideViz: {
-      marginTop: 0,
-      marginBottom: 0,
-      marginLeft: 'calc(50% - 50vw)',
-      marginRight: 'calc(50% - 50vw)',
+      position: 'relative',
+      left: '50%',
+      transform: 'translateX(-50%)',
       width: '100vw',
+      maxWidth: '100vw',
       display: 'flex',
       flexDirection: 'column',
       gap: 24,
+      marginTop: 0,
+      marginBottom: 0,
     },
     // The wide-viz card itself has no outer chrome (no border / radius)
     // because edge-to-edge cards with rounded corners look broken at
@@ -305,42 +327,62 @@ export default function Framework() {
     },
 
     techList: {
-      // v25.7.0.4.3: compact dense grid — more columns, less per-card
-      // height. Description hidden by default (visible on hover via the
-      // title attribute). Reduces vertical scrolling significantly:
-      // 25 techniques in ~5 rows instead of ~13.
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-      gap: 8,
-      maxWidth: 'none',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+      gap: 10,
+      maxWidth: 900,
     },
     tech: {
-      // v25.7.0.4.3: compact card — minimal padding, two-line content
-      // (ID on first line, name on second), no description.
-      padding: '8px 12px',
+      padding: '14px 18px',
       background: 'var(--paper)',
       border: '1px solid var(--rule)',
       borderRadius: 'var(--radius)',
-      cursor: 'help', // hover reveals description via title attribute
-      transition: 'border-color 200ms',
     },
     techId: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 9.5, color: 'var(--ink-faint)',
-      marginBottom: 2, letterSpacing: '0.06em',
+      fontSize: 10, color: 'var(--ink-faint)',
+      marginBottom: 4, letterSpacing: '0.06em',
     },
     techName: {
-      fontFamily: 'var(--font-body)',
-      fontSize: 13, fontWeight: 500, marginBottom: 0,
-      lineHeight: 1.3,
-      // Clamp very long technique names to 2 lines max
-      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+      fontFamily: 'var(--font-display)',
+      fontSize: 15, fontWeight: 500, marginBottom: 6,
+    },
+    techDesc: {
+      fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5,
+      // Clamp long technique descriptions so the grid stays scannable —
+      // the full text is visible on hover via the title attribute, and
+      // will appear on a future per-technique detail view.
+      display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical',
       overflow: 'hidden',
     },
-    // techDesc is no longer rendered in the compact view — description
-    // is available on hover via the parent <div title={...}> attribute.
-    techDesc: {
-      display: 'none',
+    // v25.7.0.4.4: collapsible techniques section. The label that
+    // says "25 techniques and sub-techniques" becomes a click target
+    // that toggles between expanded (grid visible) and collapsed
+    // (just the label and a chevron). State lives on the tactic
+    // record itself in component state via expandedTechniques set.
+    techCollapseToggle: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      width: '100%',
+      padding: '12px 16px',
+      background: 'var(--paper)',
+      border: '1px solid var(--rule)',
+      borderRadius: 'var(--radius)',
+      cursor: 'pointer',
+      fontFamily: 'var(--font-mono)',
+      fontSize: 11,
+      letterSpacing: '0.14em',
+      textTransform: 'uppercase',
+      color: 'var(--ink-soft)',
+      marginBottom: 12,
+      transition: 'all 200ms',
+    },
+    techCollapseChevron: {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 14,
+      color: 'var(--ink-faint)',
+      transition: 'transform 200ms',
     },
     emptyTech: {
       fontSize: 13, color: 'var(--ink-faint)',
@@ -446,24 +488,40 @@ export default function Framework() {
                     {/* All techniques in this tactic */}
                     {Array.isArray(t.techniques) && t.techniques.length > 0 ? (
                       <>
-                        <div style={styles.techSectionLabel}>
-                          {t.techniques.length} {t.techniques.length === 1 ? 'technique' : 'techniques'} and sub-techniques
-                        </div>
-                        <div style={styles.techList}>
-                          {t.techniques.map((tech) => (
-                            <div
-                              key={tech.id}
-                              style={styles.tech}
-                              title={tech.description}
-                            >
-                              <div style={styles.techId}>{tech.id}</div>
-                              <div style={styles.techName}>{tech.name}</div>
-                              {tech.description && (
-                                <div style={styles.techDesc}>{tech.description}</div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
+                        {/* v25.7.0.4.4: collapsible section header.
+                            Click toggles techniques visibility. Default
+                            collapsed to keep page short. */}
+                        <button
+                          onClick={() => toggleTechniques(t.id)}
+                          style={styles.techCollapseToggle}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--paper)' }}
+                        >
+                          <span>
+                            {t.techniques.length} {t.techniques.length === 1 ? 'technique' : 'techniques'} and sub-techniques
+                          </span>
+                          <span style={{
+                            ...styles.techCollapseChevron,
+                            transform: expandedTechniques.has(t.id) ? 'rotate(90deg)' : 'none',
+                          }}>→</span>
+                        </button>
+                        {expandedTechniques.has(t.id) && (
+                          <div style={styles.techList}>
+                            {t.techniques.map((tech) => (
+                              <div
+                                key={tech.id}
+                                style={styles.tech}
+                                title={tech.description}
+                              >
+                                <div style={styles.techId}>{tech.id}</div>
+                                <div style={styles.techName}>{tech.name}</div>
+                                {tech.description && (
+                                  <div style={styles.techDesc}>{tech.description}</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div style={styles.emptyTech}>
