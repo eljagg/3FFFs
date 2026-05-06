@@ -513,18 +513,74 @@ function ZoneFrame({ title, children, isFocal, accentColor, cream }) {
   return (
     <motion.div
       animate={{
-        scale: isFocal ? 1.005 : 1,
+        // v25.7.0.9.1: brighter focal-zone signaling per testing feedback.
+        // Was: 1.005 scale + 2px border + faint shadow.
+        // Now: 1.015 scale + 3px border + outer glow + inner accent tint.
+        // Still subtle (no strobe, no jarring bounce) but actually visible.
+        scale: isFocal ? 1.015 : 1,
         boxShadow: isFocal
-          ? `0 0 0 2px ${accentColor}, 0 4px 16px rgba(0, 0, 0, 0.15)`
+          ? `0 0 0 3px ${accentColor},
+             0 0 24px ${accentColor}40,
+             inset 0 0 0 1px ${accentColor}33,
+             0 4px 16px rgba(0, 0, 0, 0.2)`
           : '0 0 0 1px var(--rule)',
       }}
       transition={{ duration: 0.3 }}
       style={{
         ...styles.zoneFrame,
         ...(cream ? styles.zoneFrameCream : {}),
+        // Position relative so the ACTIVE badge can absolute-position
+        // inside the zone frame
+        position: 'relative',
       }}
     >
-      <div style={cream ? styles.zoneTitleCream : styles.zoneTitle}>{title}</div>
+      <div style={{
+        ...(cream ? styles.zoneTitleCream : styles.zoneTitle),
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
+      }}>
+        <span>{title}</span>
+        {/* v25.7.0.9.1: ACTIVE indicator — small pulsing dot + label
+            that gives an explicit verbal cue alongside the visual
+            border. Lands better for users whose eyes don't catch
+            subtle border changes. Low-intensity heartbeat per Q-2. */}
+        {isFocal && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.25 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              letterSpacing: '0.18em',
+              fontWeight: 700,
+              color: accentColor,
+            }}
+          >
+            <motion.span
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{
+                duration: 1.6,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: accentColor,
+                display: 'inline-block',
+              }}
+            />
+            <span>ACTIVE</span>
+          </motion.div>
+        )}
+      </div>
       <div style={styles.zoneBody}>{children}</div>
     </motion.div>
   )
@@ -738,9 +794,9 @@ const styles = {
   /* Three-zone canvas */
   canvas: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(180px, 0.85fr) minmax(220px, 1.15fr) minmax(180px, 0.85fr)',
+    gridTemplateColumns: 'minmax(220px, 1fr) minmax(280px, 1.3fr) minmax(220px, 1fr)',
     gap: 10,
-    minHeight: 460,
+    minHeight: 420,
   },
 
   zoneFrame: {
@@ -1201,7 +1257,7 @@ const styles = {
   },
   controlsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
     gap: 8,
   },
   controlToggle: {

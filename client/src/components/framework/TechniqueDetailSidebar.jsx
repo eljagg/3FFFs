@@ -172,11 +172,20 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
             transition={{ type: 'tween', duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
             style={{
               position: 'fixed', top: 0, right: 0, bottom: 0,
-              // v25.7.0.9: wider (800) when an animation is registered
-              // for this technique. Animation needs three-zone room.
-              // Narrower (600) for techniques without animation.
+              // v25.7.0.9.1: animation-equipped techniques get a much
+              // wider panel — min(1400px, 95vw) — because the 3-zone
+              // canvas + detection controls need real estate to avoid
+              // scrolling. The backdrop-dim treatment + close X already
+              // makes this effectively a focused modal.
+              //
+              // Non-animation techniques stay at 600px because text
+              // content reads better in narrower columns (typographic
+              // best practice: 60-80 chars per line). A 1400px-wide
+              // column of placeholder text would be harder to read.
               width: '100%',
-              maxWidth: technique && ANIMATION_MAP[technique.id] ? 820 : 600,
+              maxWidth: technique && ANIMATION_MAP[technique.id]
+                ? 'min(1400px, 95vw)'
+                : 600,
               background: 'var(--paper)', zIndex: 201,
               display: 'flex', flexDirection: 'column',
               boxShadow: '-8px 0 30px rgba(0,0,0,0.15)',
