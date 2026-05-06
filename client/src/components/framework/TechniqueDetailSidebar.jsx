@@ -8,10 +8,12 @@ import { api } from '../../lib/api.js'
 // by importing a new scene-data file and adding a map entry — no
 // changes to the engine itself.
 import ProcessAnimation from './animations/ProcessAnimation.jsx'
-import ivrDiscoveryScenes from './animations/ivrDiscoveryScenes.js'
+import ivrDiscoveryScenes from './animations/ivrDiscoveryScenes.jsx'
+import osintProfilingScenes from './animations/osintProfilingScenes.jsx'
 
 const ANIMATION_MAP = {
-  'F1073': ivrDiscoveryScenes,  // IVR Discovery (TA0043 Reconnaissance)
+  'F1073': ivrDiscoveryScenes,    // IVR Discovery (TA0043 Reconnaissance)
+  'F1067': osintProfilingScenes,  // OSINT Profiling (TA0043 Reconnaissance) — v25.7.0.10
   // Future:
   //   'F1008.001': eDeliverySilentAlarmScenes,
   //   'F1097': cardBypassScenes (3DS Bypass)

@@ -1,8 +1,15 @@
 /**
- * ivrDiscoveryScenes.js — v25.7.0.9
+ * ivrDiscoveryScenes.jsx — v25.7.0.9 (data) → v25.7.0.10 (now declares zones + render fns)
  *
- * Scene data for the F1073 IVR Discovery technique animation.
- * Consumed by the generic ProcessAnimation engine.
+ * Scene data + zone renderers for the F1073 IVR Discovery technique
+ * animation. Consumed by the generic ProcessAnimation engine.
+ *
+ * v25.7.0.10 refactor: this file now also OWNS the IVR-specific zone
+ * rendering. Previously the engine had ZoneAttacker / ZoneIVR /
+ * ZoneDefender hardcoded. Now those renderers live here, and the
+ * engine just orchestrates layout + focal signaling. This keeps the
+ * engine source-agnostic and lets different animations (e.g.
+ * osintProfilingScenes.jsx) render fundamentally different shapes.
  *
  * Design notes:
  * - Each stage describes the FULL state at end-of-stage. The engine
@@ -22,6 +29,11 @@
  *   monitoring view. The defender zone stays largely empty — that
  *   silence IS the lesson.
  */
+
+import { motion, AnimatePresence } from 'framer-motion'
+import { engineStyles, AudioWaveform, CascadeAnimation, SurgeAnimation } from './ProcessAnimation.jsx'
+
+const styles = engineStyles  // Convenience alias for the renderer below
 
 /* ─── Detection controls ──────────────────────────────────────────────
    Four real controls + one naive (project convention from
@@ -434,10 +446,299 @@ export const IVR_DISCOVERY_META = {
   stageCount: 7,
 }
 
+/* ─── Activity-chip label map for the attacker zone ───────────────── */
+const ATTACKER_ACTIVITY_LABEL = {
+  planning:    'PLANNING',
+  probing:     'PROBING THE IVR',
+  mining:      'MINING DATA',
+  industrial:  'INDUSTRIAL SCALE',
+  complete:    'RECON COMPLETE',
+}
+
+/* ─── Zone renderer: Attacker (left zone) ────────────────────────────
+   Receives { state } (the stage's attackerZone object). Returns the
+   INNER content of the zone — engine wraps in <ZoneFrame> for focal
+   signaling.
+   ──────────────────────────────────────────────────────────────────── */
+function renderAttackerZone({ state }) {
+  if (!state) return null
+  return (
+    <>
+      <div style={styles.zoneSection}>
+        <div style={styles.zoneSectionLabel}>Notepad</div>
+        <div style={styles.notepad}>
+          <AnimatePresence mode="popLayout">
+            {state.notepad.map((row) => (
+              <motion.div
+                key={row.label}
+                layout
+                initial={row.justAdded ? { opacity: 0, x: -8 } : false}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: row.justAdded ? 0.15 : 0 }}
+                style={{
+                  ...styles.notepadRow,
+                  ...(row.confirmed ? styles.notepadRowConfirmed : {}),
+                  ...(row.highlight ? styles.notepadRowHighlight : {}),
+                  ...(row.hint ? styles.notepadRowHint : {}),
+                }}
+              >
+                <span style={styles.notepadLabel}>{row.label}</span>
+                <span style={styles.notepadValue}>{row.value}</span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <div style={styles.zoneSection}>
+        <div style={styles.zoneSectionLabel}>Calls placed</div>
+        <motion.div
+          key={state.callsPlaced}
+          initial={{ scale: 1.15, color: 'var(--accent-hi, #d66e5a)' }}
+          animate={{ scale: 1, color: 'var(--ink)' }}
+          transition={{ duration: 0.4 }}
+          style={styles.bigCounter}
+        >
+          {state.callsPlaced}
+        </motion.div>
+        <div style={styles.activityChip}>
+          {ATTACKER_ACTIVITY_LABEL[state.activity] || state.activity}
+        </div>
+      </div>
+
+      {state.cascadeAnimation && <CascadeAnimation />}
+    </>
+  )
+}
+
+/* ─── Zone renderer: IVR (middle zone) ────────────────────────────────
+   Receives { state, scenes }. Pulls the IVR menu from scenes.ivrMenu.
+   ──────────────────────────────────────────────────────────────────── */
+function renderIvrZone({ state, scenes }) {
+  if (!state) return null
+  const ivrMenu = scenes.ivrMenu || []
+  return (
+    <>
+      <div style={styles.zoneSection}>
+        <div style={styles.zoneSectionLabelCream}>Caller ID</div>
+        {state.callerIdShown ? (
+          <motion.div
+            key={state.callerId}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            style={styles.callerIdDisplay}
+          >
+            ☎ {state.callerId}
+          </motion.div>
+        ) : (
+          <div style={styles.callerIdEmpty}>— No active call —</div>
+        )}
+      </div>
+
+      <div style={styles.zoneSection}>
+        <div style={styles.zoneSectionLabelCream}>Menu</div>
+        <div style={styles.menuTree}>
+          {ivrMenu.map(item => {
+            const isActive = state.activeMenuKey === item.key
+            const wasTraversed = (state.pathTraversed || []).includes(item.key)
+            return (
+              <motion.div
+                key={item.key}
+                animate={{
+                  background: isActive
+                    ? 'rgba(107, 142, 90, 0.25)'
+                    : wasTraversed
+                      ? 'rgba(107, 142, 90, 0.10)'
+                      : 'transparent',
+                }}
+                transition={{ duration: 0.3 }}
+                style={{
+                  ...styles.menuItem,
+                  ...(isActive ? styles.menuItemActive : {}),
+                }}
+              >
+                <span style={styles.menuKey}>{item.key}</span>
+                <span style={styles.menuLabel}>{item.label}</span>
+                {item.authRequired && (
+                  <span style={styles.menuAuthChip}>auth</span>
+                )}
+              </motion.div>
+            )
+          })}
+        </div>
+      </div>
+
+      {state.isCallActive && <AudioWaveform />}
+
+      {state.promptText && (
+        <motion.div
+          key={state.promptText}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4 }}
+          style={styles.promptBubble}
+        >
+          <span style={styles.promptBubbleQuote}>"</span>
+          {state.promptText}
+          <span style={styles.promptBubbleQuote}>"</span>
+        </motion.div>
+      )}
+
+      {state.callDurationMs != null && (
+        <div style={styles.callDuration}>
+          Call duration: {(state.callDurationMs / 1000).toFixed(0)}s
+        </div>
+      )}
+
+      {state.surgeAnimation && <SurgeAnimation />}
+    </>
+  )
+}
+
+/* ─── Zone renderer: Defender (right zone) ────────────────────────────
+   Receives { state, revealedSignals, activeControls, controlById }.
+   ──────────────────────────────────────────────────────────────────── */
+function renderDefenderZone({ state, revealedSignals, activeControls }) {
+  if (!state) return null
+  return (
+    <>
+      <div style={styles.zoneSection}>
+        <div style={styles.zoneSectionLabel}>Today</div>
+        <div style={styles.statRow}>
+          <span style={styles.statLabel}>Calls received</span>
+          <motion.span
+            key={state.callsToday}
+            initial={{ color: 'var(--accent-hi, #d66e5a)' }}
+            animate={{ color: 'var(--ink)' }}
+            transition={{ duration: 0.5 }}
+            style={styles.statValue}
+          >
+            {state.callsToday}
+          </motion.span>
+        </div>
+        <div style={styles.statRow}>
+          <span style={styles.statLabel}>Unique ANIs</span>
+          <span style={styles.statValue}>{state.uniqueAniToday}</span>
+        </div>
+        {state.avgCallDuration != null && (
+          <div style={styles.statRow}>
+            <span style={styles.statLabel}>Avg call duration</span>
+            <span style={styles.statValue}>
+              {(state.avgCallDuration / 1000).toFixed(0)}s
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div style={styles.zoneSection}>
+        <div style={styles.zoneSectionLabel}>Alerts</div>
+        <motion.div
+          animate={{
+            color: state.alertsToday === 0
+              ? 'var(--ink-faint)'
+              : 'var(--accent-hi, #d66e5a)',
+          }}
+          style={{
+            ...styles.bigCounter,
+            color: state.alertsToday === 0 ? 'var(--ink-faint)' : 'var(--accent-hi, #d66e5a)',
+          }}
+        >
+          {state.alertsToday}
+        </motion.div>
+        {state.alertsToday === 0 && (
+          <div style={styles.silentBadge}>SILENT</div>
+        )}
+      </div>
+
+      <div style={styles.zoneSection}>
+        <div style={styles.zoneSectionLabel}>
+          Hidden signals
+          {revealedSignals.length > 0 && (
+            <span style={styles.signalCount}>
+              {' '}· {revealedSignals.length} surfaced
+            </span>
+          )}
+        </div>
+        <AnimatePresence>
+          {revealedSignals.length === 0 ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={styles.signalsEmpty}
+            >
+              {activeControls.size === 0
+                ? 'Toggle a control below to surface hidden signals.'
+                : 'No signals matching active controls at this stage.'}
+            </motion.div>
+          ) : (
+            revealedSignals.map(s => (
+              <motion.div
+                key={s.id}
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }}
+                transition={{ duration: 0.3 }}
+                style={styles.signalRow}
+              >
+                <div style={styles.signalLabel}>{s.label}</div>
+                <div style={styles.signalDesc}>{s.description}</div>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+
+      {state.finalHeadline && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          style={styles.finalHeadline}
+        >
+          {state.finalHeadline}
+        </motion.div>
+      )}
+    </>
+  )
+}
+
+/* ─── Zones config: tells engine which renderer goes where + how to
+       wrap each in ZoneFrame ───────────────────────────────────────── */
+const IVR_DISCOVERY_ZONES = {
+  left: {
+    title: 'Attacker',
+    accentColor: 'var(--accent)',
+    cream: false,
+    stateKey: 'attackerZone',
+    focalKey: 'attacker',
+    render: renderAttackerZone,
+  },
+  middle: {
+    title: 'IVR System',
+    accentColor: '#6b8e5a',
+    cream: true,
+    stateKey: 'ivrZone',
+    focalKey: 'ivr',
+    render: renderIvrZone,
+  },
+  right: {
+    title: 'Bank fraud monitoring',
+    accentColor: 'var(--warning, #c79a3a)',
+    cream: false,
+    stateKey: 'defenderZone',
+    focalKey: 'defender',
+    render: renderDefenderZone,
+  },
+}
+
 export default {
   meta: IVR_DISCOVERY_META,
   stages: IVR_DISCOVERY_STAGES,
   controls: IVR_DISCOVERY_CONTROLS,
   signals: IVR_DISCOVERY_SIGNALS,
   ivrMenu: IVR_MENU,
+  zones: IVR_DISCOVERY_ZONES,
 }

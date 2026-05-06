@@ -179,24 +179,37 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
         </motion.div>
       </AnimatePresence>
 
-      {/* Three-zone canvas */}
+      {/* Three-zone canvas. v25.7.0.10: zones are now scene-driven —
+          each scene file declares its own zone titles, accent colors,
+          cream flag, and renderer for the per-stage content. The
+          engine just orchestrates layout + focal signaling. */}
       <div style={styles.canvas}>
-        <ZoneAttacker
-          state={currentStage.attackerZone}
-          isFocal={currentStage.focalZone === 'attacker'}
-        />
-        <ZoneIVR
-          state={currentStage.ivrZone}
-          ivrMenu={ivrMenu}
-          isFocal={currentStage.focalZone === 'ivr'}
-        />
-        <ZoneDefender
-          state={currentStage.defenderZone}
-          isFocal={currentStage.focalZone === 'defender'}
-          revealedSignals={revealedSignals}
-          activeControls={activeControls}
-          controlById={controlById}
-        />
+        {['left', 'middle', 'right'].map(zoneKey => {
+          const zoneCfg = scenes.zones?.[zoneKey]
+          if (!zoneCfg) return <div key={zoneKey} />
+          const stateKey = zoneCfg.stateKey  // e.g. 'attackerZone' / 'ivrZone'
+          const state = currentStage[stateKey]
+          // The render function receives state + helpers including the
+          // revealed signals (only relevant for defender-style zones)
+          // and access to scene-level data like ivrMenu.
+          return (
+            <ZoneFrame
+              key={zoneKey}
+              title={zoneCfg.title}
+              isFocal={currentStage.focalZone === zoneCfg.focalKey}
+              accentColor={zoneCfg.accentColor}
+              cream={zoneCfg.cream}
+            >
+              {zoneCfg.render({
+                state,
+                scenes,
+                revealedSignals,
+                activeControls,
+                controlById,
+              })}
+            </ZoneFrame>
+          )
+        })}
       </div>
 
       {/* Playback controls */}
@@ -265,260 +278,19 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
 }
 
 
-/* ─── Subcomponent: Attacker Zone ────────────────────────────────────── */
-function ZoneAttacker({ state, isFocal }) {
-  return (
-    <ZoneFrame title="Attacker" isFocal={isFocal} accentColor="var(--accent)">
-      <div style={styles.zoneSection}>
-        <div style={styles.zoneSectionLabel}>Notepad</div>
-        <div style={styles.notepad}>
-          <AnimatePresence mode="popLayout">
-            {state.notepad.map((row, i) => (
-              <motion.div
-                key={row.label}
-                layout
-                initial={row.justAdded ? { opacity: 0, x: -8 } : false}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: row.justAdded ? 0.15 : 0 }}
-                style={{
-                  ...styles.notepadRow,
-                  ...(row.confirmed ? styles.notepadRowConfirmed : {}),
-                  ...(row.highlight ? styles.notepadRowHighlight : {}),
-                  ...(row.hint ? styles.notepadRowHint : {}),
-                }}
-              >
-                <span style={styles.notepadLabel}>{row.label}</span>
-                <span style={styles.notepadValue}>{row.value}</span>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </div>
+/* v25.7.0.10: ZoneAttacker / ZoneIVR / ZoneDefender removed from
+   engine. Zone rendering is now scene-driven — each scene file
+   declares zones.left/middle/right.render({state, scenes,
+   revealedSignals, activeControls, controlById}) and the engine wraps
+   each in a ZoneFrame for focal signaling. See ivrDiscoveryScenes.js
+   for the IVR Discovery zone renderers; osintProfilingScenes.js for
+   the OSINT Profiling zone renderers. */
 
-      <div style={styles.zoneSection}>
-        <div style={styles.zoneSectionLabel}>Calls placed</div>
-        <motion.div
-          key={state.callsPlaced}
-          initial={{ scale: 1.15, color: 'var(--accent-hi, #d66e5a)' }}
-          animate={{ scale: 1, color: 'var(--ink)' }}
-          transition={{ duration: 0.4 }}
-          style={styles.bigCounter}
-        >
-          {state.callsPlaced}
-        </motion.div>
-        <div style={styles.activityChip}>
-          {ATTACKER_ACTIVITY_LABEL[state.activity] || state.activity}
-        </div>
-      </div>
-
-      {state.cascadeAnimation && <CascadeAnimation />}
-    </ZoneFrame>
-  )
-}
-
-const ATTACKER_ACTIVITY_LABEL = {
-  planning:    'PLANNING',
-  probing:     'PROBING THE IVR',
-  mining:      'MINING DATA',
-  industrial:  'INDUSTRIAL SCALE',
-  complete:    'RECON COMPLETE',
-}
-
-/* ─── Subcomponent: IVR Zone ─────────────────────────────────────────── */
-function ZoneIVR({ state, ivrMenu, isFocal }) {
-  return (
-    <ZoneFrame title="IVR System" isFocal={isFocal} accentColor="#6b8e5a" cream>
-      <div style={styles.zoneSection}>
-        <div style={styles.zoneSectionLabelCream}>Caller ID</div>
-        {state.callerIdShown ? (
-          <motion.div
-            key={state.callerId}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            style={styles.callerIdDisplay}
-          >
-            ☎ {state.callerId}
-          </motion.div>
-        ) : (
-          <div style={styles.callerIdEmpty}>— No active call —</div>
-        )}
-      </div>
-
-      {/* Menu tree */}
-      <div style={styles.zoneSection}>
-        <div style={styles.zoneSectionLabelCream}>Menu</div>
-        <div style={styles.menuTree}>
-          {ivrMenu.map(item => {
-            const isActive = state.activeMenuKey === item.key
-            const wasTraversed = (state.pathTraversed || []).includes(item.key)
-            return (
-              <motion.div
-                key={item.key}
-                animate={{
-                  background: isActive
-                    ? 'rgba(107, 142, 90, 0.25)'
-                    : wasTraversed
-                      ? 'rgba(107, 142, 90, 0.10)'
-                      : 'transparent',
-                }}
-                transition={{ duration: 0.3 }}
-                style={{
-                  ...styles.menuItem,
-                  ...(isActive ? styles.menuItemActive : {}),
-                }}
-              >
-                <span style={styles.menuKey}>{item.key}</span>
-                <span style={styles.menuLabel}>{item.label}</span>
-                {item.authRequired && (
-                  <span style={styles.menuAuthChip}>auth</span>
-                )}
-              </motion.div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Audio waveform — pulses when call is active */}
-      {state.isCallActive && <AudioWaveform />}
-
-      {/* Prompt text */}
-      {state.promptText && (
-        <motion.div
-          key={state.promptText}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4 }}
-          style={styles.promptBubble}
-        >
-          <span style={styles.promptBubbleQuote}>"</span>
-          {state.promptText}
-          <span style={styles.promptBubbleQuote}>"</span>
-        </motion.div>
-      )}
-
-      {/* Call duration */}
-      {state.callDurationMs != null && (
-        <div style={styles.callDuration}>
-          Call duration: {(state.callDurationMs / 1000).toFixed(0)}s
-        </div>
-      )}
-
-      {state.surgeAnimation && <SurgeAnimation />}
-    </ZoneFrame>
-  )
-}
-
-/* ─── Subcomponent: Defender Zone ────────────────────────────────────── */
-function ZoneDefender({ state, isFocal, revealedSignals, activeControls, controlById }) {
-  return (
-    <ZoneFrame title="Bank fraud monitoring" isFocal={isFocal} accentColor="var(--warning, #c79a3a)">
-      <div style={styles.zoneSection}>
-        <div style={styles.zoneSectionLabel}>Today</div>
-        <div style={styles.statRow}>
-          <span style={styles.statLabel}>Calls received</span>
-          <motion.span
-            key={state.callsToday}
-            initial={{ color: 'var(--accent-hi, #d66e5a)' }}
-            animate={{ color: 'var(--ink)' }}
-            transition={{ duration: 0.5 }}
-            style={styles.statValue}
-          >
-            {state.callsToday}
-          </motion.span>
-        </div>
-        <div style={styles.statRow}>
-          <span style={styles.statLabel}>Unique ANIs</span>
-          <span style={styles.statValue}>{state.uniqueAniToday}</span>
-        </div>
-        {state.avgCallDuration != null && (
-          <div style={styles.statRow}>
-            <span style={styles.statLabel}>Avg call duration</span>
-            <span style={styles.statValue}>
-              {(state.avgCallDuration / 1000).toFixed(0)}s
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div style={styles.zoneSection}>
-        <div style={styles.zoneSectionLabel}>Alerts</div>
-        <motion.div
-          animate={{
-            color: state.alertsToday === 0
-              ? 'var(--ink-faint)'
-              : 'var(--accent-hi, #d66e5a)',
-          }}
-          style={{
-            ...styles.bigCounter,
-            color: state.alertsToday === 0 ? 'var(--ink-faint)' : 'var(--accent-hi, #d66e5a)',
-          }}
-        >
-          {state.alertsToday}
-        </motion.div>
-        {state.alertsToday === 0 && (
-          <div style={styles.silentBadge}>SILENT</div>
-        )}
-      </div>
-
-      {/* Hidden signals — only render those currently revealed */}
-      <div style={styles.zoneSection}>
-        <div style={styles.zoneSectionLabel}>
-          Hidden signals
-          {revealedSignals.length > 0 && (
-            <span style={styles.signalCount}>
-              {' '}· {revealedSignals.length} surfaced
-            </span>
-          )}
-        </div>
-        <AnimatePresence>
-          {revealedSignals.length === 0 ? (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={styles.signalsEmpty}
-            >
-              {activeControls.size === 0
-                ? 'Toggle a control below to surface hidden signals.'
-                : 'No signals matching active controls at this stage.'}
-            </motion.div>
-          ) : (
-            revealedSignals.map(s => (
-              <motion.div
-                key={s.id}
-                initial={{ opacity: 0, x: 8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 8 }}
-                transition={{ duration: 0.3 }}
-                style={styles.signalRow}
-              >
-                <div style={styles.signalLabel}>{s.label}</div>
-                <div style={styles.signalDesc}>{s.description}</div>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Final-stage headline */}
-      {state.finalHeadline && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          style={styles.finalHeadline}
-        >
-          {state.finalHeadline}
-        </motion.div>
-      )}
-    </ZoneFrame>
-  )
-}
 
 /* ─── Zone frame wrapper ───────────────────────────────────────────── */
-function ZoneFrame({ title, children, isFocal, accentColor, cream }) {
+// v25.7.0.10: exported so scene files don't have to reinvent
+// the focal-zone signaling. Engine internal-render also uses this.
+export function ZoneFrame({ title, children, isFocal, accentColor, cream }) {
   return (
     <motion.div
       animate={{
@@ -596,7 +368,8 @@ function ZoneFrame({ title, children, isFocal, accentColor, cream }) {
 }
 
 /* ─── Audio waveform (decorative — pulses when call active) ────────── */
-function AudioWaveform() {
+// v25.7.0.10: exported for scene-file use
+export function AudioWaveform() {
   return (
     <div style={styles.waveformContainer} aria-hidden="true">
       {[...Array(12)].map((_, i) => (
@@ -617,7 +390,8 @@ function AudioWaveform() {
 }
 
 /* ─── Cascade animation (stage 6: 50 calls in rapid succession) ────── */
-function CascadeAnimation() {
+// v25.7.0.10: exported for scene-file use
+export function CascadeAnimation() {
   return (
     <div style={styles.cascadeContainer} aria-hidden="true">
       {[...Array(8)].map((_, i) => (
@@ -639,7 +413,9 @@ function CascadeAnimation() {
 }
 
 /* ─── Surge animation (stage 6: cycling spoofed caller IDs) ────────── */
-function SurgeAnimation() {
+// v25.7.0.10: exported for scene-file use; the FAKE_NUMBERS list and
+// label can be customized by scene needs by wrapping this component.
+export function SurgeAnimation() {
   const FAKE_NUMBERS = [
     '+1 876 555 1142', '+1 876 555 8830', '+1 876 555 6612',
     '+1 876 555 9201', '+1 876 555 4477', '+1 876 555 2240',
@@ -710,7 +486,7 @@ function ControlToggle({ control, active, onToggle }) {
       <div style={styles.controlMeta}>{control.meta}</div>
       {active && !naive && control.catchTotal > 0 && (
         <div style={styles.controlCallout}>
-          Would have flagged {control.catchCount} of {control.catchTotal} calls
+          Would have flagged {control.catchCount} of {control.catchTotal} {control.catchUnit || 'calls'}
         </div>
       )}
       {active && naive && (
@@ -724,7 +500,12 @@ function ControlToggle({ control, active, onToggle }) {
 
 
 /* ─── Styles ──────────────────────────────────────────────────────────── */
-const styles = {
+// v25.7.0.10: exported as `engineStyles` so scene files can use the
+// same visual primitives (notepad rows, big counters, signal rows etc.)
+// without duplicating ~400 lines of style definitions. Scene files
+// also write their own bespoke styles for their unique pieces (e.g.
+// OSINT's source-platform panels).
+export const engineStyles = {
   wrap: {
     width: '100%',
     display: 'flex',
@@ -1352,3 +1133,7 @@ const styles = {
     marginTop: 2,
   },
 }
+
+// v25.7.0.10: internal alias preserves backward compat for the
+// existing references to `styles` in this file's helper components.
+const styles = engineStyles
