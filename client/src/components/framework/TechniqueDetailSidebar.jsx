@@ -24,6 +24,7 @@ import osintProfilingScenes from './animations/osintProfilingScenes.jsx'
 import subthresholdStructuringScenes from './animations/subthresholdStructuringScenes.jsx'
 import phishingScenes from './animations/phishingScenes.jsx'
 import vishingScenes from './animations/vishingScenes.jsx'
+import simSwapScenes from './animations/simSwapScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -33,10 +34,13 @@ const ANIMATION_MAP = {
                                                 //   Grounded in NCB J$47.5M case (April-June 2022).
   'F1088': vishingScenes,                       // Vishing (F1088) under Initial Access (TA0001) — v25.7.0.13
                                                 //   "FID Officer Reid" call to JNCB business customer Devon Henry.
-                                                //   Demonstrates how vishing scripts defeat skepticism, callback
-                                                //   verification, and OTP warnings via real-time social engineering.
+  'T1451': simSwapScenes,                       // SIM Card Swap (T1451) under Initial Access (TA0001) — v25.7.0.14
+                                                //   5-actor sequence with Insider lane. Grounded in J$61M Jamaica
+                                                //   conviction (October 2025) where two of three convicted were
+                                                //   telco customer service representatives. Tanya Ricketts
+                                                //   (Scotia JM customer, Portmore) compromised entirely via
+                                                //   insider CSR at Digicel — strong password did not protect her.
   // Future per ANIMATION-TRIAGE.md Phase 1 sequence:
-  //   'T1451': simSwapScenes (SIM Card Swap, Initial Access) — v25.7.0.14
   //   'F1018.001': passwordResetScenes (Account Takeover: Password Reset, Initial Access) — v25.7.0.15
   //   'T1621': mfaFatigueScenes (MFA Request Generation, Initial Access) — v25.7.0.16
   //   'F1072': insiderAccessScenes (Insider Access Abuse, Initial Access) — v25.7.0.17
@@ -454,8 +458,10 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                             (FA0002), v25.7.0.11; Phishing (F1081)
                             under Initial Access (TA0001), v25.7.0.12;
                             Vishing (F1088) under Initial Access
-                            (TA0001), v25.7.0.13. More animations to
-                            follow per ANIMATION-TRIAGE.md.
+                            (TA0001), v25.7.0.13; SIM Card Swap (T1451)
+                            under Initial Access (TA0001), v25.7.0.14.
+                            More animations to follow per
+                            ANIMATION-TRIAGE.md.
                           </Placeholder>
                         )
                       }
