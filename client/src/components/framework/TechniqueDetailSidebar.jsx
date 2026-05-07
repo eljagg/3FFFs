@@ -39,6 +39,7 @@ import subthresholdStructuringScenes from './animations/subthresholdStructuringS
 import phishingScenes from './animations/phishingScenes.jsx'
 import vishingScenes from './animations/vishingScenes.jsx'
 import simSwapScenes from './animations/simSwapScenes.jsx'
+import passwordResetScenes from './animations/passwordResetScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -54,12 +55,19 @@ const ANIMATION_MAP = {
                                                 //   telco customer service representatives. Tanya Ricketts
                                                 //   (Scotia JM customer, Portmore) compromised entirely via
                                                 //   insider CSR at Digicel — strong password did not protect her.
+  'F1018.001': passwordResetScenes,             // Account Takeover: Password Reset (F1018.001) under Initial Access (TA0001) — v25.7.0.16
+                                                //   Andre Lewis (JNCB Personal customer, Kingston, age 34, accountant).
+                                                //   Composite case grounded in NCB Special Investigations public
+                                                //   reporting (Dane Nicholson 2022) and Shelly-ann Watt Gammon
+                                                //   silent-compromise case pattern (Jamaica Observer 2023). The
+                                                //   silent attack vector — victim never contacted; OSINT → knowledge-
+                                                //   based reset-flow abuse → fraudulent transfer; discovered when
+                                                //   payroll deposits to a balance J$340K lower than expected.
   // Future per ANIMATION-TRIAGE.md Phase 1 sequence:
-  //   'F1018.001': passwordResetScenes (Account Takeover: Password Reset, Initial Access) — v25.7.0.15
-  //   'T1621': mfaFatigueScenes (MFA Request Generation, Initial Access) — v25.7.0.16
-  //   'F1072': insiderAccessScenes (Insider Access Abuse, Initial Access) — v25.7.0.17
-  //   'F1018': accountTakeoverScenes (Account Takeover parent canonical flow, Initial Access) — v25.7.0.18
-  //   'T1111': mfaInterceptionScenes (MFA Interception, Initial Access) — v25.7.0.19
+  //   'T1621': mfaFatigueScenes (MFA Request Generation, Initial Access) — v25.7.0.17
+  //   'F1072': insiderAccessScenes (Insider Access Abuse, Initial Access) — v25.7.0.18
+  //   'F1018': accountTakeoverScenes (Account Takeover parent canonical flow, Initial Access) — v25.7.0.19
+  //   'T1111': mfaInterceptionScenes (MFA Interception, Initial Access) — v25.7.0.20
 }
 
 const ENGINE_MAP = {
