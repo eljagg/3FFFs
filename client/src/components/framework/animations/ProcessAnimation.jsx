@@ -345,7 +345,7 @@ export function ZoneFrame({ title, children, isFocal, accentColor, cream }) {
               alignItems: 'center',
               gap: 5,
               fontFamily: 'var(--font-mono)',
-              fontSize: 9,
+              fontSize: 11,
               letterSpacing: '0.18em',
               fontWeight: 700,
               color: accentColor,
@@ -568,7 +568,7 @@ export const engineStyles = {
   },
   headerEyebrow: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: '0.16em',
     textTransform: 'uppercase',
     color: 'var(--accent)',
@@ -600,7 +600,7 @@ export const engineStyles = {
   },
   captionLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10.5,
+    fontSize: 12.5,
     letterSpacing: '0.16em',
     textTransform: 'uppercase',
     color: 'var(--accent)',
@@ -644,7 +644,7 @@ export const engineStyles = {
   },
   zoneTitle: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10.5,
+    fontSize: 12.5,
     letterSpacing: '0.16em',
     textTransform: 'uppercase',
     color: 'var(--ink-faint)',
@@ -654,7 +654,7 @@ export const engineStyles = {
   },
   zoneTitleCream: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10.5,
+    fontSize: 12.5,
     letterSpacing: '0.16em',
     textTransform: 'uppercase',
     color: '#6b5d4a',
@@ -675,7 +675,7 @@ export const engineStyles = {
   },
   zoneSectionLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9.5,
+    fontSize: 11.5,
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
     color: 'var(--ink-faint)',
@@ -683,7 +683,7 @@ export const engineStyles = {
   },
   zoneSectionLabelCream: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9.5,
+    fontSize: 11.5,
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
     color: '#6b5d4a',
@@ -721,14 +721,14 @@ export const engineStyles = {
   },
   notepadLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9.5,
+    fontSize: 11.5,
     letterSpacing: '0.06em',
     color: 'var(--ink-faint)',
     flexShrink: 0,
   },
   notepadValue: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     color: 'var(--ink)',
     fontWeight: 500,
     textAlign: 'right',
@@ -749,7 +749,7 @@ export const engineStyles = {
   },
   activityChip: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9.5,
+    fontSize: 11.5,
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
     padding: '3px 8px',
@@ -773,7 +773,7 @@ export const engineStyles = {
   },
   callerIdEmpty: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     color: '#9a8e78',
     fontStyle: 'italic',
     padding: '8px 0',
@@ -799,7 +799,7 @@ export const engineStyles = {
   },
   menuKey: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: 700,
     color: '#6b8e5a',
     minWidth: 16,
@@ -811,7 +811,7 @@ export const engineStyles = {
   },
   menuAuthChip: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 8,
+    fontSize: 10,
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
     padding: '1px 5px',
@@ -857,7 +857,7 @@ export const engineStyles = {
   },
   callDuration: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10.5,
+    fontSize: 12.5,
     color: '#6b5d4a',
     letterSpacing: '0.06em',
     textAlign: 'right',
@@ -871,7 +871,7 @@ export const engineStyles = {
     padding: '4px 0',
   },
   statLabel: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     color: 'var(--ink-faint)',
   },
   statValue: {
@@ -882,7 +882,7 @@ export const engineStyles = {
   },
   silentBadge: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9.5,
+    fontSize: 11.5,
     letterSpacing: '0.16em',
     color: 'var(--ink-faint)',
     fontWeight: 600,
@@ -899,7 +899,7 @@ export const engineStyles = {
     fontWeight: 600,
   },
   signalsEmpty: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     color: 'var(--ink-faint)',
     fontStyle: 'italic',
     padding: '6px 0',
@@ -914,7 +914,7 @@ export const engineStyles = {
   },
   signalLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
     color: 'var(--warning, #c79a3a)',
@@ -922,7 +922,7 @@ export const engineStyles = {
     marginBottom: 3,
   },
   signalDesc: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     color: 'var(--ink-soft)',
     lineHeight: 1.5,
   },
@@ -966,7 +966,7 @@ export const engineStyles = {
   },
   surgeLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 8.5,
+    fontSize: 10.5,
     letterSpacing: '0.16em',
     color: '#6b5d4a',
     fontWeight: 600,
@@ -981,7 +981,7 @@ export const engineStyles = {
     position: 'absolute',
     top: 0,
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     color: '#1a1512',
     fontWeight: 500,
   },
@@ -1033,7 +1033,7 @@ export const engineStyles = {
   },
   speedLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9.5,
+    fontSize: 11.5,
     letterSpacing: '0.14em',
     color: 'var(--ink-faint)',
     fontWeight: 600,
@@ -1047,7 +1047,7 @@ export const engineStyles = {
     color: 'var(--ink-soft)',
     cursor: 'pointer',
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: 600,
     transition: 'all 150ms',
   },
@@ -1074,14 +1074,14 @@ export const engineStyles = {
   },
   controlsHeaderLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: '0.16em',
     textTransform: 'uppercase',
     color: 'var(--accent)',
     fontWeight: 600,
   },
   controlsHeaderHint: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     fontStyle: 'italic',
     color: 'var(--ink-faint)',
   },
@@ -1126,7 +1126,7 @@ export const engineStyles = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 11,
+    fontSize: 13,
     color: 'var(--paper)',
     fontWeight: 700,
     flexShrink: 0,
@@ -1144,7 +1144,7 @@ export const engineStyles = {
   },
   naiveBadge: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 8.5,
+    fontSize: 10.5,
     letterSpacing: '0.14em',
     padding: '2px 5px',
     borderRadius: 2,
@@ -1153,20 +1153,20 @@ export const engineStyles = {
     fontWeight: 600,
   },
   controlMeta: {
-    fontSize: 11,
+    fontSize: 13,
     color: 'var(--ink-faint)',
     lineHeight: 1.4,
     paddingLeft: 24,
   },
   controlCallout: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     fontWeight: 600,
     color: 'var(--warning, #c79a3a)',
     paddingLeft: 24,
     marginTop: 2,
   },
   controlCalloutNaive: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     fontStyle: 'italic',
     color: 'var(--ink-faint)',
     paddingLeft: 24,
@@ -1177,7 +1177,7 @@ export const engineStyles = {
   // and italic text to distinguish from the primary "would have
   // flagged X of Y" callout.
   controlStageHint: {
-    fontSize: 11,
+    fontSize: 13,
     fontStyle: 'italic',
     color: 'var(--ink-faint)',
     paddingLeft: 22,

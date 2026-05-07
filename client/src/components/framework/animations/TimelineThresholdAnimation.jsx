@@ -427,7 +427,7 @@ function TimelinePanel({ character, thresholdAmount, thresholdLabel, currency, w
               <line x1={MARGIN_LEFT} y1={y} x2={PANEL_WIDTH - MARGIN_RIGHT} y2={y}
                 stroke="var(--rule)" strokeWidth="0.5" opacity="0.5" />
               <text x={MARGIN_LEFT - 8} y={y + 3} textAnchor="end"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fill: 'var(--ink-faint)' }}>
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fill: 'var(--ink-faint)' }}>
                 J${formatJMDShort(amt)}
               </text>
             </g>
@@ -451,7 +451,7 @@ function TimelinePanel({ character, thresholdAmount, thresholdLabel, currency, w
           textAnchor="end"
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9.5,
+            fontSize: 11.5,
             fill: '#a14040',
             fontWeight: 600,
             letterSpacing: '0.06em',
@@ -469,7 +469,7 @@ function TimelinePanel({ character, thresholdAmount, thresholdLabel, currency, w
               <line x1={x} y1={MARGIN_TOP + plotHeight} x2={x} y2={MARGIN_TOP + plotHeight + 4}
                 stroke="var(--rule)" strokeWidth="0.5" />
               <text x={x} y={MARGIN_TOP + plotHeight + 16} textAnchor="middle"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fill: 'var(--ink-faint)', letterSpacing: '0.04em' }}>
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fill: 'var(--ink-faint)', letterSpacing: '0.04em' }}>
                 W{week}
               </text>
             </g>
@@ -482,7 +482,7 @@ function TimelinePanel({ character, thresholdAmount, thresholdLabel, currency, w
           y={MARGIN_TOP + plotHeight / 2}
           textAnchor="middle"
           transform={`rotate(-90, ${MARGIN_LEFT - 70}, ${MARGIN_TOP + plotHeight / 2})`}
-          style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fill: 'var(--ink-faint)', letterSpacing: '0.12em', fontWeight: 600 }}
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fill: 'var(--ink-faint)', letterSpacing: '0.12em', fontWeight: 600 }}
         >
           DEPOSIT AMOUNT (JMD)
         </text>
@@ -604,7 +604,7 @@ function CumulativeSumOverlay({ transactions, xForWeek, yForAmount, weekRange, m
         textAnchor="end"
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 9.5,
+          fontSize: 11.5,
           fill: 'var(--accent)',
           fontWeight: 600,
         }}
@@ -879,7 +879,7 @@ const tlStyles = {
   },
   viewModeChip: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: '0.16em',
     padding: '2px 8px',
     background: 'rgba(184, 81, 61, 0.1)',
@@ -917,7 +917,7 @@ const tlStyles = {
   },
   panelDot: {
     color: 'var(--ink-faint)',
-    fontSize: 11,
+    fontSize: 13,
   },
   panelName: {
     fontFamily: 'var(--font-display)',
@@ -926,13 +926,13 @@ const tlStyles = {
     color: 'var(--ink)',
   },
   panelDescriptor: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     color: 'var(--ink-soft)',
     fontStyle: 'italic',
   },
   panelMetaSmall: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10,
+    fontSize: 12,
     color: 'var(--ink-faint)',
     letterSpacing: '0.04em',
   },
@@ -946,12 +946,12 @@ const tlStyles = {
     marginTop: 6,
     paddingTop: 6,
     borderTop: '1px solid var(--rule)',
-    fontSize: 11,
+    fontSize: 13,
     color: 'var(--ink-soft)',
   },
   statInline: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10.5,
+    fontSize: 12.5,
     color: 'var(--ink)',
     fontWeight: 500,
   },
@@ -959,13 +959,13 @@ const tlStyles = {
     color: 'var(--ink-faint)',
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: 600,
     marginRight: 4,
   },
   statInlineDot: {
     color: 'var(--ink-faint)',
-    fontSize: 11,
+    fontSize: 13,
   },
   // v25.7.0.11.1+ legacy (kept for completeness, unused after compaction):
   statsStrip: {
@@ -983,7 +983,7 @@ const tlStyles = {
   },
   statLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
     color: 'var(--ink-faint)',
@@ -991,7 +991,7 @@ const tlStyles = {
   },
   statValue: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 11.5,
+    fontSize: 13.5,
     color: 'var(--ink)',
     fontWeight: 500,
   },
@@ -1007,7 +1007,7 @@ const tlStyles = {
   },
   legendStripLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: '0.16em',
     textTransform: 'uppercase',
     color: 'var(--ink-faint)',
@@ -1016,7 +1016,7 @@ const tlStyles = {
   legendStripItem: {
     display: 'flex',
     alignItems: 'center',
-    fontSize: 11.5,
+    fontSize: 13.5,
     color: 'var(--ink-soft)',
   },
   queueWrap: {
@@ -1035,7 +1035,7 @@ const tlStyles = {
   },
   queueHeaderLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
     color: 'var(--ink-faint)',
@@ -1043,7 +1043,7 @@ const tlStyles = {
   },
   queueHeaderCount: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10.5,
+    fontSize: 12.5,
     color: 'var(--accent)',
     fontWeight: 600,
   },
@@ -1064,7 +1064,7 @@ const tlStyles = {
     marginBottom: 2,
   },
   queueRowDescriptor: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     color: 'var(--ink-soft)',
     fontStyle: 'italic',
   },
@@ -1081,14 +1081,14 @@ const tlStyles = {
   },
   queueRowMetaLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
     color: 'var(--ink-faint)',
   },
   queueRowMetaValue: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10.5,
+    fontSize: 12.5,
     color: 'var(--ink)',
     textAlign: 'right',
   },
@@ -1108,7 +1108,7 @@ const tlStyles = {
   },
   decisionHeader: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
     color: 'var(--ink-faint)',
@@ -1133,7 +1133,7 @@ const tlStyles = {
   },
   decisionVerdict: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: '0.12em',
     fontWeight: 600,
     padding: '4px 10px',
@@ -1143,7 +1143,7 @@ const tlStyles = {
     textAlign: 'center',
   },
   decisionRationale: {
-    fontSize: 11.5,
+    fontSize: 13.5,
     color: 'var(--ink-soft)',
     lineHeight: 1.45,
   },
@@ -1154,7 +1154,7 @@ const tlStyles = {
   },
   decisionFrameworkTitle: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
     color: 'var(--ink-faint)',
@@ -1165,11 +1165,11 @@ const tlStyles = {
     display: 'flex',
     gap: 10,
     padding: '6px 0',
-    fontSize: 11,
+    fontSize: 13,
   },
   decisionNoteLabel: {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9.5,
+    fontSize: 11.5,
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
     color: 'var(--accent)',
