@@ -23,24 +23,25 @@ import ivrDiscoveryScenes from './animations/ivrDiscoveryScenes.jsx'
 import osintProfilingScenes from './animations/osintProfilingScenes.jsx'
 import subthresholdStructuringScenes from './animations/subthresholdStructuringScenes.jsx'
 import phishingScenes from './animations/phishingScenes.jsx'
+import vishingScenes from './animations/vishingScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
   'F1067': osintProfilingScenes,                // Gather Victim Information (F1067) under Reconnaissance (TA0043) — v25.7.0.10
-                                                //   The animation specifically shows the OSINT-profiling sub-pattern
-                                                //   of this broader technique.
   'F1087': subthresholdStructuringScenes,       // Structuring (F1087) under Monetization (FA0002) — v25.7.0.11
-                                                //   The animation specifically shows the sub-threshold structuring
-                                                //   sub-pattern (deposits hugging the J$1M POCA Section 101A
-                                                //   threshold from below).
   'F1081': phishingScenes,                      // Phishing (F1081) under Initial Access (TA0001) — v25.7.0.12
-                                                //   4-actor sequence (Fraudster / Beverly / NCB / Mule chain).
                                                 //   Grounded in NCB J$47.5M case (April-June 2022).
-  // Future:
-  //   'F1088': vishingScenes (Vishing, Initial Access) — v25.7.0.13
+  'F1088': vishingScenes,                       // Vishing (F1088) under Initial Access (TA0001) — v25.7.0.13
+                                                //   "FID Officer Reid" call to JNCB business customer Devon Henry.
+                                                //   Demonstrates how vishing scripts defeat skepticism, callback
+                                                //   verification, and OTP warnings via real-time social engineering.
+  // Future per ANIMATION-TRIAGE.md Phase 1 sequence:
   //   'T1451': simSwapScenes (SIM Card Swap, Initial Access) — v25.7.0.14
-  //   '3DS Bypass (F1076)' under Defense Evasion (TA0005) — DEFERRED, multi-perspective post-incident framing
-  //   ...
+  //   'F1018.001': passwordResetScenes (Account Takeover: Password Reset, Initial Access) — v25.7.0.15
+  //   'T1621': mfaFatigueScenes (MFA Request Generation, Initial Access) — v25.7.0.16
+  //   'F1072': insiderAccessScenes (Insider Access Abuse, Initial Access) — v25.7.0.17
+  //   'F1018': accountTakeoverScenes (Account Takeover parent canonical flow, Initial Access) — v25.7.0.18
+  //   'T1111': mfaInterceptionScenes (MFA Interception, Initial Access) — v25.7.0.19
 }
 
 const ENGINE_MAP = {
@@ -451,9 +452,10 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                             Reconnaissance (TA0043), v25.7.0.10;
                             Structuring (F1087) under Monetization
                             (FA0002), v25.7.0.11; Phishing (F1081)
-                            under Initial Access (TA0001), v25.7.0.12.
-                            More animations to follow per
-                            ANIMATION-TRIAGE.md.
+                            under Initial Access (TA0001), v25.7.0.12;
+                            Vishing (F1088) under Initial Access
+                            (TA0001), v25.7.0.13. More animations to
+                            follow per ANIMATION-TRIAGE.md.
                           </Placeholder>
                         )
                       }

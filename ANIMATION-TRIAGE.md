@@ -28,6 +28,7 @@ full form has just been used.
 | **Gather Victim Information (F1067)** | Reconnaissance (TA0043) | v25.7.0.10 [F1067 animation + engine refactor for scene-driven zone rendering] | The animation specifically shows the OSINT-profiling sub-pattern: sequential aggregation across 5 sources; attacker's dossier grows; target awareness stays NONE (gap = aggregation creates risk no single source represents) |
 | **Structuring (F1087)** | Monetization (FA0002) | v25.7.0.11 [TimelineThresholdAnimation engine + dual-character non-linear case-review visualization] · v25.7.0.11.1 [F-code resolution + tactic correction] | Sub-threshold structuring sub-pattern. Case-review pedagogy: trainee plays AML analyst comparing two NCB Jamaica accounts — Mrs. Marcia Edwards (legitimate cash-heavy small business) vs. Trevor Bennett (structurer). POCA Section 101A J$1M threshold framework, FID/goAML reporting workflow. |
 | **Phishing (F1081)** | Initial Access (TA0001) | v25.7.0.12 [MultiActorSequenceAnimation engine + 4-actor temporal flow] | Grounded in real NCB J$47.5M phishing case (April-June 2022, 16 NCB customer accounts compromised). Mrs. Beverly Williams (Spanish Town, age 58) targeted by Smishing Triad-style "Lighthouse" kit. 7 stages from kit purchase through 16-hour aftermath. 4 actors (Fraudster / Beverly / NCB / Mule chain). NCB's October 2023 decision to suspend SMS alert system surfaced as critical pedagogical moment — institutional choice removed customer detection capability. Naive control surfaces the publicly-stated "customers expose themselves" framing as the failed institutional posture it is. |
+| **Vishing (F1088)** | Initial Access (TA0001) | v25.7.0.13 [reuses MultiActorSequenceAnimation; engine architecture validated across two techniques] | Grounded in Caribbean vishing pattern documented across BOJ Financial Stability Reports and JCF Fraud Squad investigations. Mr. Devon Henry (Montego Bay, age 42, JNCB business customer, 4-year clean history) targeted by "FID Officer Reid" call with spoofed caller-ID. 8 stages showing how vishing scripts defeat skepticism, isolation-script pattern ("don\'t hang up, don\'t call your bank"), OTP disclosure framing ("that warning is for external scams, not FID"), and how the bank\'s callback verification gets weaponized when the script pre-conditions the victim. The educated, professionally active business owner is the script\'s target profile, not the exception. |
 
 ---
 
@@ -44,8 +45,8 @@ Caribbean grounding from BOJ/MOCA/JCF reports + Smishing Triad research.
 | # | Release | Animation | Real-world anchor |
 |---|---|---|---|
 | ✅ | v25.7.0.12 | Phishing (F1081) — Initial Access (TA0001) | NCB J$47.5M case (April-June 2022) |
-| ⏳ | v25.7.0.13 | Vishing (F1088) — Initial Access (TA0001) | "Bank fraud officer" calling about "suspicious activity" — daily Caribbean retail banking pattern |
-| 📋 | v25.7.0.14 | SIM Card Swap (T1451) — Initial Access (TA0001) | J$61M conviction October 2025 — multi-actor including insider at telco/bank (2 of 3 convicted were customer service reps) |
+| ✅ | v25.7.0.13 | Vishing (F1088) — Initial Access (TA0001) | "FID Officer Reid" call to JNCB business customer; isolation-script + OTP-disclosure + callback-weaponization patterns |
+| ⏳ | v25.7.0.14 | SIM Card Swap (T1451) — Initial Access (TA0001) | J$61M conviction October 2025 — multi-actor including insider at telco/bank (2 of 3 convicted were customer service reps) |
 | 📋 | v25.7.0.15 | Account Takeover: Password Reset (F1018.001) — Initial Access (TA0001) | Email compromise → cascade to bank account |
 | 📋 | v25.7.0.16 | MFA Request Generation (T1621) — Initial Access (TA0001) | MFA fatigue temporal pressure pattern |
 
