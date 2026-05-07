@@ -3,21 +3,32 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../../lib/api.js'
 // v25.7.0.9: process-animation engine + scene data per technique.
-// ANIMATION_MAP routes a technique ID to its scene data; if absent,
-// the sidebar falls back to the placeholder. New animations are added
-// by importing a new scene-data file and adding a map entry — no
-// changes to the engine itself.
+// v25.7.0.10: scene-driven zone rendering refactor.
+// v25.7.0.11: third engine (TimelineThresholdAnimation) for case-review
+// shape. Routing via ENGINE_MAP keyed on scene config's `engine` field.
+// Default 'three-zone' preserves backward compat with F1073 + F1067.
 import ProcessAnimation from './animations/ProcessAnimation.jsx'
+import TimelineThresholdAnimation from './animations/TimelineThresholdAnimation.jsx'
 import ivrDiscoveryScenes from './animations/ivrDiscoveryScenes.jsx'
 import osintProfilingScenes from './animations/osintProfilingScenes.jsx'
+import subthresholdStructuringScenes from './animations/subthresholdStructuringScenes.jsx'
 
 const ANIMATION_MAP = {
-  'F1073': ivrDiscoveryScenes,    // IVR Discovery (TA0043 Reconnaissance)
-  'F1067': osintProfilingScenes,  // OSINT Profiling (TA0043 Reconnaissance) — v25.7.0.10
+  'F1073': ivrDiscoveryScenes,                  // IVR Discovery (TA0043 Reconnaissance) — v25.7.0.9
+  'F1067': osintProfilingScenes,                // OSINT Profiling (TA0043 Reconnaissance) — v25.7.0.10
+  'F1XXX': subthresholdStructuringScenes,       // Sub-threshold Structuring (TA0005 Defense Evasion) — v25.7.0.11
+                                                //   ⚠ F-code is PLACEHOLDER. Omar to resolve actual F-code from
+                                                //   the live framework (query /api/framework/tactics/TA0005/techniques-tree)
+                                                //   and replace 'F1XXX' here with the resolved code.
   // Future:
-  //   'F1008.001': eDeliverySilentAlarmScenes,
-  //   'F1097': cardBypassScenes (3DS Bypass)
+  //   'F1097': cardBypassScenes (3DS Bypass — shelved, revisit with multi-perspective post-incident framing)
   //   ...
+}
+
+const ENGINE_MAP = {
+  'three-zone': ProcessAnimation,                  // F1073, F1067
+  'timeline-threshold': TimelineThresholdAnimation, // structuring (v25.7.0.11)
+  // Future shapes added here as engines come online
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -383,38 +394,64 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                     </Placeholder>
                   </Section>
 
-                  {/* v25.7.0.9: Animation — renders ProcessAnimation if
-                      scene data is registered for this technique in
-                      ANIMATION_MAP. Otherwise falls back to placeholder.
-                      First animation shipped: F1073 IVR Discovery.
+                  {/* v25.7.0.9: Animation — renders the appropriate
+                      engine if scene data is registered for this
+                      technique in ANIMATION_MAP. Otherwise falls back
+                      to placeholder.
+
                       v25.7.0.9.2: collapsible. When collapsed, animation
                       auto-pauses (via externalPauseSignal counter) but
                       retains its current stage. User clicks Play to resume.
+
                       v25.7.0.9.3: uses Set-based collapse state; pause
-                      side-effect handled inside toggleSection. */}
+                      side-effect handled inside toggleSection.
+
+                      v25.7.0.11: ENGINE_MAP routes by scene config's
+                      `engine` field. Default 'three-zone' preserves
+                      backward compat with F1073 IVR Discovery and
+                      F1067 OSINT Profiling (which don't declare an
+                      engine field). Sub-threshold structuring scene
+                      file declares engine: 'timeline-threshold' and
+                      routes to TimelineThresholdAnimation. */}
                   <Section
                     title="How this technique works"
                     collapsible
                     expanded={isExpanded('animation')}
                     onToggleExpand={() => toggleSection('animation')}
                   >
-                    {ANIMATION_MAP[technique.id] ? (
-                      <ProcessAnimation
-                        scenes={ANIMATION_MAP[technique.id]}
-                        externalPauseSignal={animationPauseSignal}
-                      />
-                    ) : (
-                      <Placeholder>
-                        Interactive animation showing the technique's
-                        step-by-step process is planned for v25.7.0.9+.
-                        First animation shipped: F1073 IVR Discovery
-                        (TA0043 Reconnaissance). Future candidates:
-                        F1008.001 e-delivery silent-alarm, F1067 OSINT
-                        data sweep, F1097 3DS Bypass MITM flow,
-                        sub-threshold structuring threshold-relative
-                        pattern, mule-pipeline cross-bank funds flow.
-                      </Placeholder>
-                    )}
+                    {(() => {
+                      const scenes = ANIMATION_MAP[technique.id]
+                      if (!scenes) {
+                        return (
+                          <Placeholder>
+                            Interactive animation showing the technique's
+                            step-by-step process is planned for v25.7.0.9+.
+                            Animations shipped: F1073 IVR Discovery
+                            (Reconnaissance, v25.7.0.9), F1067 OSINT
+                            Profiling (Reconnaissance, v25.7.0.10),
+                            sub-threshold structuring case review
+                            (Defense Evasion, v25.7.0.11). More animations
+                            to follow per ANIMATION-TRIAGE.md.
+                          </Placeholder>
+                        )
+                      }
+                      const engineKey = scenes.engine || 'three-zone'
+                      const Engine = ENGINE_MAP[engineKey]
+                      if (!Engine) {
+                        return (
+                          <Placeholder>
+                            Animation engine "{engineKey}" not registered.
+                            Check ENGINE_MAP in TechniqueDetailSidebar.jsx.
+                          </Placeholder>
+                        )
+                      }
+                      return (
+                        <Engine
+                          scenes={scenes}
+                          externalPauseSignal={animationPauseSignal}
+                        />
+                      )
+                    })()}
                   </Section>
 
                   {/* Demonstrated in — scenarios. v25.7.0.9.3: collapsible. */}

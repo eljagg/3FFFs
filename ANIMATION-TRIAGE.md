@@ -24,7 +24,8 @@ has just been used.
 | Technique | Tactic | Release | Why ANIMATE |
 |---|---|---|---|
 | **F1073 IVR Discovery** | TA0043 Reconnaissance | v25.7.0.9 [first animation + ProcessAnimation framework] | Step-by-step probe; attacker's notepad evolves stage-by-stage; defender alerts counter stays at 0 (the gap = the lesson) |
-| **F1067 OSINT Profiling** | TA0043 Reconnaissance | v25.7.0.10 [F1067 + engine refactor] | Sequential aggregation across 5 sources; attacker's dossier grows; target awareness stays NONE (gap = aggregation creates risk no single source represents) |
+| **F1067 OSINT Profiling** | TA0043 Reconnaissance | v25.7.0.10 [F1067 + engine refactor for scene-driven zone rendering] | Sequential aggregation across 5 sources; attacker's dossier grows; target awareness stays NONE (gap = aggregation creates risk no single source represents) |
+| **Sub-threshold Structuring (F-code resolved by Omar from live framework — placeholder F1XXX in shipped code, see deploy notes)** | TA0005 Defense Evasion | v25.7.0.11 [TimelineThresholdAnimation engine + dual-character non-linear case-review visualization] | Case-review pedagogy: trainee plays AML analyst comparing two NCB Jamaica accounts. Mrs. Marcia Edwards (Mandeville market vendor, legitimate cash-heavy small business) vs. "Trevor Bennett" (3-month-old account, threshold-hugging deposits, channel-fragmented, undocumented source). The pattern only exists across time, channels, and customer baseline — not in any single transaction. Teaches actual analyst job. POCA Section 101A J$1M threshold framework, FID/goAML reporting workflow. |
 
 ---
 
@@ -32,10 +33,9 @@ has just been used.
 
 | Technique | Tactic | Planned release | Why ANIMATE | Notes |
 |---|---|---|---|---|
-| **F1097 3DS Bypass** | FA0002 Monetization | v25.7.0.11 [different-shape animation] (likely) | MITM message-passing flow with timing pressure | DIFFERENT SHAPE than 3-zone — requires 4-actor sequence diagram (customer / attacker-MITM / merchant / bank). Tests whether engine evolves cleanly when shape FAMILY changes. |
-| **Sub-threshold structuring (F-code TBD — resolve from live framework when authoring)** | TA0005 Defense Evasion | v25.7.0.12 [structuring animation] (likely) | Transactions over time relative to a moving threshold line | DIFFERENT SHAPE again — timeline + threshold, not zones. Validates engine handles 3+ shape families. |
 | **Mule pipeline cross-bank funds flow (F-code TBD — resolve from live framework when authoring)** | FA0002 Monetization | TBD | Funds flowing across multiple bank nodes | DIFFERENT SHAPE — network/graph, animated flow between nodes |
 | **F1008.001 Change e-delivery settings (the silent alarm move)** | TA0005 Defense Evasion | TBD | Silent-alarm moment: alerts redirect to attacker email; victim doesn't know | Borderline — possibly STATIC DIAGRAM instead. Decide closer to authoring. |
+| **F1097 3DS Bypass** | FA0002 Monetization | DEFERRED — revisit later with multi-perspective post-incident investigation framing | The original real-time-attacker-walkthrough framing was triaged out as too operationally detailed; the multi-perspective post-incident investigator framing (per Omar's earlier suggestion) preserves the defender lesson with less attacker uplift. Code on internal shelf can be refactored when authored. | SequenceDiagramAnimation engine code is ready and reusable when this technique is reauthored with the better framing. |
 
 ---
 
