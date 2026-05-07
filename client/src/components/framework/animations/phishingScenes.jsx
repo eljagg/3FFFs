@@ -200,7 +200,7 @@ export const PHISHING_STAGES = [
     durationMs: 6000,
     messages: [
       { id: 'm3-1', fromActor: 'fraudster', toActor: 'beverly', kind: 'sms', label: '"NCB ALERT: Unusual login. Verify in 30 min."', tooltip: 'ncb-secure.live/verify · TYPOSQUAT', suspicious: true,
-        audio: { text: 'NCB ALERT: Unusual login from Kingston. Verify in 30 minutes or account will be locked. ncb dash secure dot live slash verify.', profile: 'system' } },
+        audio: { text: 'NCB alert. Unusual login. Verify in thirty minutes or account locks.', profile: 'system' } },
     ],
     actorStateChanges: { 'beverly': 'targeted' },
     revealedSignalIds: ['sig-typosquat-domain', 'sig-urgency-language'],
@@ -230,7 +230,7 @@ export const PHISHING_STAGES = [
     messages: [
       { id: 'm5-1', fromActor: 'fraudster', toActor: 'ncb', kind: 'http', label: 'Login with Beverly\'s credentials', suspicious: true },
       { id: 'm5-2', fromActor: 'ncb', toActor: 'beverly', kind: 'sms', label: 'OTP: 384719 (legitimate)', tooltip: 'sent 4:18:47 PM',
-        audio: { text: 'NCB. Three eight four seven one nine is your one-time code. Do not share with anyone.', profile: 'system' } },
+        audio: { text: 'NCB. Code three eight four seven one nine. Do not share.', profile: 'system' } },
       { id: 'm5-3', fromActor: 'beverly', toActor: 'fraudster', kind: 'http', label: 'OTP entered on clone site' },
       { id: 'm5-4', fromActor: 'fraudster', toActor: 'ncb', kind: 'http', label: 'OTP replay · session established', tooltip: '4:19:42 PM · 55s after delivery', suspicious: true },
     ],
@@ -259,12 +259,12 @@ export const PHISHING_STAGES = [
     label: 'The aftermath',
     title: 'Beverly discovers the loss the next morning',
     caption: 'Without active SMS alerts (NCB suspended these in October 2023), Beverly has no notification anything is wrong. She drives home, has dinner, goes to bed. The next morning she logs in to NCB to pay a bill and sees the J$2.4M transfer. She calls NCB. By then the funds have been withdrawn from the dispersion accounts. NCB\'s position: she provided the OTP herself, so the bank has no liability. Beverly\'s position: the bank suspended the alert system that would have given her a chance to stop this. Both positions are documented in the actual NCB J$47.5M case.',
-    durationMs: 6000,
+    durationMs: 12000,
     messages: [
       { id: 'm7-1', fromActor: 'beverly', toActor: 'ncb', kind: 'callback', label: 'Discovers loss · calls NCB', tooltip: 'Wednesday morning, ~16 hours later',
-        audio: { text: 'NCB? I logged into my account this morning and there is a transfer for two point four million dollars I never made. What happened?', profile: 'victim' } },
+        audio: { text: 'NCB? There\'s a transfer for two point four million I never made.', profile: 'victim' } },
       { id: 'm7-2', fromActor: 'ncb', toActor: 'beverly', kind: 'system', label: 'Funds already withdrawn · "you provided OTP yourself"',
-        audio: { text: 'Mrs. Williams, our records show the transfer was authorized using your one-time code. Since you provided the code yourself, the bank has no liability for these funds.', profile: 'investigator' } },
+        audio: { text: 'You authorized it with your one-time code. The bank has no liability.', profile: 'investigator' } },
     ],
     actorStateChanges: { 'beverly': 'aware', 'ncb': 'investigating' },
     revealedSignalIds: ['sig-no-customer-notification'],
@@ -281,7 +281,7 @@ export const PHISHING_META = {
   tacticName: 'Initial Access',
   scenario: 'SC-beverly-ncb-phishing',
   scenarioContext: 'Mrs. Beverly Williams, NCB customer in Spanish Town, age 58, retired teacher. She is a phishing victim — not complicit, not careless within typical Caribbean banking customer norms, just targeted by a sophisticated kit-based campaign. The animation grounds in the documented NCB J$47.5M case (April-June 2022, 16 accounts compromised) and uses the Smishing Triad kit context (publicly documented via Silent Push research). Distinct character role from Allison Brown (mule recruitment scenario (SC007), recruited mule), Marcia Edwards (legitimate vendor in Structuring (F1087)), Trevor Bennett (structurer in Structuring (F1087)), and Marcus Walters (3DS Bypass (F1076) victim, deferred animation).',
-  totalDurationMs: 41000,
+  totalDurationMs: 47000,
   stageCount: 7,
 }
 

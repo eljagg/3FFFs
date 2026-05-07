@@ -199,7 +199,7 @@ export const SIMSWAP_STAGES = [
     durationMs: 6500,
     messages: [
       { id: 'ss-m1-1', fromActor: 'fraudster', toActor: 'insider', kind: 'system', label: 'Recruitment + payment offer · J$120K per port',
-        audio: { text: 'One twenty thousand per successful port. Same as last time. I send you the details, you do the swap, I confirm payment within the hour.', profile: 'fraudster' } },
+        audio: { text: 'One twenty thousand per port. Same as before. I send the details.', profile: 'fraudster' } },
       { id: 'ss-m1-2', fromActor: 'fraudster', toActor: 'fraudster', kind: 'system', label: 'OSINT: Tanya · Scotia · Digicel · 876-XXX-XXXX' },
     ],
     actorStateChanges: { 'insider': 'active' },
@@ -276,7 +276,7 @@ export const SIMSWAP_STAGES = [
     messages: [
       { id: 'ss-m6-1', fromActor: 'fraudster', toActor: 'scotia', kind: 'http', label: 'Initiate J$1.2M transfer · new beneficiary', suspicious: true },
       { id: 'ss-m6-2', fromActor: 'scotia', toActor: 'telco', kind: 'sms', label: 'OTP SMS · 482917',
-        audio: { text: 'Scotia. Four eight two nine one seven is your one-time code. Authorizing transfer of one point two million.', profile: 'system' } },
+        audio: { text: 'Scotia. Code four eight two nine one seven. Authorizing transfer of one point two million.', profile: 'system' } },
       { id: 'ss-m6-3', fromActor: 'telco', toActor: 'fraudster', kind: 'sms', label: 'OTP delivered to ported SIM', suspicious: true },
       { id: 'ss-m6-4', fromActor: 'fraudster', toActor: 'scotia', kind: 'http', label: 'OTP entered · transfer cleared', suspicious: true },
     ],
@@ -304,16 +304,16 @@ export const SIMSWAP_STAGES = [
     label: 'Realization',
     title: '4:47 PM — Tanya borrows a phone',
     caption: '4:47 PM. Tanya\'s phone has been showing "No Service" for over two hours. After her meeting she borrows a colleague\'s phone to call Digicel. The Digicel agent confirms her number was ported to a new SIM at 2:33 PM today — at her request, the system shows. Tanya says she did not request anything. The agent escalates. Tanya then calls Scotia. Scotia confirms a J$1.2M transfer cleared at 2:38 PM, authorized via OTP. The recovery window has closed; the funds are dispersed. Five years later, the J$61M conviction case will show that Tanya\'s incident was one of dozens enabled by the same insider CSR ring.',
-    durationMs: 9000,
+    durationMs: 24000,
     messages: [
       { id: 'ss-m8-1', fromActor: 'tanya', toActor: 'telco', kind: 'callback', label: '"My number — what happened?"', tooltip: '4:47 PM · borrowed colleague\'s phone',
-        audio: { text: 'My phone has had no service for over two hours. My number is eight seven six, my name is Tanya Ricketts. Can you check what happened to my line?', profile: 'victim' } },
+        audio: { text: 'My phone had no service for two hours. What happened to my line?', profile: 'victim' } },
       { id: 'ss-m8-2', fromActor: 'telco', toActor: 'tanya', kind: 'callback', label: '"Ported at 2:33 PM at your request"',
-        audio: { text: 'Mrs. Ricketts, your number was ported to a new SIM card at two thirty-three PM today. Our system shows the request was made at your request.', profile: 'investigator' } },
+        audio: { text: 'Your number was ported at two thirty-three. Our system shows it was at your request.', profile: 'investigator' } },
       { id: 'ss-m8-3', fromActor: 'tanya', toActor: 'scotia', kind: 'callback', label: '"What was the J$1.2M transfer?"',
-        audio: { text: 'Scotia, my number was just ported without my permission. There may be transfers on my account I did not authorize.', profile: 'victim' } },
+        audio: { text: 'My number was ported without my permission. Were there transfers on my account?', profile: 'victim' } },
       { id: 'ss-m8-4', fromActor: 'scotia', toActor: 'tanya', kind: 'callback', label: '"Authorized via OTP at 2:38 PM"',
-        audio: { text: 'Mrs. Ricketts, our records show a one point two million dollar transfer was authorized via one-time code at two thirty-eight PM today. The funds were dispersed within minutes.', profile: 'investigator' } },
+        audio: { text: 'A one point two million transfer cleared at two thirty-eight. Funds dispersed within minutes.', profile: 'investigator' } },
     ],
     actorStateChanges: { 'tanya': 'aware', 'telco': 'investigating', 'scotia': 'investigating' },
     revealedSignalIds: ['sig-insider-port-anomaly', 'sig-cascade-across-accounts'],
@@ -330,7 +330,7 @@ export const SIMSWAP_META = {
   tacticName: 'Initial Access',
   scenario: 'SC-tanya-scotia-simswap',
   scenarioContext: 'Ms. Tanya Ricketts, Scotia JM customer in Portmore, age 34, marketing coordinator, single mother of two. SIM swap victim — did nothing wrong. Strong password, careful with phishing, did not share OTP. Compromised entirely via insider CSR at Digicel. The animation grounds in the J$61 million Jamaica conviction (Corporate Area Parish Court, October 2025; sentencing November 6, 2025) where two of three convicted were telco customer service representatives. Distinct character role from existing roster: Allison Brown (mule recruitment scenario (SC007), recruited mule), Marcia Edwards (legitimate vendor in Structuring (F1087)), Trevor Bennett (structurer in Structuring (F1087)), Marcus Walters (3DS Bypass (F1076) victim, deferred), Beverly Williams (phishing victim in Phishing (F1081)), Devon Henry (vishing victim in Vishing (F1088)). Tanya represents the demographic that "stronger passwords" advice fails — her credential hygiene was already strong; her vulnerability was structural to SMS-2FA + insider co-conspirators.',
-  totalDurationMs: 60000,
+  totalDurationMs: 75000,
   stageCount: 8,
 }
 

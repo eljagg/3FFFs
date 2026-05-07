@@ -187,8 +187,12 @@ export function useNarration() {
     const config = VOICE_PROFILES[profile] || VOICE_PROFILES.narrator
     const speedMultiplier = opts.rate || 1
 
-    // Cancel anything currently speaking — sequence is one-message-at-a-time.
-    try { window.speechSynthesis.cancel() } catch (e) { /* noop */ }
+    // v25.7.0.15.2: do NOT cancel prior utterance. Let speechSynthesis
+    // queue naturally so multiple messages within a stage play
+    // sequentially. The caller is responsible for calling stopAll()
+    // on stage change (engines do this in their effect cleanup) and
+    // on unmount/mute. Cancelling on every speakMessage is what
+    // caused mid-sentence cutoffs in v25.7.0.15.
 
     const utt = new SpeechSynthesisUtterance(audio.text)
     utt.pitch = config.pitch
@@ -196,6 +200,15 @@ export function useNarration() {
     const voice = pickVoice(voicesRef.current, profile)
     if (voice) utt.voice = voice
     utt.lang = (voice && voice.lang) || 'en-US'
+
+    // v25.7.0.15.2: optional onStart/onEnd hooks for the visual
+    // speaker-icon cue. The browser fires these as the utterance
+    // moves through the queue.
+    if (opts.onStart) utt.onstart = opts.onStart
+    if (opts.onEnd)   utt.onend   = opts.onEnd
+    // onerror should also clear the cue so a failed utterance doesn't
+    // leave the icon stuck on
+    if (opts.onEnd) utt.onerror = opts.onEnd
 
     currentUtteranceRef.current = utt
     try {

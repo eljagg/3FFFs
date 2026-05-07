@@ -124,6 +124,16 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
      every render due to scenes-object reference churn from the parent.
      Also: cancel global speech on engine mount, in case a previous
      animation left utterances queued.
+     v25.7.0.15.2: replace slot-distribution-with-cancel with sequential
+     queue. The browser's speechSynthesis queue plays utterances back-
+     to-back; we just enqueue all of a stage's audio messages at stage
+     entry. This eliminates the mid-sentence-cutoff bug where slot
+     timeouts fired cancel() while the prior utterance was still
+     speaking. The activeMsgId visual cue uses each utterance's
+     onstart/onend callbacks to highlight the currently-speaking
+     message in real time. Audio may run slightly past stage boundary
+     (acceptable — leaks into next stage for ~1-2 seconds at worst);
+     stage-change cancels any remaining queue.
   ─────────────────────────────────────────────────────────────────── */
   useEffect(() => {
     // Mount-only: clear any leftover global speech from a prior animation
@@ -131,45 +141,34 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const audioTimersRef = useRef([])
   useEffect(() => {
-    // Always cancel previous audio + scheduled speeches when stage changes
+    // Stage change — cancel any queued speech from prior stage
     stopAllNarration()
-    audioTimersRef.current.forEach(t => clearTimeout(t))
-    audioTimersRef.current = []
     setActiveMsgId(null)
 
     if (isMuted || !audioSupported) return
     const stage = stages[currentStageIdx]
     if (!stage || !stage.messages || stage.messages.length === 0) return
 
-    // Find messages with EXPLICIT audio fields only (v25.7.0.15.1).
-    // The earlier auto-derivation from message labels for 'sms'/'callback'/
-    // 'voice' kinds was over-eager — labels like "SMS delivered · to
-    // ported SIM" are diagram-annotation language, not what would actually
-    // be heard. Require explicit `audio: { text, profile }` per message.
+    // Explicit audio fields only.
     const speakable = stage.messages
       .map(m => ({ msg: m, audio: m.audio }))
       .filter(({ audio }) => audio && audio.text)
 
     if (speakable.length === 0) return
 
-    // Distribute across the stage's playback duration
-    const stageDur = stage.durationMs / playbackSpeed
-    const slotDur = stageDur / speakable.length
-
-    speakable.forEach(({ msg, audio }, idx) => {
-      const startAt = idx * slotDur + slotDur * 0.1  // small offset to let stage caption land first
-      const t = setTimeout(() => {
-        setActiveMsgId(msg.id)
-        speakMessage(audio, { rate: playbackSpeed })
-      }, startAt)
-      audioTimersRef.current.push(t)
+    // Enqueue all of this stage's utterances back-to-back. Browser's
+    // speechSynthesis queue handles sequencing — no slot timeouts.
+    // Each utterance's onstart/onend updates the active-message cue.
+    speakable.forEach(({ msg, audio }) => {
+      speakMessage(audio, {
+        rate: playbackSpeed,
+        onStart: () => setActiveMsgId(msg.id),
+        onEnd: () => setActiveMsgId(prev => (prev === msg.id ? null : prev)),
+      })
     })
 
     return () => {
-      audioTimersRef.current.forEach(t => clearTimeout(t))
-      audioTimersRef.current = []
       stopAllNarration()
       setActiveMsgId(null)
     }
