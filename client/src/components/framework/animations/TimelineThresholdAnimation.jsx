@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { engineStyles } from './ProcessAnimation.jsx'
 import { useNarration } from './audioNarration.js'
+import { StageCoachOverlay, CoachToggleButton, useCoachToggle } from './StageCoachOverlay.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    TimelineThresholdAnimation — v25.7.0.11
@@ -71,6 +72,7 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
   const [activeControls, setActiveControls] = useState(() => new Set())
   const [scrubWeek, setScrubWeek] = useState(null)  // null = not scrubbing
   const [isMuted, setIsMuted] = useState(true)      // v25.7.0.15.5: default MUTED
+  const [isCoachOn, toggleCoach] = useCoachToggle() // v25.7.0.17: trainee-facing live caption overlay; persisted to localStorage
 
   // v25.7.0.15: audio narration hook
   const { speakMessage, stopAll: stopAllNarration, isSupported: audioSupported } = useNarration()
@@ -241,36 +243,47 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
         <ComplianceQueue characters={characters} thresholdAmount={thresholdAmount} currency={currency} />
       )}
 
-      {/* Main canvas — two stacked timelines */}
-      {currentStage.viewMode !== 'queue' && currentStage.viewMode !== 'decision' && (
-        <div style={tlStyles.canvasStack}>
-          {characters.map(character => (
-            <TimelinePanel
-              key={character.id}
-              character={character}
-              thresholdAmount={thresholdAmount}
-              thresholdLabel={thresholdLabel}
-              currency={currency}
-              weekRange={weekRange}
-              viewMode={currentStage.viewMode}
-              emphasized={currentStage.emphasizedCharacterId === character.id}
-              dimmed={currentStage.emphasizedCharacterId && currentStage.emphasizedCharacterId !== character.id}
-              scrubWeek={scrubWeek}
-              setScrubWeek={setScrubWeek}
-            />
-          ))}
-        </div>
-      )}
+      {/* v25.7.0.17: relative wrapper for coach overlay */}
+      <div style={{ position: 'relative' }}>
+        {/* Main canvas — two stacked timelines */}
+        {currentStage.viewMode !== 'queue' && currentStage.viewMode !== 'decision' && (
+          <div style={tlStyles.canvasStack}>
+            {characters.map(character => (
+              <TimelinePanel
+                key={character.id}
+                character={character}
+                thresholdAmount={thresholdAmount}
+                thresholdLabel={thresholdLabel}
+                currency={currency}
+                weekRange={weekRange}
+                viewMode={currentStage.viewMode}
+                emphasized={currentStage.emphasizedCharacterId === character.id}
+                dimmed={currentStage.emphasizedCharacterId && currentStage.emphasizedCharacterId !== character.id}
+                scrubWeek={scrubWeek}
+                setScrubWeek={setScrubWeek}
+              />
+            ))}
+          </div>
+        )}
 
-      {/* Decision panel — shown on final stage */}
-      {currentStage.viewMode === 'decision' && currentStage.decision && (
-        <DecisionPanel decision={currentStage.decision} characters={characters} />
-      )}
+        {/* Decision panel — shown on final stage */}
+        {currentStage.viewMode === 'decision' && currentStage.decision && (
+          <DecisionPanel decision={currentStage.decision} characters={characters} />
+        )}
 
-      {/* Channel/source legend (when relevant) */}
-      {(currentStage.viewMode === 'channel' || currentStage.viewMode === 'time') && (
-        <ChannelLegend />
-      )}
+        {/* Channel/source legend (when relevant) */}
+        {(currentStage.viewMode === 'channel' || currentStage.viewMode === 'time') && (
+          <ChannelLegend />
+        )}
+
+        {/* v25.7.0.17: live trainee-facing coach caption overlay */}
+        <StageCoachOverlay
+          isOn={isCoachOn}
+          text={currentStage.caption}
+          stageLabel={currentStage.label}
+          stageIdx={currentStageIdx}
+        />
+      </div>
 
       {/* Playback controls */}
       <div style={engineStyles.playbackBar}>
@@ -297,6 +310,12 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
           )}
         </div>
         <div style={engineStyles.playbackRight}>
+          {/* v25.7.0.17: coach mode toggle */}
+          <CoachToggleButton
+            isOn={isCoachOn}
+            onToggle={toggleCoach}
+            baseStyle={{ ...engineStyles.speedButton, marginRight: 12, fontSize: 13 }}
+          />
           {/* v25.7.0.15: audio mute toggle */}
           {audioSupported && (
             <button

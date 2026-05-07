@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNarration } from './audioNarration.js'
+import { StageCoachOverlay, CoachToggleButton, useCoachToggle } from './StageCoachOverlay.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    ProcessAnimation — v25.7.0.9
@@ -58,6 +59,7 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeControls, setActiveControls] = useState(() => new Set())
   const [isMuted, setIsMuted] = useState(true)         // v25.7.0.15.5: default MUTED (browser TTS quality insufficient; ElevenLabs pivot deferred)
+  const [isCoachOn, toggleCoach] = useCoachToggle()    // v25.7.0.17: trainee-facing live caption overlay; persisted to localStorage
 
   // v25.7.0.15: audio narration hook
   const { speakMessage, stopAll: stopAllNarration, isSupported: audioSupported } = useNarration()
@@ -285,6 +287,13 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
             </ZoneFrame>
           )
         })}
+        {/* v25.7.0.17: live trainee-facing coach caption overlay */}
+        <StageCoachOverlay
+          isOn={isCoachOn}
+          text={currentStage.caption}
+          stageLabel={currentStage.label}
+          stageIdx={currentStageIdx}
+        />
       </div>
 
       {/* Playback controls */}
@@ -312,6 +321,12 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
           )}
         </div>
         <div style={styles.playbackRight}>
+          {/* v25.7.0.17: coach mode toggle */}
+          <CoachToggleButton
+            isOn={isCoachOn}
+            onToggle={toggleCoach}
+            baseStyle={{ ...styles.speedButton, marginRight: 12, fontSize: 13 }}
+          />
           {/* v25.7.0.15: audio mute toggle */}
           {audioSupported && (
             <button
@@ -731,6 +746,7 @@ export const engineStyles = {
     gridTemplateColumns: 'minmax(220px, 1fr) minmax(280px, 1.3fr) minmax(220px, 1fr)',
     gap: 10,
     minHeight: 420,
+    position: 'relative',  // v25.7.0.17: enables StageCoachOverlay absolute positioning
   },
 
   zoneFrame: {

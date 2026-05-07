@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { engineStyles } from './ProcessAnimation.jsx'
 import { useNarration } from './audioNarration.js'
+import { StageCoachOverlay, CoachToggleButton, useCoachToggle } from './StageCoachOverlay.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    MultiActorSequenceAnimation — v25.7.0.12
@@ -66,6 +67,7 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeControls, setActiveControls] = useState(() => new Set())
   const [isMuted, setIsMuted] = useState(true)         // v25.7.0.15.5: default MUTED (browser TTS quality insufficient; ElevenLabs pivot deferred)
+  const [isCoachOn, toggleCoach] = useCoachToggle()    // v25.7.0.17: trainee-facing live caption overlay; persisted to localStorage
   const [activeMsgId, setActiveMsgId] = useState(null) // v25.7.0.15: visual cue on speaking message
 
   // v25.7.0.15: audio narration hook
@@ -295,15 +297,24 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
         </motion.div>
       </AnimatePresence>
 
-      {/* Sequence diagram canvas */}
-      <SequenceDiagramCanvas
-        actors={actors}
-        accumulatedMessages={accumulatedMessages}
-        actorStates={actorStates}
-        currentStageIdx={currentStageIdx}
-        totalStages={stages.length}
-        activeMsgId={activeMsgId}
-      />
+      {/* Sequence diagram canvas — wrapped in relative container for v25.7.0.17 coach overlay */}
+      <div style={{ position: 'relative' }}>
+        <SequenceDiagramCanvas
+          actors={actors}
+          accumulatedMessages={accumulatedMessages}
+          actorStates={actorStates}
+          currentStageIdx={currentStageIdx}
+          totalStages={stages.length}
+          activeMsgId={activeMsgId}
+        />
+        {/* v25.7.0.17: live trainee-facing coach caption overlay */}
+        <StageCoachOverlay
+          isOn={isCoachOn}
+          text={currentStage.caption}
+          stageLabel={currentStage.label}
+          stageIdx={currentStageIdx}
+        />
+      </div>
 
       {/* Playback controls */}
       <div style={engineStyles.playbackBar}>
@@ -330,6 +341,12 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
           )}
         </div>
         <div style={engineStyles.playbackRight}>
+          {/* v25.7.0.17: coach mode toggle */}
+          <CoachToggleButton
+            isOn={isCoachOn}
+            onToggle={toggleCoach}
+            baseStyle={{ ...engineStyles.speedButton, marginRight: 12, fontSize: 13 }}
+          />
           {/* v25.7.0.15: audio mute toggle. Only rendered when speech
               synthesis is supported (typically all modern browsers). */}
           {audioSupported && (
