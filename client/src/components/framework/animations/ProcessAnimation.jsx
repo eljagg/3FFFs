@@ -262,14 +262,22 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
           </span>
         </div>
         <div style={styles.controlsGrid}>
-          {controls.map(c => (
-            <ControlToggle
-              key={c.id}
-              control={c}
-              active={activeControls.has(c.id)}
-              onToggle={() => toggleControl(c.id)}
-            />
-          ))}
+          {controls.map(c => {
+            // v25.7.0.11.2: tell the toggle whether this control is
+            // currently surfacing a signal. If active but no signal —
+            // toggle renders the "step through to view" hint.
+            const hasActiveSignal = revealedSignals.some(s => s.revealedBy === c.id)
+            return (
+              <ControlToggle
+                key={c.id}
+                control={c}
+                active={activeControls.has(c.id)}
+                onToggle={() => toggleControl(c.id)}
+                hasActiveSignalAtCurrentStage={hasActiveSignal}
+                stageLabels={stages.map(s => s.label)}
+              />
+            )
+          })}
         </div>
       </div>
 
@@ -463,8 +471,35 @@ function PlaybackButton({ onClick, disabled, primary, title, children }) {
 }
 
 /* ─── Control toggle ───────────────────────────────────────────────── */
-function ControlToggle({ control, active, onToggle }) {
+function ControlToggle({ control, active, onToggle, hasActiveSignalAtCurrentStage, stageLabels }) {
   const naive = control.naive
+
+  // v25.7.0.11.2: when the control is active but no signal is live at
+  // the current stage, show a hint pointing at which stages the
+  // control would have caught signals. Preserves the per-stage
+  // pedagogy while making the trainee understand the control IS
+  // doing something — just not at the stage they're currently viewing.
+  const showStageHint =
+    active &&
+    !naive &&
+    !hasActiveSignalAtCurrentStage &&
+    Array.isArray(control.revealsAtStages) &&
+    control.revealsAtStages.length > 0
+
+  // Convert the 1-indexed revealsAtStages to a friendly hint string.
+  // E.g., [3, 7] with 7 total stages → "Active at stages 3, 7. Step
+  // through to view." If we have stageLabels, pull a 1-2 word
+  // summary instead of bare numbers.
+  let stageHintText = null
+  if (showStageHint) {
+    const stageRefs = control.revealsAtStages.map(idx => {
+      // revealsAtStages is 1-indexed; stageLabels is 0-indexed array
+      const label = stageLabels && stageLabels[idx - 1]
+      return label ? `stage ${idx} (${label})` : `stage ${idx}`
+    })
+    stageHintText = `Active at ${stageRefs.join(', ')}. Step through to view.`
+  }
+
   return (
     <button
       onClick={onToggle}
@@ -487,6 +522,11 @@ function ControlToggle({ control, active, onToggle }) {
       {active && !naive && control.catchTotal > 0 && (
         <div style={styles.controlCallout}>
           Would have flagged {control.catchCount} of {control.catchTotal} {control.catchUnit || 'calls'}
+        </div>
+      )}
+      {showStageHint && (
+        <div style={styles.controlStageHint}>
+          {stageHintText}
         </div>
       )}
       {active && naive && (
@@ -1131,6 +1171,22 @@ export const engineStyles = {
     color: 'var(--ink-faint)',
     paddingLeft: 24,
     marginTop: 2,
+  },
+  // v25.7.0.11.2: hint shown when a control is toggled active but
+  // its signal isn't live at the current stage. Dashed left border
+  // and italic text to distinguish from the primary "would have
+  // flagged X of Y" callout.
+  controlStageHint: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: 'var(--ink-faint)',
+    paddingLeft: 22,
+    marginLeft: 2,
+    marginTop: 4,
+    borderLeft: '2px dashed var(--rule)',
+    paddingTop: 2,
+    paddingBottom: 2,
+    lineHeight: 1.45,
   },
 }
 

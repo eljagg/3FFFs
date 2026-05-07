@@ -276,14 +276,22 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
           </span>
         </div>
         <div style={engineStyles.controlsGrid}>
-          {controls.map(c => (
-            <ControlToggle
-              key={c.id}
-              control={c}
-              active={activeControls.has(c.id)}
-              onToggle={() => toggleControl(c.id)}
-            />
-          ))}
+          {controls.map(c => {
+            // v25.7.0.11.2: tell the toggle whether this control is
+            // currently surfacing a signal. If active but no signal —
+            // toggle renders the "step through to view" hint.
+            const hasActiveSignal = revealedSignals.some(s => s.revealedBy === c.id)
+            return (
+              <ControlToggle
+                key={c.id}
+                control={c}
+                active={activeControls.has(c.id)}
+                onToggle={() => toggleControl(c.id)}
+                hasActiveSignalAtCurrentStage={hasActiveSignal}
+                stageLabels={stages.map(s => s.label)}
+              />
+            )
+          })}
         </div>
       </div>
 
@@ -340,12 +348,16 @@ function ComplianceQueue({ characters, thresholdAmount, currency }) {
 /* ─── TimelinePanel: one character's timeline ────────────────────── */
 function TimelinePanel({ character, thresholdAmount, thresholdLabel, currency, weekRange, viewMode, emphasized, dimmed, scrubWeek, setScrubWeek }) {
   // Layout
+  // v25.7.0.11.2: compacted panel layout for vertical-fit. Was
+  // 220h with 30/50 top/bottom margins; now 160h with 22/38 margins.
+  // Plot area drops from 140h → 100h. Threshold line and dot
+  // positions still read clearly; saves ~120px across two stacked panels.
   const PANEL_WIDTH = 920
-  const PANEL_HEIGHT = 220
+  const PANEL_HEIGHT = 160
   const MARGIN_LEFT = 90
   const MARGIN_RIGHT = 30
-  const MARGIN_TOP = 30
-  const MARGIN_BOTTOM = 50
+  const MARGIN_TOP = 22
+  const MARGIN_BOTTOM = 38
 
   const plotWidth = PANEL_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
   const plotHeight = PANEL_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
@@ -388,15 +400,17 @@ function TimelinePanel({ character, thresholdAmount, thresholdLabel, currency, w
         ...(emphasized ? tlStyles.panelEmphasized : {}),
       }}
     >
+      {/* v25.7.0.11.2: single-line dense header. Was a 2-row flex
+          with separate left/right blocks; now one row with bullet-
+          separated metadata. Saves ~30px per panel. */}
       <div style={tlStyles.panelHeader}>
-        <div style={tlStyles.panelHeaderLeft}>
-          <div style={tlStyles.panelName}>{character.name}</div>
-          <div style={tlStyles.panelDescriptor}>{character.descriptor}</div>
-        </div>
-        <div style={tlStyles.panelHeaderRight}>
-          <div style={tlStyles.panelMetaSmall}>{character.account}</div>
-          <div style={tlStyles.panelMetaSmall}>Account age: {character.accountAgeWeeks} weeks</div>
-        </div>
+        <span style={tlStyles.panelName}>{character.name}</span>
+        <span style={tlStyles.panelDot}>·</span>
+        <span style={tlStyles.panelDescriptor}>{character.descriptor}</span>
+        <span style={tlStyles.panelDot}>·</span>
+        <span style={tlStyles.panelMetaSmall}>{character.account}</span>
+        <span style={tlStyles.panelDot}>·</span>
+        <span style={tlStyles.panelMetaSmall}>{formatAccountAge(character.accountAgeWeeks)}</span>
       </div>
 
       <svg
@@ -527,13 +541,28 @@ function TimelinePanel({ character, thresholdAmount, thresholdLabel, currency, w
         )}
       </svg>
 
-      {/* Stats strip below chart */}
-      <div style={tlStyles.statsStrip}>
-        <StatItem label="Deposits this period" value={txs.length} />
-        <StatItem label="Cumulative" value={`J$${formatJMDShort(txs.reduce((s, t) => s + t.amountJMD, 0))}`} />
-        <StatItem label="Avg deposit" value={`J$${formatJMDShort(txs.reduce((s, t) => s + t.amountJMD, 0) / txs.length)}`} />
-        <StatItem label="Above threshold" value={txs.filter(t => t.amountJMD >= thresholdAmount).length} />
-        <StatItem label="Declared occupation" value={character.declaredOccupation} />
+      {/* v25.7.0.11.2: compact inline single-line stats summary.
+          Was a flex of 5 stat-items each stacked label-over-value;
+          now one row, smaller font, no per-stat label/value verticals.
+          Occupation dropped from the strip (already conveyed in
+          the header descriptor — no need to repeat). Saves ~40px
+          per panel. */}
+      <div style={tlStyles.statsStripCompact}>
+        <span style={tlStyles.statInline}>
+          <span style={tlStyles.statInlineLabel}>Deposits</span> {txs.length}
+        </span>
+        <span style={tlStyles.statInlineDot}>·</span>
+        <span style={tlStyles.statInline}>
+          <span style={tlStyles.statInlineLabel}>Cumulative</span> J${formatJMDShort(txs.reduce((s, t) => s + t.amountJMD, 0))}
+        </span>
+        <span style={tlStyles.statInlineDot}>·</span>
+        <span style={tlStyles.statInline}>
+          <span style={tlStyles.statInlineLabel}>Avg</span> J${formatJMDShort(txs.reduce((s, t) => s + t.amountJMD, 0) / txs.length)}
+        </span>
+        <span style={tlStyles.statInlineDot}>·</span>
+        <span style={tlStyles.statInline}>
+          <span style={tlStyles.statInlineLabel}>Above threshold</span> {txs.filter(t => t.amountJMD >= thresholdAmount).length}
+        </span>
       </div>
     </motion.div>
   )
@@ -690,6 +719,17 @@ function formatJMDShort(amt) {
   return amt.toString()
 }
 
+// v25.7.0.11.2: human-readable account-age summary for the dense
+// single-line header. Marcia's 208 weeks reads as "4yr customer";
+// Trevor's 12 weeks reads as "12wk customer".
+function formatAccountAge(weeks) {
+  if (weeks >= 52) {
+    const years = (weeks / 52).toFixed(weeks % 52 === 0 ? 0 : 1)
+    return `${years}yr customer`
+  }
+  return `${weeks}wk customer`
+}
+
 
 /* ─── RevealedSignalsStrip ──────────────────────────────────────── */
 function RevealedSignalsStrip({ revealedSignals, activeControlsSize, finalHeadline }) {
@@ -768,8 +808,28 @@ function PlaybackButton({ onClick, disabled, primary, title, children }) {
   )
 }
 
-function ControlToggle({ control, active, onToggle }) {
+function ControlToggle({ control, active, onToggle, hasActiveSignalAtCurrentStage, stageLabels }) {
   const naive = control.naive
+
+  // v25.7.0.11.2: stage-feedback hint when control is toggled active
+  // at a stage where its signal isn't live. Same logic as
+  // ProcessAnimation's ControlToggle.
+  const showStageHint =
+    active &&
+    !naive &&
+    !hasActiveSignalAtCurrentStage &&
+    Array.isArray(control.revealsAtStages) &&
+    control.revealsAtStages.length > 0
+
+  let stageHintText = null
+  if (showStageHint) {
+    const stageRefs = control.revealsAtStages.map(idx => {
+      const label = stageLabels && stageLabels[idx - 1]
+      return label ? `stage ${idx} (${label})` : `stage ${idx}`
+    })
+    stageHintText = `Active at ${stageRefs.join(', ')}. Step through to view.`
+  }
+
   return (
     <button
       onClick={onToggle}
@@ -792,6 +852,11 @@ function ControlToggle({ control, active, onToggle }) {
       {active && !naive && control.catchTotal > 0 && (
         <div style={engineStyles.controlCallout}>
           Would have flagged {control.catchCount} of {control.catchTotal} {control.catchUnit || 'patterns'}
+        </div>
+      )}
+      {showStageHint && (
+        <div style={engineStyles.controlStageHint}>
+          {stageHintText}
         </div>
       )}
       {active && naive && (
@@ -827,38 +892,43 @@ const tlStyles = {
     flexDirection: 'column',
     gap: 16,
   },
+  // v25.7.0.11.2: tighter padding (was 14/16 → 10/14) for vertical fit
   panel: {
     background: 'var(--paper-hi)',
     border: '1px solid var(--rule)',
     borderRadius: 8,
-    padding: '14px 16px',
+    padding: '10px 14px',
     transition: 'all 0.3s',
   },
   panelEmphasized: {
     border: '2px solid var(--accent)',
     boxShadow: '0 0 12px rgba(184, 81, 61, 0.18)',
   },
+  // v25.7.0.11.2: compact single-row header. Inline elements with
+  // bullet separators. Tighter padding than the old 2-row layout.
   panelHeader: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-    paddingBottom: 8,
+    alignItems: 'baseline',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 6,
+    paddingBottom: 6,
     borderBottom: '1px solid var(--rule)',
   },
-  panelHeaderLeft: { flex: 1 },
-  panelHeaderRight: { textAlign: 'right' },
+  panelDot: {
+    color: 'var(--ink-faint)',
+    fontSize: 11,
+  },
   panelName: {
     fontFamily: 'var(--font-display)',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 600,
     color: 'var(--ink)',
   },
   panelDescriptor: {
-    fontSize: 12,
+    fontSize: 11.5,
     color: 'var(--ink-soft)',
     fontStyle: 'italic',
-    marginTop: 2,
   },
   panelMetaSmall: {
     fontFamily: 'var(--font-mono)',
@@ -866,6 +936,38 @@ const tlStyles = {
     color: 'var(--ink-faint)',
     letterSpacing: '0.04em',
   },
+  // v25.7.0.11.2: compact inline stats — single row, no vertical
+  // label/value stacks. Saves ~40px per panel.
+  statsStripCompact: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'baseline',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTop: '1px solid var(--rule)',
+    fontSize: 11,
+    color: 'var(--ink-soft)',
+  },
+  statInline: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 10.5,
+    color: 'var(--ink)',
+    fontWeight: 500,
+  },
+  statInlineLabel: {
+    color: 'var(--ink-faint)',
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    fontSize: 9,
+    fontWeight: 600,
+    marginRight: 4,
+  },
+  statInlineDot: {
+    color: 'var(--ink-faint)',
+    fontSize: 11,
+  },
+  // v25.7.0.11.1+ legacy (kept for completeness, unused after compaction):
   statsStrip: {
     display: 'flex',
     gap: 16,
