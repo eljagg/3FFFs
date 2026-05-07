@@ -199,7 +199,8 @@ export const PHISHING_STAGES = [
     caption: 'Tuesday afternoon, 4:17 PM. Beverly\'s phone buzzes. SMS from "NCB-ALERT": "Unusual login from Kingston. Verify in 30 minutes or account will be locked. ncb-secure.live/verify". The message format mirrors real NCB security SMS exactly. The 30-minute deadline triggers urgency. Beverly is in a grocery store; she clicks while walking to her car.',
     durationMs: 6000,
     messages: [
-      { id: 'm3-1', fromActor: 'fraudster', toActor: 'beverly', kind: 'sms', label: '"NCB ALERT: Unusual login. Verify in 30 min."', tooltip: 'ncb-secure.live/verify · TYPOSQUAT', suspicious: true },
+      { id: 'm3-1', fromActor: 'fraudster', toActor: 'beverly', kind: 'sms', label: '"NCB ALERT: Unusual login. Verify in 30 min."', tooltip: 'ncb-secure.live/verify · TYPOSQUAT', suspicious: true,
+        audio: { text: 'NCB ALERT: Unusual login from Kingston. Verify in 30 minutes or account will be locked. ncb dash secure dot live slash verify.', profile: 'system' } },
     ],
     actorStateChanges: { 'beverly': 'targeted' },
     revealedSignalIds: ['sig-typosquat-domain', 'sig-urgency-language'],
@@ -228,7 +229,8 @@ export const PHISHING_STAGES = [
     durationMs: 6000,
     messages: [
       { id: 'm5-1', fromActor: 'fraudster', toActor: 'ncb', kind: 'http', label: 'Login with Beverly\'s credentials', suspicious: true },
-      { id: 'm5-2', fromActor: 'ncb', toActor: 'beverly', kind: 'sms', label: 'OTP: 384719 (legitimate)', tooltip: 'sent 4:18:47 PM' },
+      { id: 'm5-2', fromActor: 'ncb', toActor: 'beverly', kind: 'sms', label: 'OTP: 384719 (legitimate)', tooltip: 'sent 4:18:47 PM',
+        audio: { text: 'NCB. Three eight four seven one nine is your one-time code. Do not share with anyone.', profile: 'system' } },
       { id: 'm5-3', fromActor: 'beverly', toActor: 'fraudster', kind: 'http', label: 'OTP entered on clone site' },
       { id: 'm5-4', fromActor: 'fraudster', toActor: 'ncb', kind: 'http', label: 'OTP replay · session established', tooltip: '4:19:42 PM · 55s after delivery', suspicious: true },
     ],
@@ -259,8 +261,10 @@ export const PHISHING_STAGES = [
     caption: 'Without active SMS alerts (NCB suspended these in October 2023), Beverly has no notification anything is wrong. She drives home, has dinner, goes to bed. The next morning she logs in to NCB to pay a bill and sees the J$2.4M transfer. She calls NCB. By then the funds have been withdrawn from the dispersion accounts. NCB\'s position: she provided the OTP herself, so the bank has no liability. Beverly\'s position: the bank suspended the alert system that would have given her a chance to stop this. Both positions are documented in the actual NCB J$47.5M case.',
     durationMs: 6000,
     messages: [
-      { id: 'm7-1', fromActor: 'beverly', toActor: 'ncb', kind: 'callback', label: 'Discovers loss · calls NCB', tooltip: 'Wednesday morning, ~16 hours later' },
-      { id: 'm7-2', fromActor: 'ncb', toActor: 'beverly', kind: 'system', label: 'Funds already withdrawn · "you provided OTP yourself"' },
+      { id: 'm7-1', fromActor: 'beverly', toActor: 'ncb', kind: 'callback', label: 'Discovers loss · calls NCB', tooltip: 'Wednesday morning, ~16 hours later',
+        audio: { text: 'NCB? I logged into my account this morning and there is a transfer for two point four million dollars I never made. What happened?', profile: 'victim' } },
+      { id: 'm7-2', fromActor: 'ncb', toActor: 'beverly', kind: 'system', label: 'Funds already withdrawn · "you provided OTP yourself"',
+        audio: { text: 'Mrs. Williams, our records show the transfer was authorized using your one-time code. Since you provided the code yourself, the bank has no liability for these funds.', profile: 'investigator' } },
     ],
     actorStateChanges: { 'beverly': 'aware', 'ncb': 'investigating' },
     revealedSignalIds: ['sig-no-customer-notification'],

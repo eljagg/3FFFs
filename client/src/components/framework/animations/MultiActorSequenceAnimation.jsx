@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { engineStyles } from './ProcessAnimation.jsx'
+import { useNarration, deriveAudioFromMessage } from './audioNarration.js'
 
 /* ─────────────────────────────────────────────────────────────────────────
    MultiActorSequenceAnimation — v25.7.0.12
+   v25.7.0.15: integrated audioNarration — speaks per-message audio on
+   stage transitions when audio metadata is present. Mute toggle in
+   playback bar. Default unmuted (trainees encounter the realism on
+   first watch).
 
    Animation engine for multi-actor temporal flows where the lesson is in
    how messages/transactions/events pass between distinct actors over time.
@@ -60,11 +65,19 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeControls, setActiveControls] = useState(() => new Set())
+  const [isMuted, setIsMuted] = useState(false)        // v25.7.0.15: audio toggle, default unmuted
+  const [activeMsgId, setActiveMsgId] = useState(null) // v25.7.0.15: visual cue on speaking message
+
+  // v25.7.0.15: audio narration hook
+  const { speakMessage, stopAll: stopAllNarration, isSupported: audioSupported } = useNarration()
 
   // External pause hook
   useEffect(() => {
-    if (externalPauseSignal != null) setIsPlaying(false)
-  }, [externalPauseSignal])
+    if (externalPauseSignal != null) {
+      setIsPlaying(false)
+      stopAllNarration()
+    }
+  }, [externalPauseSignal, stopAllNarration])
 
   const currentStage = stages[currentStageIdx]
   const isAtEnd = currentStageIdx >= stages.length - 1
@@ -95,6 +108,56 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [isPlaying, currentStageIdx, playbackSpeed, currentStage, isAtEnd, stages.length])
+
+  /* ─── Audio narration — v25.7.0.15 ────────────────────────────────
+     On every stage entry, queue up the messages that have audio metadata
+     and speak them sequentially within the stage's duration. Each message
+     gets a slot of (stageDuration / messageCount) ms.
+     - Skipped entirely when muted
+     - Skipped when speech synthesis isn't supported
+     - Cancelled cleanly on stage change, pause, scrub, unmount
+     - activeMsgId state tracks which message is currently speaking,
+       used by SequenceDiagramCanvas to render the speaker-icon cue
+  ─────────────────────────────────────────────────────────────────── */
+  const audioTimersRef = useRef([])
+  useEffect(() => {
+    // Always cancel previous audio + scheduled speeches when stage changes
+    stopAllNarration()
+    audioTimersRef.current.forEach(t => clearTimeout(t))
+    audioTimersRef.current = []
+    setActiveMsgId(null)
+
+    if (isMuted || !audioSupported) return
+    const stage = currentStage
+    if (!stage || !stage.messages || stage.messages.length === 0) return
+
+    // Find messages with audio (explicit or auto-derivable)
+    const speakable = stage.messages
+      .map(m => ({ msg: m, audio: m.audio || deriveAudioFromMessage(m) }))
+      .filter(({ audio }) => audio && audio.text)
+
+    if (speakable.length === 0) return
+
+    // Distribute across the stage's playback duration
+    const stageDur = currentStage.durationMs / playbackSpeed
+    const slotDur = stageDur / speakable.length
+
+    speakable.forEach(({ msg, audio }, idx) => {
+      const startAt = idx * slotDur + slotDur * 0.1  // small offset to let stage caption land first
+      const t = setTimeout(() => {
+        setActiveMsgId(msg.id)
+        speakMessage(audio, { rate: playbackSpeed })
+      }, startAt)
+      audioTimersRef.current.push(t)
+    })
+
+    return () => {
+      audioTimersRef.current.forEach(t => clearTimeout(t))
+      audioTimersRef.current = []
+      stopAllNarration()
+      setActiveMsgId(null)
+    }
+  }, [currentStageIdx, isMuted, audioSupported, currentStage, playbackSpeed, speakMessage, stopAllNarration])
 
   function togglePlay() {
     if (isAtEnd) {
@@ -217,6 +280,7 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
         actorStates={actorStates}
         currentStageIdx={currentStageIdx}
         totalStages={stages.length}
+        activeMsgId={activeMsgId}
       />
 
       {/* Playback controls */}
@@ -244,6 +308,22 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
           )}
         </div>
         <div style={engineStyles.playbackRight}>
+          {/* v25.7.0.15: audio mute toggle. Only rendered when speech
+              synthesis is supported (typically all modern browsers). */}
+          {audioSupported && (
+            <button
+              onClick={() => setIsMuted(m => !m)}
+              title={isMuted ? 'Audio muted — click to enable' : 'Audio on — click to mute'}
+              style={{
+                ...engineStyles.speedButton,
+                marginRight: 12,
+                fontSize: 13,
+                opacity: isMuted ? 0.55 : 1,
+              }}
+            >
+              {isMuted ? '🔇 Audio' : '🔊 Audio'}
+            </button>
+          )}
           <span style={engineStyles.speedLabel}>SPEED</span>
           {[0.5, 1, 2].map(s => (
             <button
@@ -298,7 +378,7 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
 
 
 /* ─── SequenceDiagramCanvas — the actual diagram ──────────────────── */
-function SequenceDiagramCanvas({ actors, accumulatedMessages, actorStates, currentStageIdx, totalStages }) {
+function SequenceDiagramCanvas({ actors, accumulatedMessages, actorStates, currentStageIdx, totalStages, activeMsgId }) {
   // Layout
   const CANVAS_WIDTH = 1100
   const ACTOR_HEADER_HEIGHT = 70
@@ -427,6 +507,7 @@ function SequenceDiagramCanvas({ actors, accumulatedMessages, actorStates, curre
           const arrowSize = 6
           const color = MESSAGE_KIND_COLORS[msg.kind] || '#666'
           const isCurrent = msg.isCurrent
+          const isSpeaking = activeMsgId === msg.id     // v25.7.0.15: speaker-icon cue
           const opacity = isCurrent ? 1 : 0.55
 
           return (
@@ -506,6 +587,26 @@ function SequenceDiagramCanvas({ actors, accumulatedMessages, actorStates, curre
                     </text>
                   )}
                 </>
+              )}
+              {/* v25.7.0.15: speaker icon when audio for this message is playing */}
+              {isSpeaking && (
+                <g>
+                  <circle
+                    cx={isSelf ? x1 + 60 : (x1 + x2) / 2}
+                    cy={isSelf ? y + 4 : y - 22}
+                    r={9}
+                    fill="var(--accent)"
+                    opacity="0.85"
+                  />
+                  <text
+                    x={isSelf ? x1 + 60 : (x1 + x2) / 2}
+                    y={isSelf ? y + 8 : y - 18}
+                    textAnchor="middle"
+                    style={{ fontSize: 11, fill: '#fff', fontWeight: 700 }}
+                  >
+                    🔊
+                  </text>
+                </g>
               )}
             </motion.g>
           )

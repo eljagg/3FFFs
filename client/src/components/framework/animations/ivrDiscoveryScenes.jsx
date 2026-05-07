@@ -152,6 +152,7 @@ export const IVR_DISCOVERY_STAGES = [
     label: 'Probe #1',
     title: 'Map the menu — no auth attempted',
     caption: 'First call: spoofed caller ID makes it look like the call comes from a Kingston mobile number. The attacker listens through every menu option, captures the structure, hangs up. No authentication tried — pure reconnaissance.',
+    audio: { text: 'Welcome to JNCB Customer Service. For English, press 1. For Spanish, press 2. For account balance, press 1. For card services, press 2. For transfer history, press 3.', profile: 'system' },
     durationMs: 6000,
     focalZone: 'ivr',
     attackerZone: {
@@ -192,6 +193,7 @@ export const IVR_DISCOVERY_STAGES = [
     label: 'Probe #2',
     title: 'Test the auth boundary — first guess fails',
     caption: 'Second call: attacker selects "Account balance," gets prompted for the account number. Enters a guess based on the last-4 they have. Distinct error tone — wrong account. Hangs up immediately. Now they know the format.',
+    audio: { text: 'Please enter your eight-digit account number followed by the pound key. We are sorry, the account number you entered does not match our records. Please try again.', profile: 'system' },
     durationMs: 5500,
     focalZone: 'ivr',
     attackerZone: {
@@ -233,6 +235,7 @@ export const IVR_DISCOVERY_STAGES = [
     label: 'Probe #3',
     title: 'Auth boundary — second guess hits',
     caption: 'Third call (different spoofed ANI, 12 minutes later). Attacker tries another account number guess. Correct! IVR proceeds to PIN prompt. Attacker hangs up — they don\'t need to enter the PIN, they just confirmed the account exists.',
+    audio: { text: 'Please enter your eight-digit account number followed by the pound key. Thank you. Please enter your four-digit personal identification number.', profile: 'system' },
     durationMs: 5500,
     focalZone: 'attacker',
     attackerZone: {
@@ -274,6 +277,7 @@ export const IVR_DISCOVERY_STAGES = [
     label: 'Validation',
     title: "Allison's account confirmed — balance harvested",
     caption: 'Crew has now obtained the PIN through a separate phishing channel (off-stage). They call back, breeze through authentication, listen to balance ("JMD $14,200"), hang up. 18 seconds total. The IVR sees a balance check. So does fraud monitoring — and finds it indistinguishable from a real customer.',
+    audio: { text: 'Authentication successful. Your current balance is fourteen thousand two hundred Jamaican dollars. To repeat this information, press 1.', profile: 'system' },
     durationMs: 6000,
     focalZone: 'ivr',
     attackerZone: {

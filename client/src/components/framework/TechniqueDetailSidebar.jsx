@@ -16,6 +16,20 @@ import { api } from '../../lib/api.js'
 // v25.7.0.12: fourth engine (MultiActorSequenceAnimation) for multi-
 //   actor temporal flows. First consumer: Phishing (F1081) under
 //   Initial Access (TA0001). Grounded in real NCB J$47.5M case.
+// v25.7.0.13-14: Vishing (F1088) and SIM Card Swap (T1451) animations
+//   on the same engine; SIM Swap extended to 5 actors (Insider lane).
+// v25.7.0.14.1: auto-derived control-stage hint mapping (engine fix;
+//   scene metadata `revealsAtStages` now derived from actual signal-to-
+//   stage mapping rather than hand-maintained).
+// v25.7.0.15: audio narration system across all three engines via the
+//   browser's Web Speech API. Per-message audio fields on dialogue
+//   messages (Phishing, Vishing, SIM Swap) and per-stage audio on
+//   process/timeline animations (IVR Discovery). Mute toggle in
+//   playback bar; default unmuted so trainees encounter the realism.
+//   Pedagogical rationale: tellers and customer-service staff hear
+//   actual fraudster voices when customers report incidents — they
+//   need to recognize the voice pattern (cadence, scripted authority
+//   language, specific phrases) as the fraud signature.
 import ProcessAnimation from './animations/ProcessAnimation.jsx'
 import TimelineThresholdAnimation from './animations/TimelineThresholdAnimation.jsx'
 import MultiActorSequenceAnimation from './animations/MultiActorSequenceAnimation.jsx'

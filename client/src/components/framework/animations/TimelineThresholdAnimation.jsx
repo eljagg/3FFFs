@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { engineStyles } from './ProcessAnimation.jsx'
+import { useNarration } from './audioNarration.js'
 
 /* ─────────────────────────────────────────────────────────────────────────
    TimelineThresholdAnimation — v25.7.0.11
+   v25.7.0.15: integrated audioNarration. Same pattern as ProcessAnimation
+   — per-stage `audio: { text, profile }` is spoken on stage entry.
+   Current Structuring (F1087) scene has no audio fields (case-review,
+   no dialogue), so the mute toggle is functional but inert. Future
+   case-review animations can opt in by adding audio fields.
 
    Animation engine for timeline+threshold-shape technique animations.
    Third engine alongside ProcessAnimation (3-zone) and the shelved
@@ -64,13 +70,34 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeControls, setActiveControls] = useState(() => new Set())
   const [scrubWeek, setScrubWeek] = useState(null)  // null = not scrubbing
+  const [isMuted, setIsMuted] = useState(false)     // v25.7.0.15: audio toggle
+
+  // v25.7.0.15: audio narration hook
+  const { speakMessage, stopAll: stopAllNarration, isSupported: audioSupported } = useNarration()
 
   // External pause hook
   useEffect(() => {
     if (externalPauseSignal != null) {
       setIsPlaying(false)
+      stopAllNarration()
     }
-  }, [externalPauseSignal])
+  }, [externalPauseSignal, stopAllNarration])
+
+  // v25.7.0.15: per-stage audio narration
+  useEffect(() => {
+    stopAllNarration()
+    if (isMuted || !audioSupported) return
+    const stage = stages[currentStageIdx]
+    const stageAudio = stage && stage.audio
+    if (!stageAudio || !stageAudio.text) return
+    const t = setTimeout(() => {
+      speakMessage(stageAudio, { rate: playbackSpeed })
+    }, 350)
+    return () => {
+      clearTimeout(t)
+      stopAllNarration()
+    }
+  }, [currentStageIdx, isMuted, audioSupported, stages, playbackSpeed, speakMessage, stopAllNarration])
 
   const currentStage = stages[currentStageIdx]
   const isAtEnd = currentStageIdx >= stages.length - 1
@@ -264,6 +291,21 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
           )}
         </div>
         <div style={engineStyles.playbackRight}>
+          {/* v25.7.0.15: audio mute toggle */}
+          {audioSupported && (
+            <button
+              onClick={() => setIsMuted(m => !m)}
+              title={isMuted ? 'Audio muted — click to enable' : 'Audio on — click to mute'}
+              style={{
+                ...engineStyles.speedButton,
+                marginRight: 12,
+                fontSize: 13,
+                opacity: isMuted ? 0.55 : 1,
+              }}
+            >
+              {isMuted ? '🔇 Audio' : '🔊 Audio'}
+            </button>
+          )}
           <span style={engineStyles.speedLabel}>SPEED</span>
           {[0.5, 1, 2].map(s => (
             <button

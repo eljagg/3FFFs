@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNarration } from './audioNarration.js'
 
 /* ─────────────────────────────────────────────────────────────────────────
    ProcessAnimation — v25.7.0.9
+   v25.7.0.15: integrated audioNarration. Each stage may declare an
+   optional `audio` field { text, profile } that is spoken on stage
+   entry. For IVR Discovery, this is used to speak the actual IVR
+   menu prompts the attacker hears during reconnaissance — the
+   pedagogical value is letting the trainee hear what the fraudster
+   heard. Mute toggle in playback bar; default unmuted.
 
    Generic animation engine for technique process visualizations.
    Currently consumed by IVR Discovery (F1073). Designed to support
@@ -50,6 +57,10 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeControls, setActiveControls] = useState(() => new Set())
+  const [isMuted, setIsMuted] = useState(false)        // v25.7.0.15: audio toggle, default unmuted
+
+  // v25.7.0.15: audio narration hook
+  const { speakMessage, stopAll: stopAllNarration, isSupported: audioSupported } = useNarration()
 
   // v25.7.0.9.2: external pause hook. When the parent (sidebar) collapses
   // the animation section, it bumps externalPauseSignal — animation pauses
@@ -57,8 +68,9 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
   useEffect(() => {
     if (externalPauseSignal != null) {
       setIsPlaying(false)
+      stopAllNarration()
     }
-  }, [externalPauseSignal])
+  }, [externalPauseSignal, stopAllNarration])
 
   const currentStage = stages[currentStageIdx]
   const isAtEnd = currentStageIdx >= stages.length - 1
@@ -97,6 +109,28 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [isPlaying, currentStageIdx, playbackSpeed, currentStage, isAtEnd, stages.length])
+
+  /* ─── Audio narration — v25.7.0.15 ────────────────────────────────
+     ProcessAnimation is stage-based (vs. message-based like
+     MultiActorSequenceAnimation), so audio is per-stage rather than
+     per-message. A stage may declare `audio: { text, profile }` to be
+     spoken on entry. For IVR Discovery the audio is the actual IVR
+     menu prompt the attacker hears. Skipped when muted or unsupported.
+  ─────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    stopAllNarration()
+    if (isMuted || !audioSupported) return
+    const stageAudio = currentStage && currentStage.audio
+    if (!stageAudio || !stageAudio.text) return
+    // Brief delay so caption is visible before audio starts
+    const t = setTimeout(() => {
+      speakMessage(stageAudio, { rate: playbackSpeed })
+    }, 350)
+    return () => {
+      clearTimeout(t)
+      stopAllNarration()
+    }
+  }, [currentStageIdx, isMuted, audioSupported, currentStage, playbackSpeed, speakMessage, stopAllNarration])
 
   /* ─── Controls ─────────────────────────────────────────────────── */
   function togglePlay() {
@@ -260,6 +294,21 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
           )}
         </div>
         <div style={styles.playbackRight}>
+          {/* v25.7.0.15: audio mute toggle */}
+          {audioSupported && (
+            <button
+              onClick={() => setIsMuted(m => !m)}
+              title={isMuted ? 'Audio muted — click to enable' : 'Audio on — click to mute'}
+              style={{
+                ...styles.speedButton,
+                marginRight: 12,
+                fontSize: 13,
+                opacity: isMuted ? 0.55 : 1,
+              }}
+            >
+              {isMuted ? '🔇 Audio' : '🔊 Audio'}
+            </button>
+          )}
           <span style={styles.speedLabel}>SPEED</span>
           {[0.5, 1, 2].map(s => (
             <button
