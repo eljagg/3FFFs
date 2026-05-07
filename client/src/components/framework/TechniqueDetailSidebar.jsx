@@ -40,6 +40,7 @@ import phishingScenes from './animations/phishingScenes.jsx'
 import vishingScenes from './animations/vishingScenes.jsx'
 import simSwapScenes from './animations/simSwapScenes.jsx'
 import passwordResetScenes from './animations/passwordResetScenes.jsx'
+import mfaFatigueScenes from './animations/mfaFatigueScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -63,11 +64,17 @@ const ANIMATION_MAP = {
                                                 //   silent attack vector — victim never contacted; OSINT → knowledge-
                                                 //   based reset-flow abuse → fraudulent transfer; discovered when
                                                 //   payroll deposits to a balance J$340K lower than expected.
+  'T1621': mfaFatigueScenes,                    // MFA Request Generation (T1621) under Initial Access (TA0001) — v25.7.0.18
+                                                //   Pat Henriques (JNCB Personal customer, Mandeville, teacher,
+                                                //   age 47). Composite case grounded in documented MFA fatigue
+                                                //   pattern (Microsoft Threat Intel; Uber Sep 2022; Cisco Aug 2022).
+                                                //   The bank's own push-MFA system is the attack vector,
+                                                //   weaponized via 28-push bombing campaign at 9:47 PM Sunday
+                                                //   until customer taps Approve to stop the buzzing.
   // Future per ANIMATION-TRIAGE.md Phase 1 sequence:
-  //   'T1621': mfaFatigueScenes (MFA Request Generation, Initial Access) — v25.7.0.17
-  //   'F1072': insiderAccessScenes (Insider Access Abuse, Initial Access) — v25.7.0.18
-  //   'F1018': accountTakeoverScenes (Account Takeover parent canonical flow, Initial Access) — v25.7.0.19
-  //   'T1111': mfaInterceptionScenes (MFA Interception, Initial Access) — v25.7.0.20
+  //   'F1072': insiderAccessScenes (Insider Access Abuse, Initial Access) — v25.7.0.19
+  //   'F1018': accountTakeoverScenes (Account Takeover parent canonical flow, Initial Access) — v25.7.0.20
+  //   'T1111': mfaInterceptionScenes (MFA Interception, Initial Access) — v25.7.0.21
 }
 
 const ENGINE_MAP = {

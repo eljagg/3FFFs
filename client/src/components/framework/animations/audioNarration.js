@@ -175,7 +175,7 @@ function pickVoice(voices, profile) {
  * decides whether to call speakMessage at all. Keeps the mute logic
  * close to the toggle UI.
  */
-export const AUDIO_NARRATION_VERSION = 'v25.7.0.17'
+export const AUDIO_NARRATION_VERSION = 'v25.7.0.18'
 
 export function useNarration() {
   const voicesRef = useRef([])
