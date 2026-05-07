@@ -26,17 +26,70 @@ full form has just been used.
 |---|---|---|---|
 | **IVR Discovery (F1073)** | Reconnaissance (TA0043) | v25.7.0.9 [first animation + ProcessAnimation framework] | Step-by-step probe; attacker's notepad evolves stage-by-stage; defender alerts counter stays at 0 (the gap = the lesson) |
 | **Gather Victim Information (F1067)** | Reconnaissance (TA0043) | v25.7.0.10 [F1067 animation + engine refactor for scene-driven zone rendering] | The animation specifically shows the OSINT-profiling sub-pattern: sequential aggregation across 5 sources; attacker's dossier grows; target awareness stays NONE (gap = aggregation creates risk no single source represents) |
-| **Structuring (F1087)** | Monetization (FA0002) | v25.7.0.11 [TimelineThresholdAnimation engine + dual-character non-linear case-review visualization] · v25.7.0.11.1 [F-code resolution + tactic correction] | The animation specifically shows the sub-threshold structuring sub-pattern (deposits hugging the J$1M POCA Section 101A threshold from below). Case-review pedagogy: trainee plays AML analyst comparing two NCB Jamaica accounts. Mrs. Marcia Edwards (Mandeville market vendor, legitimate cash-heavy small business) vs. Trevor Bennett (3-month-old account, threshold-hugging deposits, channel-fragmented, undocumented source). The pattern only exists across time, channels, and customer baseline — not in any single transaction. POCA Section 101A J$1M threshold framework, FID/goAML reporting workflow. |
+| **Structuring (F1087)** | Monetization (FA0002) | v25.7.0.11 [TimelineThresholdAnimation engine + dual-character non-linear case-review visualization] · v25.7.0.11.1 [F-code resolution + tactic correction] | Sub-threshold structuring sub-pattern. Case-review pedagogy: trainee plays AML analyst comparing two NCB Jamaica accounts — Mrs. Marcia Edwards (legitimate cash-heavy small business) vs. Trevor Bennett (structurer). POCA Section 101A J$1M threshold framework, FID/goAML reporting workflow. |
+| **Phishing (F1081)** | Initial Access (TA0001) | v25.7.0.12 [MultiActorSequenceAnimation engine + 4-actor temporal flow] | Grounded in real NCB J$47.5M phishing case (April-June 2022, 16 NCB customer accounts compromised). Mrs. Beverly Williams (Spanish Town, age 58) targeted by Smishing Triad-style "Lighthouse" kit. 7 stages from kit purchase through 16-hour aftermath. 4 actors (Fraudster / Beverly / NCB / Mule chain). NCB's October 2023 decision to suspend SMS alert system surfaced as critical pedagogical moment — institutional choice removed customer detection capability. Naive control surfaces the publicly-stated "customers expose themselves" framing as the failed institutional posture it is. |
 
 ---
 
-## Planned (next 1-3 releases)
+## Planned — comprehensive coverage initiative (v25.7.0.13+)
 
-| Technique | Tactic | Planned release | Why ANIMATE | Notes |
-|---|---|---|---|---|
-| **Mule pipeline cross-bank funds flow (F-code TBD — resolve from live framework when authoring)** | Monetization (FA0002) | TBD | Funds flowing across multiple bank nodes | DIFFERENT SHAPE — network/graph, animated flow between nodes |
-| **Account Manipulation: Change E-Delivery / Notification Settings (F1008.001) (the silent alarm move)** | Positioning (FA0001) | TBD | Silent-alarm moment: alerts redirect to attacker email; victim doesn't know | Borderline — possibly STATIC DIAGRAM instead. Decide closer to authoring. NOTE: lives under Positioning (FA0001) in the live framework, not Defense Evasion (TA0005) as earlier project notes had it. |
-| **3DS Bypass (F1076)** | Defense Evasion (TA0005) | DEFERRED — revisit later with multi-perspective post-incident investigation framing | The original real-time-attacker-walkthrough framing was triaged out as too operationally detailed; the multi-perspective post-incident investigator framing preserves the defender lesson with less attacker uplift. Code on internal shelf is reusable when reauthored. NOTE: F-code is F1076, NOT F1097 as earlier project notes had it. F1097 is "Use Virtual cards", a different technique entirely. |
+Per editorial principle locked v25.7.0.12+: comprehensive animation
+coverage across all 7 F3 tactics. Animate every technique that meets
+OBS-028 triage criteria. Static viz for shape-matters-but-timing-doesn't.
+Text only for definitional. Real-world training, not sheltered.
+Caribbean grounding from BOJ/MOCA/JCF reports + Smishing Triad research.
+
+### Phase 1 — High-frequency direct customer attacks (Tellers see these every day)
+
+| # | Release | Animation | Real-world anchor |
+|---|---|---|---|
+| ✅ | v25.7.0.12 | Phishing (F1081) — Initial Access (TA0001) | NCB J$47.5M case (April-June 2022) |
+| ⏳ | v25.7.0.13 | Vishing (F1088) — Initial Access (TA0001) | "Bank fraud officer" calling about "suspicious activity" — daily Caribbean retail banking pattern |
+| 📋 | v25.7.0.14 | SIM Card Swap (T1451) — Initial Access (TA0001) | J$61M conviction October 2025 — multi-actor including insider at telco/bank (2 of 3 convicted were customer service reps) |
+| 📋 | v25.7.0.15 | Account Takeover: Password Reset (F1018.001) — Initial Access (TA0001) | Email compromise → cascade to bank account |
+| 📋 | v25.7.0.16 | MFA Request Generation (T1621) — Initial Access (TA0001) | MFA fatigue temporal pressure pattern |
+
+### Phase 2 — Account positioning (the silent-prep work)
+
+| # | Release | Animation | Notes |
+|---|---|---|---|
+| 📋 | v25.7.0.17 | Account Manipulation: Change E-Delivery / Notification Settings (F1008.001) — Positioning (FA0001) | The silent alarm move; victim has no signal |
+| 📋 | v25.7.0.18 | Card Testing (F1043) — Positioning (FA0001) | Velocity-rule detection target |
+| 📋 | v25.7.0.19 | Card Dump Capture (F1042) — Positioning (FA0001) | POS skimming temporal flow |
+| 📋 | v25.7.0.20 | Insider Access Abuse (F1072) — Initial Access (TA0001) | Promoted to ANIMATE per Caribbean research; NCB and SIM swap cases both involved insiders |
+
+### Phase 3 — Monetization completion
+
+| # | Release | Animation | Notes |
+|---|---|---|---|
+| 📋 | v25.7.0.21 | Mule pipeline cross-bank funds flow — Monetization (FA0002) | Network/graph engine (4th engine); Jamaica → US lottery scam architecture (FedEx packages, etc.) |
+| 📋 | v25.7.0.22 | Cashout: Conversion to Cryptocurrency (F1047) — Monetization (FA0002) | Multi-stage layering with detection windows |
+| 📋 | v25.7.0.23 | Bank Transfer (F1038) — Execution (TA0002) | Wire/ACH timing + recall windows |
+| 📋 | v25.7.0.24 | 3DS Bypass (F1076) — Defense Evasion (TA0005) | Multi-perspective post-incident framing (revisit deferred from v25.7.0.11) |
+
+### Phase 4 — Fraud infrastructure
+
+| # | Release | Animation | Notes |
+|---|---|---|---|
+| 📋 | v25.7.0.25 | Establish Accounts (T1585) — Resource Development (TA0042) | Mule account onboarding from bank-side |
+| 📋 | v25.7.0.26 | Acquire Infrastructure: Domains (T1583.001) — Resource Development (TA0042) | Typosquat → DNS → phishing site goes live; Smishing Triad rotation pattern |
+| 📋 | v25.7.0.27 | Scheduled Transfer (F1095) — Execution (TA0002) | Slow-drain pattern only visible in retrospect |
+
+### Phase 5 — Static diagram batch (~v25.7.0.28+)
+
+Static diagrams for ~30 techniques across all 6 remaining tactics that
+don't meet OBS-028 ANIMATE criteria. Batched 5-7 per release. Covers
+remaining Account Manipulation sub-types, Brute Force variants,
+Compromise Accounts variants, Acquire Infrastructure variants,
+Bank Deposit variants, ATM Manipulation variants, Withdrawals variants,
+Betting & Gambling Platforms, etc.
+
+### Phase 6 — Scenario beat completion (~v25.7.0.33+)
+
+Author SC008 ATM Skimming, SC011 Romance Scam, SC013 Wire Fraud as
+full case-review-style scenarios using the Structuring (F1087)
+template that worked. Mule recruitment scenario (SC007) is already
+fully authored with Allison Brown.
 
 ---
 
