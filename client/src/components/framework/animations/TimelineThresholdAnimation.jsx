@@ -70,7 +70,7 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeControls, setActiveControls] = useState(() => new Set())
   const [scrubWeek, setScrubWeek] = useState(null)  // null = not scrubbing
-  const [isMuted, setIsMuted] = useState(false)     // v25.7.0.15: audio toggle
+  const [isMuted, setIsMuted] = useState(true)      // v25.7.0.15.5: default MUTED
 
   // v25.7.0.15: audio narration hook
   const { speakMessage, stopAll: stopAllNarration, isSupported: audioSupported } = useNarration()
@@ -301,7 +301,7 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
           {audioSupported && (
             <button
               onClick={() => setIsMuted(m => !m)}
-              title={isMuted ? 'Audio muted — click to enable' : 'Audio on — click to mute'}
+              title={isMuted ? 'Audio muted (browser TTS quality is limited — click to enable)' : 'Audio on — click to mute'}
               style={{
                 ...engineStyles.speedButton,
                 marginRight: 12,

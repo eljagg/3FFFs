@@ -1,10 +1,28 @@
 /**
- * audioNarration.js — v25.7.0.15.4
+ * audioNarration.js — v25.7.0.15.5
  *
- * VERSION CHECK: After deploy, open browser console and look for
- * "[3FFFs audio v25.7.0.15.4 — Chrome keep-alive]" log on first
- * animation play. If you see "v25.7.0.15.3" or earlier, the new
- * code did not deploy.
+ * VERSION CHECK: open browser console and look for
+ * "[3FFFs audio v25.7.0.15.5 — muted by default]" log on first
+ * animation play.
+ *
+ * STATUS as of v25.7.0.15.5:
+ *   Audio is MUTED BY DEFAULT. Trainees can opt in via the 🔇 toggle
+ *   in the playback bar. Browser TTS quality (Chrome/Edge bundled
+ *   voices) was determined insufficient for the realism objective
+ *   after 5 iterations (v25.7.0.15 through v25.7.0.15.4). The
+ *   architectural fixes (sequential queue, Chrome keep-alive,
+ *   cancel/speak race window) are still in place — audio plays
+ *   correctly when toggled on; it just sounds robotic.
+ *
+ * DEFERRED: ElevenLabs pivot. The architecture supports
+ *   `audio: { src: '/audio/file.mp3' }` in scene metadata. When
+ *   ElevenLabs subscription becomes feasible, the migration is:
+ *   (1) generate audio per scene line with ElevenLabs API,
+ *   (2) drop files in client/public/audio/,
+ *   (3) update audioNarration.js to play files when src is present
+ *       (fall back to TTS otherwise).
+ *   Estimated effort: 2-3 focused hours. See ELEVENLABS-PIVOT.md.
+ *
  *
  *
  * Browser-native speech synthesis for animation dialogue. Adds
@@ -157,7 +175,7 @@ function pickVoice(voices, profile) {
  * decides whether to call speakMessage at all. Keeps the mute logic
  * close to the toggle UI.
  */
-export const AUDIO_NARRATION_VERSION = 'v25.7.0.15.4'
+export const AUDIO_NARRATION_VERSION = 'v25.7.0.15.5'
 
 export function useNarration() {
   const voicesRef = useRef([])
@@ -172,7 +190,7 @@ export function useNarration() {
     if (!loggedRef.current) {
       loggedRef.current = true
       // eslint-disable-next-line no-console
-      console.log('[3FFFs audio ' + AUDIO_NARRATION_VERSION + ' — Chrome keep-alive]')
+      console.log('[3FFFs audio ' + AUDIO_NARRATION_VERSION + ' — muted by default]')
     }
     let cancelled = false
     getVoices().then(voices => {

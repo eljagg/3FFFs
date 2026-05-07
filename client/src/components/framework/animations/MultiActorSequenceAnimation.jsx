@@ -65,7 +65,7 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeControls, setActiveControls] = useState(() => new Set())
-  const [isMuted, setIsMuted] = useState(false)        // v25.7.0.15: audio toggle, default unmuted
+  const [isMuted, setIsMuted] = useState(true)         // v25.7.0.15.5: default MUTED (browser TTS quality insufficient; ElevenLabs pivot deferred)
   const [activeMsgId, setActiveMsgId] = useState(null) // v25.7.0.15: visual cue on speaking message
 
   // v25.7.0.15: audio narration hook
@@ -335,7 +335,7 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
           {audioSupported && (
             <button
               onClick={() => setIsMuted(m => !m)}
-              title={isMuted ? 'Audio muted — click to enable' : 'Audio on — click to mute'}
+              title={isMuted ? 'Audio muted (browser TTS quality is limited — click to enable)' : 'Audio on — click to mute'}
               style={{
                 ...engineStyles.speedButton,
                 marginRight: 12,
