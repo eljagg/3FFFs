@@ -23,7 +23,8 @@
     "migrate:cbest-concept-summaries": "node --env-file-if-exists=../.env src/seed/add-cbest-concept-summaries.js",
     "migrate:banks": "node --env-file-if-exists=../.env src/seed/add-banks.js",
     "migrate:visualizations": "node --env-file-if-exists=../.env src/seed/add-visualizations.js",
-    "migrate:engagement-schema": "node --env-file-if-exists=../.env src/seed/add-engagement-schema.js"
+    "migrate:engagement-schema": "node --env-file-if-exists=../.env src/seed/add-engagement-schema.js",
+    "migrate:t1621": "node --env-file-if-exists=../.env src/seed/add-t1621-technique.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

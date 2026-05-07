@@ -41,6 +41,7 @@ import vishingScenes from './animations/vishingScenes.jsx'
 import simSwapScenes from './animations/simSwapScenes.jsx'
 import passwordResetScenes from './animations/passwordResetScenes.jsx'
 import mfaFatigueScenes from './animations/mfaFatigueScenes.jsx'
+import insiderAccessScenes from './animations/insiderAccessScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -71,8 +72,18 @@ const ANIMATION_MAP = {
                                                 //   The bank's own push-MFA system is the attack vector,
                                                 //   weaponized via 28-push bombing campaign at 9:47 PM Sunday
                                                 //   until customer taps Approve to stop the buzzing.
+                                                //   T1621 framework grid surfacing via add-t1621-technique.js — v25.7.0.18.1
+  'F1072': insiderAccessScenes,                 // Insider Access Abuse (F1072) under Initial Access (TA0001) — v25.7.0.19
+                                                //   Devon Walters (JNCB Personal Banker, Half-Way Tree, 6yr tenure,
+                                                //   age 38). Composite case grounded in J$61M SIM-swap conviction
+                                                //   (Oct 2025, two telco CSRs convicted) reframed for bank-insider
+                                                //   standalone framing F1072 specifically addresses, plus BOJ
+                                                //   2024-2025 reporting on disproportionate-value-per-incident
+                                                //   insider pattern. Targets dormant high-balance victim profile;
+                                                //   structures J$3.2M drain across 28 days under both supervisor-
+                                                //   approval and customer-callback thresholds; caught by quarterly
+                                                //   Internal Audit access-pattern review at 4.1x peer mean.
   // Future per ANIMATION-TRIAGE.md Phase 1 sequence:
-  //   'F1072': insiderAccessScenes (Insider Access Abuse, Initial Access) — v25.7.0.19
   //   'F1018': accountTakeoverScenes (Account Takeover parent canonical flow, Initial Access) — v25.7.0.20
   //   'T1111': mfaInterceptionScenes (MFA Interception, Initial Access) — v25.7.0.21
 }
