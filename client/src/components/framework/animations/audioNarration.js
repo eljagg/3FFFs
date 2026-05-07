@@ -1,5 +1,11 @@
 /**
- * audioNarration.js — v25.7.0.15
+ * audioNarration.js — v25.7.0.15.3
+ *
+ * VERSION CHECK: After deploy, open browser console and look for
+ * "[3FFFs audio v25.7.0.15.3 — sequential queue]" log on first
+ * animation play. If you see "v25.7.0.15.1" or no log at all,
+ * the new code did not deploy.
+ *
  *
  * Browser-native speech synthesis for animation dialogue. Adds
  * fraudster-voice / victim-voice / system-voice realism to the
@@ -151,15 +157,23 @@ function pickVoice(voices, profile) {
  * decides whether to call speakMessage at all. Keeps the mute logic
  * close to the toggle UI.
  */
+export const AUDIO_NARRATION_VERSION = 'v25.7.0.15.3'
+
 export function useNarration() {
   const voicesRef = useRef([])
   const currentUtteranceRef = useRef(null)
+  const loggedRef = useRef(false)
   const isSupported = typeof window !== 'undefined' &&
                       typeof window.speechSynthesis !== 'undefined'
 
-  // Load voices once on mount.
+  // Load voices once on mount + log version once for deploy verification
   useEffect(() => {
     if (!isSupported) return
+    if (!loggedRef.current) {
+      loggedRef.current = true
+      // eslint-disable-next-line no-console
+      console.log('[3FFFs audio ' + AUDIO_NARRATION_VERSION + ' — sequential queue]')
+    }
     let cancelled = false
     getVoices().then(voices => {
       if (!cancelled) voicesRef.current = voices

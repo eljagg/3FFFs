@@ -158,6 +158,7 @@ export const OSINT_PROFILING_STAGES = [
     label: 'Target identified',
     title: 'A name in a crew\'s shopping list',
     caption: "The crew has a list of 50 'Kingston-area Jamaicans, age 20-40, high-balance candidate.' Allison Brown is one entry. Just a name — they need to figure out everything else. The OSINT phase begins with public sources, $0 budget, no devices touched.",
+    audio: { text: 'Target: Allison Brown. Just a name.', profile: 'narrator' },
     durationMs: 3500,
     focalZone: 'attacker',
     attackerZone: {
@@ -190,6 +191,7 @@ export const OSINT_PROFILING_STAGES = [
     label: 'Source 1',
     title: 'Professional networking site — employment + photo',
     caption: 'Free public profile. Allison Brown · Marketing Coordinator · Sangster Travel Agency · Kingston · Studied at UTech. Headshot used to verify against later photos. The platform itself shows "viewed by recruiter" — invisible to Allison, since recruiter searches don\'t notify.',
+    audio: { text: 'Source one: professional network. Job, employer, photo. Free.', profile: 'narrator' },
     durationMs: 5000,
     focalZone: 'middle',
     attackerZone: {
@@ -231,6 +233,7 @@ export const OSINT_PROFILING_STAGES = [
     label: 'Source 2',
     title: 'Social media — family, birthday, hometown',
     caption: 'Allison\'s public Facebook posts: a 2024 birthday photo with caption "happy 21st 🎂 12 March". Her mother is tagged in 4 posts ("Mommy ❤"). Hometown checked-in: Mandeville. Vacation timeline: family at Negril last August. All public, all aggregated.',
+    audio: { text: 'Source two: social media. Birthday, mother\'s name, hometown. Public.', profile: 'narrator' },
     durationMs: 5500,
     focalZone: 'middle',
     attackerZone: {
@@ -271,6 +274,7 @@ export const OSINT_PROFILING_STAGES = [
     label: 'Source 3',
     title: 'Public records aggregator — address + phone',
     caption: 'Crew pays $4 USD to a public-records broker. Receives current address (12B Hope Pastures Apt, Kingston 6), phone (+1-876-555-0144), and 2 previous addresses. Broker keeps no record of buyer identity. Indistinguishable from legitimate background-check use.',
+    audio: { text: 'Source three: data broker. Address, phone, history. Four dollars.', profile: 'narrator' },
     durationMs: 5000,
     focalZone: 'middle',
     attackerZone: {
@@ -312,6 +316,7 @@ export const OSINT_PROFILING_STAGES = [
     label: 'Source 4',
     title: 'Breach corpus — email + reused password',
     caption: 'Crew searches for "abrown" + "Sangster" patterns in compiled breach datasets (HIBP-style aggregator). Allison\'s email surfaces in 3 leaked breaches. One leaked password hash is weak (md5) and cracks offline in seconds. She\'s reused that password elsewhere. Free.',
+    audio: { text: 'Source four: breach corpus. Email, password hash. Cracks in seconds.', profile: 'narrator' },
     durationMs: 5500,
     focalZone: 'middle',
     attackerZone: {
@@ -350,6 +355,7 @@ export const OSINT_PROFILING_STAGES = [
     label: 'Inference',
     title: 'Employer → bank inference',
     caption: 'Sangster Travel\'s LinkedIn page lists "JNCB Corporate Banking" as a payroll partner — public information for B2B credibility. Inference: Sangster employees receive payroll deposits via JNCB. Allison probably banks JNCB. Not direct evidence — but enough to target the right IVR.',
+    audio: { text: 'Inference: employer banks at JNCB. Allison probably does too.', profile: 'narrator' },
     durationMs: 5500,
     focalZone: 'middle',
     attackerZone: {
@@ -386,6 +392,7 @@ export const OSINT_PROFILING_STAGES = [
     label: 'Handoff',
     title: 'Profile complete — listed for sale',
     caption: '47 minutes. $4 spent. Complete attack-target dossier on Allison Brown. Listed in a crew-private dark-web channel for sale at $40 USD per profile. The IVR Discovery animation\'s prologue starts HERE — that\'s the buyer who paid $40 and used this dossier to probe the JNCB IVR. The reconnaissance phase is complete.',
+    audio: { text: 'Profile complete. Listed for sale. Forty dollars.', profile: 'narrator' },
     durationMs: 4500,
     focalZone: 'attacker',
     attackerZone: {

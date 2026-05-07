@@ -152,7 +152,7 @@ export const IVR_DISCOVERY_STAGES = [
     label: 'Probe #1',
     title: 'Map the menu — no auth attempted',
     caption: 'First call: spoofed caller ID makes it look like the call comes from a Kingston mobile number. The attacker listens through every menu option, captures the structure, hangs up. No authentication tried — pure reconnaissance.',
-    audio: { text: 'Welcome to JNCB. For balance, press one. For card services, two. For transfers, three.', profile: 'system' },
+    audio: { text: 'Welcome to JNCB. For balance, press one. Card services, two. Transfers, three.', profile: 'system' },
     durationMs: 6000,
     focalZone: 'ivr',
     attackerZone: {
