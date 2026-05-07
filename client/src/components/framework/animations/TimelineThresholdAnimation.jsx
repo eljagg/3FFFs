@@ -84,6 +84,12 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
   }, [externalPauseSignal, stopAllNarration])
 
   // v25.7.0.15: per-stage audio narration
+  // v25.7.0.15.1: also cancel any leftover global speech on engine mount
+  useEffect(() => {
+    if (audioSupported) stopAllNarration()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     stopAllNarration()
     if (isMuted || !audioSupported) return

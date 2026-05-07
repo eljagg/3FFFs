@@ -116,11 +116,25 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
      per-message. A stage may declare `audio: { text, profile }` to be
      spoken on entry. For IVR Discovery the audio is the actual IVR
      menu prompt the attacker hears. Skipped when muted or unsupported.
+
+     v25.7.0.15.1: dependency-array fix — depend on `currentStageIdx`
+     only (and stable hook references), not on `currentStage` reference.
+     Reading `stages[currentStageIdx]` inside the effect avoids re-firing
+     every render due to scenes-object reference churn from the parent.
+     Also: cancel global speech on engine mount, in case a previous
+     animation left utterances queued.
   ─────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    // Mount-only: clear any leftover global speech from a prior animation
+    if (audioSupported) stopAllNarration()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     stopAllNarration()
     if (isMuted || !audioSupported) return
-    const stageAudio = currentStage && currentStage.audio
+    const stage = stages[currentStageIdx]
+    const stageAudio = stage && stage.audio
     if (!stageAudio || !stageAudio.text) return
     // Brief delay so caption is visible before audio starts
     const t = setTimeout(() => {
@@ -130,7 +144,7 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
       clearTimeout(t)
       stopAllNarration()
     }
-  }, [currentStageIdx, isMuted, audioSupported, currentStage, playbackSpeed, speakMessage, stopAllNarration])
+  }, [currentStageIdx, isMuted, audioSupported, playbackSpeed, speakMessage, stopAllNarration, stages])
 
   /* ─── Controls ─────────────────────────────────────────────────── */
   function togglePlay() {

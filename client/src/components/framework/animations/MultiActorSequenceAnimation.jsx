@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { engineStyles } from './ProcessAnimation.jsx'
-import { useNarration, deriveAudioFromMessage } from './audioNarration.js'
+import { useNarration } from './audioNarration.js'
 
 /* ─────────────────────────────────────────────────────────────────────────
    MultiActorSequenceAnimation — v25.7.0.12
@@ -118,7 +118,19 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
      - Cancelled cleanly on stage change, pause, scrub, unmount
      - activeMsgId state tracks which message is currently speaking,
        used by SequenceDiagramCanvas to render the speaker-icon cue
+     v25.7.0.15.1: dependency-array fix — depend on `currentStageIdx`
+     and `stages` only, not on `currentStage` reference. Reading
+     `stages[currentStageIdx]` inside the effect avoids re-firing
+     every render due to scenes-object reference churn from the parent.
+     Also: cancel global speech on engine mount, in case a previous
+     animation left utterances queued.
   ─────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    // Mount-only: clear any leftover global speech from a prior animation
+    if (audioSupported) stopAllNarration()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const audioTimersRef = useRef([])
   useEffect(() => {
     // Always cancel previous audio + scheduled speeches when stage changes
@@ -128,18 +140,22 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
     setActiveMsgId(null)
 
     if (isMuted || !audioSupported) return
-    const stage = currentStage
+    const stage = stages[currentStageIdx]
     if (!stage || !stage.messages || stage.messages.length === 0) return
 
-    // Find messages with audio (explicit or auto-derivable)
+    // Find messages with EXPLICIT audio fields only (v25.7.0.15.1).
+    // The earlier auto-derivation from message labels for 'sms'/'callback'/
+    // 'voice' kinds was over-eager — labels like "SMS delivered · to
+    // ported SIM" are diagram-annotation language, not what would actually
+    // be heard. Require explicit `audio: { text, profile }` per message.
     const speakable = stage.messages
-      .map(m => ({ msg: m, audio: m.audio || deriveAudioFromMessage(m) }))
+      .map(m => ({ msg: m, audio: m.audio }))
       .filter(({ audio }) => audio && audio.text)
 
     if (speakable.length === 0) return
 
     // Distribute across the stage's playback duration
-    const stageDur = currentStage.durationMs / playbackSpeed
+    const stageDur = stage.durationMs / playbackSpeed
     const slotDur = stageDur / speakable.length
 
     speakable.forEach(({ msg, audio }, idx) => {
@@ -157,7 +173,7 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
       stopAllNarration()
       setActiveMsgId(null)
     }
-  }, [currentStageIdx, isMuted, audioSupported, currentStage, playbackSpeed, speakMessage, stopAllNarration])
+  }, [currentStageIdx, isMuted, audioSupported, stages, playbackSpeed, speakMessage, stopAllNarration])
 
   function togglePlay() {
     if (isAtEnd) {
