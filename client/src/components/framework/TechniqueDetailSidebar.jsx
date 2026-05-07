@@ -42,6 +42,7 @@ import simSwapScenes from './animations/simSwapScenes.jsx'
 import passwordResetScenes from './animations/passwordResetScenes.jsx'
 import mfaFatigueScenes from './animations/mfaFatigueScenes.jsx'
 import insiderAccessScenes from './animations/insiderAccessScenes.jsx'
+import accountTakeoverScenes from './animations/accountTakeoverScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -83,8 +84,17 @@ const ANIMATION_MAP = {
                                                 //   structures J$3.2M drain across 28 days under both supervisor-
                                                 //   approval and customer-callback thresholds; caught by quarterly
                                                 //   Internal Audit access-pattern review at 4.1x peer mean.
+  'F1018': accountTakeoverScenes,               // Account Takeover (F1018) parent canonical under Initial Access (TA0001) — v25.7.0.20
+                                                //   Karelle Bryan (JNCB Fraud Operations senior analyst, 4yr tenure)
+                                                //   triages three overnight ATO disputes — Andre Lewis (.001 Password
+                                                //   Reset, reused from v25.7.0.16), Marcus Bryan (.002 Credential
+                                                //   Stuffing, LinkedIn 2024 breach), Tashana Hall (.003 Session
+                                                //   Cookie Theft, MBJ airport WiFi). Pedagogical job: teach DEFENDER
+                                                //   perspective (variant diagnostic protocol, per-variant tracking,
+                                                //   why variant resolution matters more than parent-category
+                                                //   resolution). Distinct from .001-specific kill-chain animation;
+                                                //   complements rather than duplicates.
   // Future per ANIMATION-TRIAGE.md Phase 1 sequence:
-  //   'F1018': accountTakeoverScenes (Account Takeover parent canonical flow, Initial Access) — v25.7.0.20
   //   'T1111': mfaInterceptionScenes (MFA Interception, Initial Access) — v25.7.0.21
 }
 
