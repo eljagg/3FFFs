@@ -142,8 +142,6 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
   }, [])
 
   useEffect(() => {
-    // Stage change — cancel any queued speech from prior stage
-    stopAllNarration()
     setActiveMsgId(null)
 
     if (isMuted || !audioSupported) return
@@ -157,18 +155,27 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
 
     if (speakable.length === 0) return
 
-    // Enqueue all of this stage's utterances back-to-back. Browser's
-    // speechSynthesis queue handles sequencing — no slot timeouts.
-    // Each utterance's onstart/onend updates the active-message cue.
-    speakable.forEach(({ msg, audio }) => {
-      speakMessage(audio, {
-        rate: playbackSpeed,
-        onStart: () => setActiveMsgId(msg.id),
-        onEnd: () => setActiveMsgId(prev => (prev === msg.id ? null : prev)),
+    // v25.7.0.15.4: 600ms delay before enqueueing — Chrome's
+    // speechSynthesis has a documented race where calling .speak()
+    // too soon after the prior effect's cleanup .cancel() causes
+    // mid-utterance restarts and audible jitter. The delay also
+    // gives the visual stage transition time to land before audio
+    // starts.
+    const t = setTimeout(() => {
+      // Enqueue all of this stage's utterances back-to-back. Browser's
+      // speechSynthesis queue handles sequencing — no slot timeouts.
+      // Each utterance's onstart/onend updates the active-message cue.
+      speakable.forEach(({ msg, audio }) => {
+        speakMessage(audio, {
+          rate: playbackSpeed,
+          onStart: () => setActiveMsgId(msg.id),
+          onEnd: () => setActiveMsgId(prev => (prev === msg.id ? null : prev)),
+        })
       })
-    })
+    }, 600)
 
     return () => {
+      clearTimeout(t)
       stopAllNarration()
       setActiveMsgId(null)
     }

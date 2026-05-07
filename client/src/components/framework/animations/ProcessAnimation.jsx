@@ -131,15 +131,19 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
   }, [])
 
   useEffect(() => {
-    stopAllNarration()
     if (isMuted || !audioSupported) return
     const stage = stages[currentStageIdx]
     const stageAudio = stage && stage.audio
     if (!stageAudio || !stageAudio.text) return
-    // Brief delay so caption is visible before audio starts
+    // v25.7.0.15.4: increased delay from 350ms to 600ms — Chrome's
+    // speechSynthesis has a documented race window where calling
+    // .speak() too soon after .cancel() (which the prior effect's
+    // cleanup did) causes mid-utterance restarts and audible jitter.
+    // 600ms gives the cancel state time to settle before the new
+    // utterance starts.
     const t = setTimeout(() => {
       speakMessage(stageAudio, { rate: playbackSpeed })
-    }, 350)
+    }, 600)
     return () => {
       clearTimeout(t)
       stopAllNarration()

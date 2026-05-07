@@ -1,10 +1,10 @@
 /**
- * audioNarration.js — v25.7.0.15.3
+ * audioNarration.js — v25.7.0.15.4
  *
  * VERSION CHECK: After deploy, open browser console and look for
- * "[3FFFs audio v25.7.0.15.3 — sequential queue]" log on first
- * animation play. If you see "v25.7.0.15.1" or no log at all,
- * the new code did not deploy.
+ * "[3FFFs audio v25.7.0.15.4 — Chrome keep-alive]" log on first
+ * animation play. If you see "v25.7.0.15.3" or earlier, the new
+ * code did not deploy.
  *
  *
  * Browser-native speech synthesis for animation dialogue. Adds
@@ -157,7 +157,7 @@ function pickVoice(voices, profile) {
  * decides whether to call speakMessage at all. Keeps the mute logic
  * close to the toggle UI.
  */
-export const AUDIO_NARRATION_VERSION = 'v25.7.0.15.3'
+export const AUDIO_NARRATION_VERSION = 'v25.7.0.15.4'
 
 export function useNarration() {
   const voicesRef = useRef([])
@@ -172,7 +172,7 @@ export function useNarration() {
     if (!loggedRef.current) {
       loggedRef.current = true
       // eslint-disable-next-line no-console
-      console.log('[3FFFs audio ' + AUDIO_NARRATION_VERSION + ' — sequential queue]')
+      console.log('[3FFFs audio ' + AUDIO_NARRATION_VERSION + ' — Chrome keep-alive]')
     }
     let cancelled = false
     getVoices().then(voices => {
@@ -183,6 +183,43 @@ export function useNarration() {
       // Defensive: cancel any utterance if the consumer unmounts.
       try { window.speechSynthesis.cancel() } catch (e) { /* noop */ }
     }
+  }, [isSupported])
+
+  /* ─── Chrome speechSynthesis keep-alive — v25.7.0.15.4 ──────────────
+     Chromium browsers (Chrome, Edge, Brave, Opera) have a documented
+     bug where speechSynthesis pauses itself between utterances or
+     after ~14 seconds of continuous speech, producing audible gaps
+     and jitter. The standard fix is a low-frequency pause/resume
+     ping that keeps the queue alive without affecting playback.
+
+     References:
+     - https://bugs.chromium.org/p/chromium/issues/detail?id=679043
+     - https://bugs.chromium.org/p/chromium/issues/detail?id=372224
+
+     This affects IVR Discovery audio more than OSINT because IVR
+     stages have longer utterances (10-14 words) that hit the bug
+     window; OSINT utterances (6-10 words) finish before the bug
+     manifests. After v25.7.0.15.3 deployed, Omar reported IVR was
+     "more jittery than OSINT" — that pattern matches this bug
+     exactly.
+
+     Note on Safari: this pattern is harmless on Safari (Safari's
+     speechSynthesis doesn't have the same pause bug, and pause/
+     resume on an idle queue is a no-op).
+  ─────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!isSupported) return
+    const intervalId = setInterval(() => {
+      try {
+        // Only ping if speech is actually happening — avoids
+        // spurious state changes on an idle queue
+        if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+          window.speechSynthesis.pause()
+          window.speechSynthesis.resume()
+        }
+      } catch (e) { /* noop — some browsers throw on pause/resume */ }
+    }, 5000)
+    return () => clearInterval(intervalId)
   }, [isSupported])
 
   const stopAll = useMemo(() => () => {

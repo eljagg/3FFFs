@@ -91,14 +91,14 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
   }, [])
 
   useEffect(() => {
-    stopAllNarration()
     if (isMuted || !audioSupported) return
     const stage = stages[currentStageIdx]
     const stageAudio = stage && stage.audio
     if (!stageAudio || !stageAudio.text) return
+    // v25.7.0.15.4: 600ms delay (see ProcessAnimation comment)
     const t = setTimeout(() => {
       speakMessage(stageAudio, { rate: playbackSpeed })
-    }, 350)
+    }, 600)
     return () => {
       clearTimeout(t)
       stopAllNarration()
