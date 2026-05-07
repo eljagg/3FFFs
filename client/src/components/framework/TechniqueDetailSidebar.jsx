@@ -5,8 +5,14 @@ import { api } from '../../lib/api.js'
 // v25.7.0.9: process-animation engine + scene data per technique.
 // v25.7.0.10: scene-driven zone rendering refactor.
 // v25.7.0.11: third engine (TimelineThresholdAnimation) for case-review
-// shape. Routing via ENGINE_MAP keyed on scene config's `engine` field.
-// Default 'three-zone' preserves backward compat with F1073 + F1067.
+//   shape. Routing via ENGINE_MAP keyed on scene config's `engine` field.
+//   Default 'three-zone' preserves backward compat with existing animations.
+// v25.7.0.11.1: F-code corrections after live-framework verification —
+//   Structuring (F1087) under Monetization (FA0002), not the F1XXX
+//   placeholder under Defense Evasion. OSINT Profiling animation
+//   correctly attached to Gather Victim Information (F1067). Naming
+//   convention per OBS-029 [pair-codes-with-names] refined: human name
+//   first, F-code in brackets after.
 import ProcessAnimation from './animations/ProcessAnimation.jsx'
 import TimelineThresholdAnimation from './animations/TimelineThresholdAnimation.jsx'
 import ivrDiscoveryScenes from './animations/ivrDiscoveryScenes.jsx'
@@ -14,20 +20,24 @@ import osintProfilingScenes from './animations/osintProfilingScenes.jsx'
 import subthresholdStructuringScenes from './animations/subthresholdStructuringScenes.jsx'
 
 const ANIMATION_MAP = {
-  'F1073': ivrDiscoveryScenes,                  // IVR Discovery (TA0043 Reconnaissance) — v25.7.0.9
-  'F1067': osintProfilingScenes,                // OSINT Profiling (TA0043 Reconnaissance) — v25.7.0.10
-  'F1XXX': subthresholdStructuringScenes,       // Sub-threshold Structuring (TA0005 Defense Evasion) — v25.7.0.11
-                                                //   ⚠ F-code is PLACEHOLDER. Omar to resolve actual F-code from
-                                                //   the live framework (query /api/framework/tactics/TA0005/techniques-tree)
-                                                //   and replace 'F1XXX' here with the resolved code.
+  'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
+  'F1067': osintProfilingScenes,                // Gather Victim Information (F1067) under Reconnaissance (TA0043) — v25.7.0.10
+                                                //   The animation specifically shows the OSINT-profiling sub-pattern
+                                                //   of this broader technique.
+  'F1087': subthresholdStructuringScenes,       // Structuring (F1087) under Monetization (FA0002) — v25.7.0.11
+                                                //   The animation specifically shows the sub-threshold structuring
+                                                //   sub-pattern (deposits hugging the J$1M POCA Section 101A
+                                                //   threshold from below). v25.7.0.11.1: F-code corrected from
+                                                //   placeholder F1XXX to F1087 after live-framework verification.
   // Future:
-  //   'F1097': cardBypassScenes (3DS Bypass — shelved, revisit with multi-perspective post-incident framing)
+  //   '3DS Bypass (F1076)' under Defense Evasion (TA0005) — DEFERRED, multi-perspective post-incident framing
+  //     NOTE: NOT F1097. F1097 is "Use Virtual cards", a different technique. Earlier project notes had this wrong.
   //   ...
 }
 
 const ENGINE_MAP = {
-  'three-zone': ProcessAnimation,                  // F1073, F1067
-  'timeline-threshold': TimelineThresholdAnimation, // structuring (v25.7.0.11)
+  'three-zone': ProcessAnimation,                  // IVR Discovery (F1073), Gather Victim Information (F1067)
+  'timeline-threshold': TimelineThresholdAnimation, // Structuring (F1087)
   // Future shapes added here as engines come online
 }
 
@@ -426,12 +436,13 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
                           <Placeholder>
                             Interactive animation showing the technique's
                             step-by-step process is planned for v25.7.0.9+.
-                            Animations shipped: F1073 IVR Discovery
-                            (Reconnaissance, v25.7.0.9), F1067 OSINT
-                            Profiling (Reconnaissance, v25.7.0.10),
-                            sub-threshold structuring case review
-                            (Defense Evasion, v25.7.0.11). More animations
-                            to follow per ANIMATION-TRIAGE.md.
+                            Animations shipped: IVR Discovery (F1073)
+                            under Reconnaissance (TA0043), v25.7.0.9;
+                            Gather Victim Information (F1067) under
+                            Reconnaissance (TA0043), v25.7.0.10;
+                            Structuring (F1087) under Monetization
+                            (FA0002), v25.7.0.11. More animations to
+                            follow per ANIMATION-TRIAGE.md.
                           </Placeholder>
                         )
                       }

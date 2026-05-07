@@ -1,15 +1,18 @@
 /**
- * subthresholdStructuringScenes.jsx — v25.7.0.11
+ * subthresholdStructuringScenes.jsx — v25.7.0.11 + v25.7.0.11.1 metadata fix
  *
- * Scene data for the sub-threshold structuring technique animation.
- * First consumer of the TimelineThresholdAnimation engine.
+ * Scene data for the Structuring (F1087) technique animation, focused
+ * on the sub-threshold structuring sub-pattern (deposits hugging the
+ * J$1M POCA Section 101A threshold from below).
  *
- * F-code: PLACEHOLDER (F1XXX) — to be resolved from live F3 framework
- * by Omar before deploy. Sub-threshold structuring lives in
- * TA0005 Defense Evasion in F3. Resolve by querying:
- *   GET /api/framework/tactics/TA0005/techniques-tree
- * and finding the structuring technique's actual F-code, then update
- * ANIMATION_MAP in TechniqueDetailSidebar.jsx.
+ * Consumer of the TimelineThresholdAnimation engine.
+ *
+ * Tactic placement (corrected v25.7.0.11.1): F1087 lives under
+ * Monetization (FA0002), NOT Defense Evasion (TA0005). The framework's
+ * own placement is defensible — structuring is a monetization-stage
+ * technique (laundering already-stolen funds), not an evasion-during-
+ * attack technique. Earlier v25.7.0.11 metadata had this wrong;
+ * v25.7.0.11.1 corrects it.
  *
  * Pedagogical insight (locked):
  *   Structuring is invisible because no single transaction looks
@@ -362,12 +365,12 @@ export const STRUCTURING_STAGES = [
 
 /* ─── Animation metadata ──────────────────────────────────────────── */
 export const STRUCTURING_META = {
-  techId: 'F1XXX',  // PLACEHOLDER — Omar to resolve from live framework
-  techName: 'Sub-threshold structuring',
-  tacticId: 'TA0005',
-  tacticName: 'Defense Evasion',
+  techId: 'F1087',
+  techName: 'Structuring',  // framework's actual name; the animation explores the sub-threshold structuring sub-pattern
+  tacticId: 'FA0002',
+  tacticName: 'Monetization',
   scenario: 'SC-marcia-vs-trevor-structuring-case-review',
-  scenarioContext: 'Two NCB Jamaica accounts flagged for compliance review. Trainee plays the AML analyst. The animation teaches the actual analyst job: pattern recognition across time, channels, and customer baseline. Mrs. Marcia Edwards (Mandeville market vendor, legitimate) and Trevor Bennett (Half-Way Tree, structurer) presented side-by-side. Distinct from Allison Brown (SC007 mule, complicit) and Marcus Walters (3DS Bypass victim, innocent) — Marcia is a legitimate Jamaican small-business depositor, Trevor is a structurer operating an account.',
+  scenarioContext: 'Two NCB Jamaica accounts flagged for compliance review. Trainee plays the AML analyst. The animation teaches the actual analyst job: pattern recognition across time, channels, and customer baseline. Mrs. Marcia Edwards (Mandeville market vendor, legitimate) and Trevor Bennett (Half-Way Tree, structurer) presented side-by-side. Distinct from Allison Brown (mule recruitment scenario (SC007), complicit) and Marcus Walters (3DS Bypass victim, innocent) — Marcia is a legitimate Jamaican small-business depositor, Trevor is a structurer operating an account.',
   totalDurationMs: 36000,
   stageCount: 5,
 }

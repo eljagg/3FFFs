@@ -441,7 +441,7 @@ export const IVR_DISCOVERY_META = {
   tacticId: 'TA0043',
   tacticName: 'Reconnaissance',
   scenario: 'SC007-prequel',
-  scenarioContext: "This animation shows the reconnaissance phase that happened BEFORE Allison was ever recruited as a money mule in SC007. The crew that recruited her had been mining the JNCB IVR for weeks to identify accounts worth targeting. Allison's account was one of 50 they validated this way.",
+  scenarioContext: "This animation shows the reconnaissance phase that happened BEFORE Allison was ever recruited as a money mule in the mule recruitment scenario (SC007). The crew that recruited her had been mining the JNCB IVR for weeks to identify accounts worth targeting. Allison's account was one of 50 they validated this way.",
   totalDurationMs: 38500, // sum of stage durations at 1x
   stageCount: 7,
 }

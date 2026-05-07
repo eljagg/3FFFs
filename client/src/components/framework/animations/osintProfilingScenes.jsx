@@ -1111,11 +1111,11 @@ const statBigStyles = {
 /* ─── Animation metadata ──────────────────────────────────────────── */
 export const OSINT_PROFILING_META = {
   techId: 'F1067',
-  techName: 'OSINT Profiling',
+  techName: 'Gather Victim Information (OSINT Profiling)',  // v25.7.0.11.1: framework's actual name first per OBS-029, with the descriptive scope of the animation in parens. Framework UI displays this technique as 'Gather Victim Information'; the animation specifically shows the OSINT-profiling sub-pattern of that broader technique.
   tacticId: 'TA0043',
   tacticName: 'Reconnaissance',
   scenario: 'SC007-prequel',
-  scenarioContext: "This animation shows the OSINT phase that came BEFORE the IVR Discovery animation's prologue. IVR Discovery's stage 1 says 'the crew buys Allison's stolen identity fragment from a dark-web dump' — this animation shows HOW that dump came into existence. The OSINT crew assembled the dossier from public sources, then sold it to the IVR-probing crew. Same Allison Brown, two adjacent reconnaissance steps.",
+  scenarioContext: "This animation shows the OSINT phase that came BEFORE the IVR Discovery (F1073) animation's prologue. IVR Discovery's stage 1 says 'the crew buys Allison's stolen identity fragment from a dark-web dump' — this animation shows HOW that dump came into existence. The OSINT crew assembled the dossier from public sources, then sold it to the IVR-probing crew. Same Allison Brown, two adjacent reconnaissance steps.",
   totalDurationMs: 34500, // sum of stage durations at 1x
   stageCount: 7,
 }
