@@ -147,6 +147,26 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
       .filter(s => s && activeControls.has(s.revealedBy))
   }, [currentStage, activeControls, signalById])
 
+  // v25.7.0.14.1: derive control-fires-at-stages map from scene data
+  // rather than relying on hand-maintained `revealsAtStages` arrays.
+  // Same pattern as ProcessAnimation. See ProcessAnimation for the
+  // rationale.
+  const derivedRevealsAtStagesByControl = useMemo(() => {
+    const map = {}
+    for (const c of controls) {
+      const controlSignals = signals.filter(s => s.revealedBy === c.id).map(s => s.id)
+      const stageNumbers = []
+      stages.forEach((stage, idx) => {
+        const stageSigIds = stage.revealedSignalIds || []
+        if (stageSigIds.some(sid => controlSignals.includes(sid))) {
+          stageNumbers.push(idx + 1)
+        }
+      })
+      map[c.id] = stageNumbers
+    }
+    return map
+  }, [controls, signals, stages])
+
   /* ─── Render ──────────────────────────────────────────────────── */
   return (
     <div style={engineStyles.wrap}>
@@ -280,6 +300,8 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
             // v25.7.0.11.2: tell the toggle whether this control is
             // currently surfacing a signal. If active but no signal —
             // toggle renders the "step through to view" hint.
+            // v25.7.0.14.1: pass engine-derived stage list (computed
+            // from actual scene data, not hand-authored metadata).
             const hasActiveSignal = revealedSignals.some(s => s.revealedBy === c.id)
             return (
               <ControlToggle
@@ -289,6 +311,7 @@ export default function TimelineThresholdAnimation({ scenes, externalPauseSignal
                 onToggle={() => toggleControl(c.id)}
                 hasActiveSignalAtCurrentStage={hasActiveSignal}
                 stageLabels={stages.map(s => s.label)}
+                derivedRevealsAtStages={derivedRevealsAtStagesByControl[c.id]}
               />
             )
           })}
@@ -808,22 +831,28 @@ function PlaybackButton({ onClick, disabled, primary, title, children }) {
   )
 }
 
-function ControlToggle({ control, active, onToggle, hasActiveSignalAtCurrentStage, stageLabels }) {
+function ControlToggle({ control, active, onToggle, hasActiveSignalAtCurrentStage, stageLabels, derivedRevealsAtStages }) {
   const naive = control.naive
 
   // v25.7.0.11.2: stage-feedback hint when control is toggled active
   // at a stage where its signal isn't live. Same logic as
   // ProcessAnimation's ControlToggle.
+  // v25.7.0.14.1: prefer engine-derived stage list over scene-author
+  // metadata (which had drifted from actual behavior in 4 of 6 animations).
+  const stageList =
+    Array.isArray(derivedRevealsAtStages) && derivedRevealsAtStages.length > 0
+      ? derivedRevealsAtStages
+      : (Array.isArray(control.revealsAtStages) ? control.revealsAtStages : [])
+
   const showStageHint =
     active &&
     !naive &&
     !hasActiveSignalAtCurrentStage &&
-    Array.isArray(control.revealsAtStages) &&
-    control.revealsAtStages.length > 0
+    stageList.length > 0
 
   let stageHintText = null
   if (showStageHint) {
-    const stageRefs = control.revealsAtStages.map(idx => {
+    const stageRefs = stageList.map(idx => {
       const label = stageLabels && stageLabels[idx - 1]
       return label ? `stage ${idx} (${label})` : `stage ${idx}`
     })

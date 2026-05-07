@@ -146,6 +146,29 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
       .filter(s => s && activeControls.has(s.revealedBy))
   }, [currentStage, activeControls, signalById])
 
+  // v25.7.0.14.1: derive the "control fires at stages X" map directly
+  // from scene data — replacing the hand-maintained `revealsAtStages`
+  // arrays on each control which had drifted from actual behavior in
+  // 4 of 6 animations. For each control, find every signal that names
+  // it as `revealedBy`, then find every stage that includes one of
+  // those signals in `revealedSignalIds`. The 1-indexed stage list is
+  // what ControlToggle renders in its hint.
+  const derivedRevealsAtStagesByControl = useMemo(() => {
+    const map = {}
+    for (const c of controls) {
+      const controlSignals = signals.filter(s => s.revealedBy === c.id).map(s => s.id)
+      const stageNumbers = []
+      stages.forEach((stage, idx) => {
+        const stageSigIds = stage.revealedSignalIds || []
+        if (stageSigIds.some(sid => controlSignals.includes(sid))) {
+          stageNumbers.push(idx + 1)  // 1-indexed
+        }
+      })
+      map[c.id] = stageNumbers
+    }
+    return map
+  }, [controls, signals, stages])
+
   /* ─── Render ──────────────────────────────────────────────────── */
   return (
     <div style={styles.wrap}>
@@ -266,6 +289,8 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
             // v25.7.0.11.2: tell the toggle whether this control is
             // currently surfacing a signal. If active but no signal —
             // toggle renders the "step through to view" hint.
+            // v25.7.0.14.1: pass engine-derived stage list (computed
+            // from actual scene data, not hand-authored metadata).
             const hasActiveSignal = revealedSignals.some(s => s.revealedBy === c.id)
             return (
               <ControlToggle
@@ -275,6 +300,7 @@ export default function ProcessAnimation({ scenes, externalPauseSignal }) {
                 onToggle={() => toggleControl(c.id)}
                 hasActiveSignalAtCurrentStage={hasActiveSignal}
                 stageLabels={stages.map(s => s.label)}
+                derivedRevealsAtStages={derivedRevealsAtStagesByControl[c.id]}
               />
             )
           })}
@@ -471,7 +497,7 @@ function PlaybackButton({ onClick, disabled, primary, title, children }) {
 }
 
 /* ─── Control toggle ───────────────────────────────────────────────── */
-function ControlToggle({ control, active, onToggle, hasActiveSignalAtCurrentStage, stageLabels }) {
+function ControlToggle({ control, active, onToggle, hasActiveSignalAtCurrentStage, stageLabels, derivedRevealsAtStages }) {
   const naive = control.naive
 
   // v25.7.0.11.2: when the control is active but no signal is live at
@@ -479,21 +505,32 @@ function ControlToggle({ control, active, onToggle, hasActiveSignalAtCurrentStag
   // control would have caught signals. Preserves the per-stage
   // pedagogy while making the trainee understand the control IS
   // doing something — just not at the stage they're currently viewing.
+  // v25.7.0.14.1: prefer engine-derived `derivedRevealsAtStages` (computed
+  // from the actual stages + signals data) over the scene-author-supplied
+  // `control.revealsAtStages`. The latter was a hand-maintained parallel
+  // field that drifted from the actual data in 4 of 6 animations. The
+  // derived value is the source of truth; the scene field is now only
+  // a fallback for rendering before the engine has had a chance to
+  // compute (which in practice never happens, but is defensive).
+  const stageList =
+    Array.isArray(derivedRevealsAtStages) && derivedRevealsAtStages.length > 0
+      ? derivedRevealsAtStages
+      : (Array.isArray(control.revealsAtStages) ? control.revealsAtStages : [])
+
   const showStageHint =
     active &&
     !naive &&
     !hasActiveSignalAtCurrentStage &&
-    Array.isArray(control.revealsAtStages) &&
-    control.revealsAtStages.length > 0
+    stageList.length > 0
 
-  // Convert the 1-indexed revealsAtStages to a friendly hint string.
+  // Convert the 1-indexed stage list to a friendly hint string.
   // E.g., [3, 7] with 7 total stages → "Active at stages 3, 7. Step
   // through to view." If we have stageLabels, pull a 1-2 word
   // summary instead of bare numbers.
   let stageHintText = null
   if (showStageHint) {
-    const stageRefs = control.revealsAtStages.map(idx => {
-      // revealsAtStages is 1-indexed; stageLabels is 0-indexed array
+    const stageRefs = stageList.map(idx => {
+      // stageList is 1-indexed; stageLabels is 0-indexed array
       const label = stageLabels && stageLabels[idx - 1]
       return label ? `stage ${idx} (${label})` : `stage ${idx}`
     })
