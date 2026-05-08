@@ -22,6 +22,17 @@ const EXPIRATION_OPTIONS = [
   { label: 'Never',     hours: null },
 ]
 
+// v25.7.0.22: quick-pick options for the Extend/Restore popover.
+// Anchored from NOW (not from current expiresAt), so "+7 days" means
+// "expires 7 days from this click", which matches the new-invite mental
+// model and is robust for both expired and active rows.
+const EXTEND_OPTIONS = [
+  { label: '+1 day',         hours: 24 },
+  { label: '+7 days',        hours: 24 * 7 },
+  { label: '+30 days',       hours: 24 * 30 },
+  { label: 'Never expires',  hours: null },
+]
+
 function fmtRelative(ts) {
   if (!ts) return '—'
   const diff = Date.now() - Number(ts)
@@ -227,6 +238,11 @@ function InvitesTab() {
   const [error, setError] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [toast, setToast] = useState(null)
+  // v25.7.0.22: extend/restore popover state. `extending` is the invite
+  // whose popover is open; `extendAnchor` is the {x,y} of the trigger
+  // button so the floating popover knows where to position itself.
+  const [extending, setExtending] = useState(null)
+  const [extendAnchor, setExtendAnchor] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -270,6 +286,39 @@ function InvitesTab() {
       await load()
       setToast({ kind: 'success', text: `Revoked ${inv.email}.` })
       setTimeout(() => setToast(null), 3500)
+    } catch (e) {
+      setToast({ kind: 'error', text: e.message })
+      setTimeout(() => setToast(null), 5000)
+    }
+  }
+
+  // v25.7.0.22 — open the Extend/Restore popover anchored to the trigger
+  function openExtendPopover(inv, e) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setExtending(inv)
+    // Right-align the popover to the trigger's right edge so it doesn't
+    // overflow off the right side of the viewport on the rightmost
+    // Action column. Top edge sits just below the trigger.
+    setExtendAnchor({ right: window.innerWidth - rect.right, top: rect.bottom + 6 })
+  }
+
+  function closeExtendPopover() {
+    setExtending(null)
+    setExtendAnchor(null)
+  }
+
+  async function handleExtend(inv, hours) {
+    const wasRevoked = !!inv.revokedAt
+    closeExtendPopover()
+    try {
+      const d = await api.adminExtendInvite(inv.id, { expirationHours: hours })
+      await load()
+      const verb = wasRevoked ? 'Restored' : 'Extended'
+      const when = d.invite.expiresAt
+        ? `expires ${fmtAbsolute(d.invite.expiresAt)}`
+        : 'no expiration'
+      setToast({ kind: 'success', text: `${verb} ${d.invite.email} — ${when}.` })
+      setTimeout(() => setToast(null), 4000)
     } catch (e) {
       setToast({ kind: 'error', text: e.message })
       setTimeout(() => setToast(null), 5000)
@@ -329,6 +378,17 @@ function InvitesTab() {
                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: st.color, display: 'inline-block' }} />
                         {st.label}
                       </span>
+                      {/* v25.7.0.22: surface extend/restore audit trail inline so admins
+                          can see at a glance which invites have been kept alive past their
+                          original expiry without opening a separate audit log. */}
+                      {inv.lastExtendedAt && (
+                        <div style={{
+                          fontSize: 10.5, color: 'var(--ink-faint)', marginTop: 3,
+                          fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+                        }} title={`${fmtAbsolute(inv.lastExtendedAt)}${inv.extendedByEmail ? ` by ${inv.extendedByEmail}` : ''}`}>
+                          ↻ extended {fmtRelative(inv.lastExtendedAt)}
+                        </div>
+                      )}
                     </Td>
                     <Td title={fmtAbsolute(inv.invitedAt)}>{fmtRelative(inv.invitedAt)}</Td>
                     <Td title={inv.expiresAt ? fmtAbsolute(inv.expiresAt) : 'No expiration'}>
@@ -340,8 +400,23 @@ function InvitesTab() {
                       {inv.notes || <span style={{ color: 'var(--ink-faint)' }}>—</span>}
                     </Td>
                     <Td align="right">
-                      {!isDone && (
-                        <button onClick={() => handleRevoke(inv)} style={dangerLinkBtn}>Revoke</button>
+                      {/* v25.7.0.22: action column is now context-aware per row state.
+                          Revoked → [Restore ▾] (re-uses extend endpoint, label flips).
+                          Expired → [Extend ▾] only (no point in revoking what's already lapsed).
+                          Active/Pending → [Extend ▾] [Revoke]. */}
+                      {inv.revokedAt ? (
+                        <button onClick={(e) => openExtendPopover(inv, e)} style={extendBtn}>
+                          Restore ▾
+                        </button>
+                      ) : (
+                        <span style={{ display: 'inline-flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                          <button onClick={(e) => openExtendPopover(inv, e)} style={extendBtn}>
+                            Extend ▾
+                          </button>
+                          {!isDone && (
+                            <button onClick={() => handleRevoke(inv)} style={dangerLinkBtn}>Revoke</button>
+                          )}
+                        </span>
                       )}
                     </Td>
                   </tr>
@@ -358,6 +433,20 @@ function InvitesTab() {
           </table>
         </div>
       )}
+
+      {/* v25.7.0.22 — Extend/Restore popover. Position: fixed, anchored to
+          the trigger button via openExtendPopover's getBoundingClientRect.
+          Outer overlay catches click-outside dismissal. */}
+      <AnimatePresence>
+        {extending && extendAnchor && (
+          <ExtendPopover
+            invite={extending}
+            anchor={extendAnchor}
+            onPick={(hours) => handleExtend(extending, hours)}
+            onClose={closeExtendPopover}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showModal && <InviteModal onClose={() => setShowModal(false)} onSubmit={handleCreate} />}
@@ -503,6 +592,98 @@ function InviteModal({ onClose, onSubmit }) {
 }
 
 // ============================================================================
+// Extend / Restore popover — v25.7.0.22
+//
+// Floating menu anchored to the trigger button. Quick-pick options for the
+// most common extension durations, plus a custom-hours input for the long
+// tail. Same component services both "Extend" (active/expired rows) and
+// "Restore" (revoked rows) — server endpoint is the same; we only flip the
+// header copy based on `invite.revokedAt`.
+// ============================================================================
+function ExtendPopover({ invite, anchor, onPick, onClose }) {
+  const [customHours, setCustomHours] = useState('')
+  const [customErr, setCustomErr] = useState(null)
+  const isRestore = !!invite.revokedAt
+
+  function applyCustom() {
+    const n = Number(customHours)
+    if (!Number.isFinite(n) || n <= 0) {
+      setCustomErr('Enter a positive number of hours.')
+      return
+    }
+    onPick(n)
+  }
+
+  return (
+    <>
+      {/* Click-outside dismiss layer */}
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, zIndex: 150, background: 'transparent',
+      }} />
+      <motion.div
+        initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.12 }}
+        style={{
+          position: 'fixed',
+          right: anchor.right, top: anchor.top,
+          zIndex: 160,
+          minWidth: 220,
+          background: 'var(--paper-hi)',
+          border: '1px solid var(--rule-strong)',
+          borderRadius: 8,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+          padding: 6,
+          fontFamily: 'inherit',
+        }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
+          textTransform: 'uppercase', color: 'var(--ink-faint)',
+          padding: '8px 10px 6px',
+        }}>
+          {isRestore ? 'Restore with new expiry' : 'Extend expiry'}
+        </div>
+        {EXTEND_OPTIONS.map(opt => (
+          <button key={opt.label} onClick={() => onPick(opt.hours)} style={popoverItemStyle}>
+            {opt.label}
+          </button>
+        ))}
+        <div style={{ borderTop: '1px solid var(--rule)', margin: '6px 0', padding: '8px 10px 4px' }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.10em',
+            textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 6,
+          }}>
+            Custom hours
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="number"
+              min="1"
+              value={customHours}
+              onChange={e => { setCustomHours(e.target.value); setCustomErr(null) }}
+              onKeyDown={e => { if (e.key === 'Enter') applyCustom() }}
+              placeholder="e.g. 72"
+              style={{
+                flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 13, fontFamily: 'inherit',
+                background: 'var(--paper)', color: 'var(--ink)',
+                border: '1px solid var(--rule)', borderRadius: 4, outline: 'none',
+              }}
+            />
+            <button onClick={applyCustom} style={{
+              padding: '6px 12px', background: 'var(--ink)', color: 'var(--paper-hi)',
+              border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>Apply</button>
+          </div>
+          {customErr && (
+            <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 4 }}>{customErr}</div>
+          )}
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
+// ============================================================================
 // Shared small components
 // ============================================================================
 function RolePills({ roles }) {
@@ -608,6 +789,19 @@ const dangerLinkBtn = {
   background: 'transparent', border: 'none', color: 'var(--danger)',
   fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px',
   textDecoration: 'underline',
+}
+// v25.7.0.22 — extend/restore action trigger. Subtle by design: it's a
+// recoverable, low-stakes action that pairs with Revoke in the same cell.
+const extendBtn = {
+  background: 'transparent', border: '1px solid var(--rule-strong)',
+  color: 'var(--ink)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+  padding: '4px 10px', borderRadius: 4, transition: 'background var(--dur) ease',
+}
+const popoverItemStyle = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, fontFamily: 'inherit',
+  background: 'transparent', border: 'none', cursor: 'pointer',
+  color: 'var(--ink)', borderRadius: 4,
 }
 
 // ============================================================================

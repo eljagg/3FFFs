@@ -13,6 +13,9 @@ import { requireRole, getUser } from '../lib/auth.js'
      GET    /users              — list all :User nodes with progress rollups
      GET    /invites            — list all :Invite nodes (active, revoked, expired)
      POST   /invites            — create or upsert an invite by email
+     POST   /invites/:id/extend — extend expiry (and clear revokedAt if set);
+                                  v25.7.0.22, single-attribute lifecycle change
+                                  separated from the heavyweight upsert
      DELETE /invites/:id        — soft-revoke an invite (sets revokedAt)
 
    Invite lifecycle:
@@ -80,19 +83,23 @@ router.get('/invites', async (_req, res, next) => {
     const rows = await runQuery(`
       MATCH (i:Invite)
       OPTIONAL MATCH (inviter:User {id: i.invitedBy})
+      OPTIONAL MATCH (extender:User {id: i.extendedBy})
       RETURN
-        i.id            AS id,
-        i.email         AS email,
-        i.roles         AS roles,
-        i.notes         AS notes,
-        i.invitedBy     AS invitedBy,
-        inviter.email   AS invitedByEmail,
-        i.invitedAt     AS invitedAt,
-        i.expiresAt     AS expiresAt,
-        i.revokedAt     AS revokedAt,
-        i.consumedAt    AS consumedAt,
-        i.lastUsedAt    AS lastUsedAt,
-        i.useCount      AS useCount
+        i.id             AS id,
+        i.email          AS email,
+        i.roles          AS roles,
+        i.notes          AS notes,
+        i.invitedBy      AS invitedBy,
+        inviter.email    AS invitedByEmail,
+        i.invitedAt      AS invitedAt,
+        i.expiresAt      AS expiresAt,
+        i.revokedAt      AS revokedAt,
+        i.consumedAt     AS consumedAt,
+        i.lastUsedAt     AS lastUsedAt,
+        i.useCount       AS useCount,
+        i.lastExtendedAt AS lastExtendedAt,
+        i.extendedBy     AS extendedBy,
+        extender.email   AS extendedByEmail
       ORDER BY i.invitedAt DESC
     `)
     res.json({ invites: rows })
@@ -173,6 +180,71 @@ router.post('/invites', async (req, res, next) => {
     })
 
     res.json({ invite: row })
+  } catch (e) { next(e) }
+})
+
+// ------------------------------------------------------------------
+// POST /api/admin/invites/:id/extend                       (v25.7.0.22)
+// ------------------------------------------------------------------
+// Body: { expirationHours }
+//   expirationHours: number of hours from NOW until new expiry,
+//                    or null for "never expires"
+//
+// Single-responsibility lifecycle endpoint. Does NOT touch email,
+// roles, notes, invitedBy, or invitedAt — those keep their original
+// values, which is the whole point: the admin's mental model is
+// "give this person more time", not "re-invite them from scratch".
+//
+// Side effect: clears revokedAt if it was set. So the same endpoint
+// also restores a previously-revoked invite. The client surfaces this
+// as a "Restore" action label when the row is in revoked state, but
+// server-side it's the same operation: refresh the deadline, lift
+// any block.
+//
+// Audit: lastExtendedAt + extendedBy capture the action; useCount and
+// consumedAt are preserved so the eventual "this invite has been
+// extended N times across M months" picture remains intact.
+router.post('/invites/:id/extend', async (req, res, next) => {
+  try {
+    const me = getUser(req)
+    const { id } = req.params
+    const expirationHours = req.body?.expirationHours
+
+    let newExpiresAt = null
+    if (expirationHours !== null && expirationHours !== undefined) {
+      const hours = Number(expirationHours)
+      if (!Number.isFinite(hours) || hours <= 0) {
+        return res.status(400).json({ error: 'expirationHours must be a positive number or null.' })
+      }
+      newExpiresAt = Date.now() + Math.round(hours * 3_600_000)
+    }
+
+    const rows = await runQuery(`
+      MATCH (i:Invite {id: $id})
+      SET i.expiresAt      = $newExpiresAt,
+          i.revokedAt      = null,
+          i.lastExtendedAt = timestamp(),
+          i.extendedBy     = $me
+      RETURN
+        i.id             AS id,
+        i.email          AS email,
+        i.roles          AS roles,
+        i.notes          AS notes,
+        i.invitedBy      AS invitedBy,
+        i.invitedAt      AS invitedAt,
+        i.expiresAt      AS expiresAt,
+        i.revokedAt      AS revokedAt,
+        i.consumedAt     AS consumedAt,
+        i.lastUsedAt     AS lastUsedAt,
+        i.useCount       AS useCount,
+        i.lastExtendedAt AS lastExtendedAt,
+        i.extendedBy     AS extendedBy
+    `, { id, newExpiresAt, me: me.id })
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Invite not found.' })
+    }
+    res.json({ invite: rows[0] })
   } catch (e) { next(e) }
 })
 

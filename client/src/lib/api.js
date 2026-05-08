@@ -143,6 +143,8 @@ export const api = {
   adminListInvites:    ()        => request('/api/admin/invites'),
   adminCreateInvite:   (body)    => request('/api/admin/invites',        { method: 'POST',   body: JSON.stringify(body) }),
   adminRevokeInvite:   (id)      => request(`/api/admin/invites/${id}`,  { method: 'DELETE' }),
+  // v25.7.0.22 — extend invite expiry (and clear revokedAt if set, which doubles as "restore")
+  adminExtendInvite:   (id, body)=> request(`/api/admin/invites/${id}/extend`, { method: 'POST', body: JSON.stringify(body) }),
 
   // Frameworks (v25.0+) — public endpoints, no auth required
   listFrameworks:      ()        => request('/api/frameworks'),
