@@ -263,3 +263,4 @@ export const api = {
     URL.revokeObjectURL(url)
   },
 }
+// v25.7.0.26.2 — rebuild trigger after lockfile sync

@@ -890,3 +890,4 @@ router.delete('/invites/:id', async (req, res, next) => {
 })
 
 export default router
+// v25.7.0.26.2 — rebuild trigger after lockfile sync
