@@ -83,12 +83,43 @@ export async function syncUser(req, res, next) {
     if (!u.id) return next()
     const domain = (u.email || '').split('@')[1] || null
 
+    // v25.7.0.25.2 — race-condition fix for the role mirror.
+    //
+    // The bug: when an admin grants a role to a user via POST /users/:id/roles,
+    // the dual-write updates Auth0 + Neo4j atomically. But the next request
+    // from that user's browser still carries their old JWT (Auth0 doesn't
+    // refresh JWTs in-place; the user must re-log in to get a new one with
+    // the updated roles claim). syncUser would then overwrite the freshly-
+    // mirrored Neo4j roles back to the JWT's stale values, silently undoing
+    // the grant.
+    //
+    // The fix: compare the JWT's iat (issued-at) timestamp against
+    // u.lastRoleChangeAt. When lastRoleChangeAt > iat, the local Neo4j state
+    // is provably newer than the JWT (because the role grant endpoint sets
+    // lastRoleChangeAt to timestamp() AFTER the JWT was issued). In that case
+    // we keep the local roles. When iat > lastRoleChangeAt (the normal case,
+    // including a fresh login), the JWT is authoritative and we use it as
+    // before.
+    //
+    // Net effect:
+    //   - Self-grants persist immediately, no logout cycle needed
+    //   - Cross-user grants persist for the affected user until their next
+    //     login (which then naturally re-syncs everything)
+    //   - Normal logins behave exactly as before
+    //   - Auth0 remains the eventual-consistency anchor
+    const iatSec = req.auth?.payload?.iat
+    const iatMs = iatSec ? iatSec * 1000 : Date.now()
+
     await runQuery(
       `MERGE (user:User {id: $id})
        ON CREATE SET user.createdAt = timestamp(), user.firstSeenAt = timestamp()
        SET user.email = $email,
            user.name = $name,
-           user.roles = $roles,
+           user.roles = CASE
+             WHEN user.lastRoleChangeAt IS NOT NULL AND user.lastRoleChangeAt > $iatMs
+             THEN user.roles
+             ELSE $roles
+           END,
            user.lastSeenAt = timestamp(),
            user.domain = $domain`,
       {
@@ -97,6 +128,7 @@ export async function syncUser(req, res, next) {
         name: u.name,
         roles: u.roles,
         domain,
+        iatMs,
       }
     )
 
