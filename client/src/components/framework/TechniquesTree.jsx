@@ -130,19 +130,41 @@ export default function TechniquesTree({ tacticId, role, onTechniqueClick }) {
 function TechniqueParentCard({ node, role, isExpanded, onToggle, onTechniqueClick, hasGating }) {
   const { parent, subTechniques, isAtomic, collapseToSingle } = node
   const isRelevant = !hasGating || (parent.roles || []).includes(role)
-  const expandable = !isAtomic && !collapseToSingle
+  // v25.7.0.20.1: expandable depends only on having sub-techniques.
+  // Previously: expandable = !isAtomic && !collapseToSingle. The
+  // collapseToSingle clause was the override that hid single-child
+  // parents from expand/sidebar choice. Now removed alongside the
+  // effectiveTargetId fix above so single-child parents (e.g. F1018
+  // with F1018.001) show an expand affordance and reveal the child
+  // as a chip — same UX as multi-child parents.
+  const expandable = !isAtomic
 
-  // For collapseToSingle, the child IS the meaningful technique — clicking
-  // the card should open the child's sidebar, not the parent's
-  const effectiveTargetId = collapseToSingle && subTechniques[0]
-    ? subTechniques[0].id
-    : parent.id
-  const effectiveTechName = collapseToSingle && subTechniques[0]
-    ? subTechniques[0].name
-    : parent.name
-  const effectiveDesc = collapseToSingle && subTechniques[0]
-    ? subTechniques[0].description
-    : parent.description
+  // v25.7.0.20.1: removed collapseToSingle override of click target.
+  // The card displays parent.id and clicks to parent.id, always.
+  //
+  // Why removed: the v25.7.0.8-era assumption that single-child parents
+  // are "just organizational shells" no longer holds. F1018 (Account
+  // Takeover) has only one sub-technique (F1018.001 Password Reset),
+  // but F1018 now has its own independent animation as of v25.7.0.20
+  // (Karelle Bryan triages three ATO variants from the defender's
+  // perspective). The collapse override was rendering F1018.001's
+  // identity on the card while routing clicks ambiguously, defeating
+  // navigation to either technique. Removing the override surfaces
+  // F1018 and F1018.001 as separate cards (via the orphan-promotion
+  // path in framework-techniques.js, since both are server-side parents
+  // with their own :PART_OF tactic links). Each card now displays its
+  // own identity and clicks to its own sidebar — the simple invariant
+  // we needed.
+  //
+  // Trade-off: any future single-child parent that is genuinely a
+  // pure organizational shell will render as its own card rather than
+  // collapsing into the child. None currently exist in the F3 grid
+  // besides F1018, and F1018 is no longer a shell. If a future case
+  // arises, revisit the collapse behavior with explicit per-technique
+  // configuration rather than the "subs.length === 1" heuristic.
+  const effectiveTargetId = parent.id
+  const effectiveTechName = parent.name
+  const effectiveDesc     = parent.description
 
   const cardStyle = {
     ...styles.parentCard,
@@ -178,7 +200,7 @@ function TechniqueParentCard({ node, role, isExpanded, onToggle, onTechniqueClic
               {subTechniques.length} sub
             </span>
           )}
-          {isAtomic && !collapseToSingle && (
+          {isAtomic && (
             <span style={styles.atomicBadge}>atomic</span>
           )}
         </div>
