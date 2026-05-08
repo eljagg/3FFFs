@@ -44,6 +44,7 @@ import mfaFatigueScenes from './animations/mfaFatigueScenes.jsx'
 import insiderAccessScenes from './animations/insiderAccessScenes.jsx'
 import accountTakeoverScenes from './animations/accountTakeoverScenes.jsx'
 import mfaInterceptionScenes from './animations/mfaInterceptionScenes.jsx'
+import silentAlarmScenes from './animations/silentAlarmScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -103,6 +104,22 @@ const ANIMATION_MAP = {
                                                 //   forwards SMS OTP to C2 in Bulgaria; attacker has correct
                                                 //   credentials + correct OTP; login completes; J$1.4M out in
                                                 //   4 minutes. Closes Phase 1 Initial Access animation set.
+  'F1008.001': silentAlarmScenes,               // Account Manipulation: Change E-Delivery / Notification Settings (F1008.001) under Positioning (FA0001) — v25.7.0.27
+                                                //   Karen Ferguson (CIBC FirstCaribbean small-business customer,
+                                                //   Ocho Rios salon proprietor, age 44). Composite case grounded in
+                                                //   BOJ 2024-2025 internet-banking fraud reporting (statement-
+                                                //   quietly-rerouted pattern), FFIEC and FinCEN BEC investigation
+                                                //   documentation, and Caribbean small-business banking norms
+                                                //   (weekly SMS-digest as primary customer-side detection channel).
+                                                //   Two-day-old phished credentials → Sunday 02:14 AM session →
+                                                //   four notification-settings flipped to suppression in 78
+                                                //   seconds → three-day Positioning gap → Wednesday J$3.6M out
+                                                //   to mule chain. Customer doesn't notice for 9 days because
+                                                //   every alert dispatched correctly to attacker-controlled
+                                                //   inbox. Pedagogical insight: the silence is the signal.
+                                                //   Opens Phase 2 Positioning animation set; first non-Phase-1
+                                                //   animation; CIBC FirstCaribbean is the 4th institution
+                                                //   represented (balancing prior NCB×3 / JNCB×4 / Scotia×1).
   // Phase 1 Initial Access — COMPLETE (v25.7.0.12 through v25.7.0.21):
   //   F1081 Phishing (v25.7.0.12), F1088 Vishing (v25.7.0.13),
   //   T1451 SIM Swap (v25.7.0.14), F1018.001 Password Reset (v25.7.0.16),
@@ -110,8 +127,10 @@ const ANIMATION_MAP = {
   //   F1072 Insider Access (v25.7.0.19), F1018 ATO parent triage (v25.7.0.20),
   //   T1111 MFA Interception (v25.7.0.21).
   //
-  // Forward to Phase 2 (Positioning FA0001) per ANIMATION-TRIAGE.md:
-  //   FA0001/F1008.001 Silent Alarm, F1043 Card Testing, F1042 Card Dump
+  // Phase 2 Positioning (FA0001) — IN PROGRESS:
+  //   F1008.001 Silent Alarm (v25.7.0.27, this release).
+  //   Next: F1043 Card Testing + F1042 Card Dump (card-data
+  //   supply-chain mini-arc).
 }
 
 const ENGINE_MAP = {
