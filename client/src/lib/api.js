@@ -145,6 +145,11 @@ export const api = {
   // v25.7.0.24 — admin edit: displayName override and/or bank reassignment
   adminUpdateUser:     (id, body)=> request(`/api/admin/users/${id}`,    { method: 'PATCH', body: JSON.stringify(body) }),
   adminListBanks:      ()        => request('/api/admin/banks'),
+  // v25.7.0.25 — role grant / revoke via Auth0 Management API
+  adminGrantRole:      (id, role)=> request(`/api/admin/users/${id}/roles`,
+                                            { method: 'POST',   body: JSON.stringify({ role }) }),
+  adminRevokeRole:     (id, role)=> request(`/api/admin/users/${id}/roles/${encodeURIComponent(role)}`,
+                                            { method: 'DELETE' }),
   adminListInvites:    ()        => request('/api/admin/invites'),
   adminCreateInvite:   (body)    => request('/api/admin/invites',        { method: 'POST',   body: JSON.stringify(body) }),
   adminRevokeInvite:   (id)      => request(`/api/admin/invites/${id}`,  { method: 'DELETE' }),

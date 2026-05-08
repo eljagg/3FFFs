@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import { runQuery } from '../lib/neo4j.js'
 import { requireRole, getUser } from '../lib/auth.js'
+import { assignRoleToUser, removeRoleFromUser, isAuth0Configured, VALID_ROLES } from '../lib/auth0-management.js'
 
 /* -------------------------------------------------------------------------
    /api/admin/* — admin-only user and invite management
@@ -16,6 +17,11 @@ import { requireRole, getUser } from '../lib/auth.js'
                                   completed scenarios. v25.7.0.23.
      PATCH  /users/:id          — admin edit: displayName override and/or
                                   bank reassignment. v25.7.0.24.
+     POST   /users/:id/roles    — grant a role to a user via the Auth0
+                                  Management API; mirrors the change to the
+                                  Neo4j :User node. v25.7.0.25.
+     DELETE /users/:id/roles/:role — revoke a role from a user. Same dual-
+                                  write to Auth0 + Neo4j. v25.7.0.25.
      GET    /banks              — list all :Bank nodes (for the bank-reassign
                                   dropdown in the user detail modal). v25.7.0.24.
      GET    /invites            — list all :Invite nodes (active, revoked, expired)
@@ -112,10 +118,14 @@ router.get('/users/:id', async (req, res, next) => {
     ] = await Promise.all([
       runQuery(`
         MATCH (u:User {id: $id})
+        OPTIONAL MATCH (changer:User {id: u.roleChangedBy})
         RETURN u.id AS id, u.email AS email, u.name AS name,
                u.displayName AS displayName,
                u.domain AS domain, u.roles AS roles,
-               u.firstSeenAt AS firstSeenAt, u.lastSeenAt AS lastSeenAt
+               u.firstSeenAt AS firstSeenAt, u.lastSeenAt AS lastSeenAt,
+               u.lastRoleChangeAt AS lastRoleChangeAt,
+               u.roleChangedBy AS roleChangedBy,
+               changer.email AS roleChangedByEmail
       `, { id }),
       runQuery(`
         MATCH (u:User {id: $id})-[:MEMBER_OF]->(b:Bank)
@@ -317,6 +327,133 @@ router.patch('/users/:id', async (req, res, next) => {
     )
     res.json({ user: refreshed[0], bank: refreshed[0]?.bank || null })
   } catch (e) { next(e) }
+})
+
+// ------------------------------------------------------------------
+// POST /api/admin/users/:id/roles                            (v25.7.0.25)
+// ------------------------------------------------------------------
+// Body: { role }   where role ∈ {'trainee','manager','admin'}
+//
+// Grants a role to a user via the Auth0 Management API, then mirrors the
+// change to the local :User node so the UI reflects the new state without
+// waiting for the user's next login. The next login's syncUser() will
+// re-read roles from Auth0 — so Auth0 remains the source of truth and
+// any divergence converges back automatically.
+//
+// Architectural note: unlike displayName (v25.7.0.24's parallel-field
+// pattern), roles MUST round-trip to Auth0 because they affect the JWT
+// the Auth0 Action issues — and that JWT is what gates server-side
+// authorization. A 3FFFs-only role write would silently fail to grant
+// access on the user's next login. This endpoint does both writes and
+// fails atomically: if Auth0 rejects, Neo4j is not touched.
+//
+// Self-demotion guard: an admin cannot revoke their own admin role
+// (would lock themselves out instantly). Other self-edits are allowed.
+router.post('/users/:id/roles', async (req, res, next) => {
+  try {
+    if (!isAuth0Configured()) {
+      return res.status(503).json({
+        error: 'Auth0 Management API not configured. Set AUTH0_DOMAIN, AUTH0_M2M_CLIENT_ID, AUTH0_M2M_CLIENT_SECRET on the server.',
+      })
+    }
+    const me = getUser(req)
+    const { id } = req.params
+    const { role } = req.body || {}
+
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ error: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}.` })
+    }
+
+    // Verify the user exists in Neo4j (also gives us their current roles
+    // for the post-grant array update)
+    const userRows = await runQuery(
+      `MATCH (u:User {id: $id}) RETURN u.id AS id, u.roles AS roles`,
+      { id }
+    )
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' })
+    }
+
+    // Auth0 first. If this throws, Neo4j is untouched — atomicity by ordering.
+    await assignRoleToUser(id, role)
+
+    // Mirror to Neo4j. Use list-comprehension to add only if not already
+    // present, preserving idempotence (matches Auth0's silent no-op behavior).
+    const existing = userRows[0].roles || []
+    const merged = existing.includes(role) ? existing : [...existing, role]
+
+    await runQuery(
+      `MATCH (u:User {id: $id})
+       SET u.roles            = $roles,
+           u.lastRoleChangeAt = timestamp(),
+           u.roleChangedBy    = $me`,
+      { id, roles: merged, me: me.id }
+    )
+
+    res.json({ ok: true, granted: role, roles: merged })
+  } catch (e) {
+    if (e.code === 'AUTH0_API_FAILED') {
+      return res.status(502).json({ error: `Auth0 rejected the role grant: ${e.message}` })
+    }
+    next(e)
+  }
+})
+
+// ------------------------------------------------------------------
+// DELETE /api/admin/users/:id/roles/:role                    (v25.7.0.25)
+// ------------------------------------------------------------------
+// Revokes a role from a user via the Auth0 Management API + local mirror.
+// Same atomicity ordering as POST. Self-demotion of admin is blocked.
+router.delete('/users/:id/roles/:role', async (req, res, next) => {
+  try {
+    if (!isAuth0Configured()) {
+      return res.status(503).json({
+        error: 'Auth0 Management API not configured. Set AUTH0_DOMAIN, AUTH0_M2M_CLIENT_ID, AUTH0_M2M_CLIENT_SECRET on the server.',
+      })
+    }
+    const me = getUser(req)
+    const { id, role } = req.params
+
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ error: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}.` })
+    }
+
+    // Self-demotion guard: an admin revoking their own admin role would
+    // lock themselves out instantly (the next request would 403). Block.
+    if (id === me.id && role === 'admin') {
+      return res.status(400).json({
+        error: 'You cannot revoke your own admin role — that would lock you out. Have another admin do it.',
+      })
+    }
+
+    const userRows = await runQuery(
+      `MATCH (u:User {id: $id}) RETURN u.id AS id, u.roles AS roles`,
+      { id }
+    )
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' })
+    }
+
+    await removeRoleFromUser(id, role)
+
+    const existing = userRows[0].roles || []
+    const remaining = existing.filter(r => r !== role)
+
+    await runQuery(
+      `MATCH (u:User {id: $id})
+       SET u.roles            = $roles,
+           u.lastRoleChangeAt = timestamp(),
+           u.roleChangedBy    = $me`,
+      { id, roles: remaining, me: me.id }
+    )
+
+    res.json({ ok: true, revoked: role, roles: remaining })
+  } catch (e) {
+    if (e.code === 'AUTH0_API_FAILED') {
+      return res.status(502).json({ error: `Auth0 rejected the role revoke: ${e.message}` })
+    }
+    next(e)
+  }
 })
 
 // ------------------------------------------------------------------

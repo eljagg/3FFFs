@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useAuth0 } from '@auth0/auth0-react'
 import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
 
@@ -798,12 +799,15 @@ function UserDetailBody({ data, onClose, onApplyUpdate }) {
   const isManager = (user.roles || []).includes('manager')
   const totals = progress.totals
 
+  // v25.7.0.25 — current Auth0 user id, used to detect self-edits and
+  // hide the admin-revoke affordance for the current user (the server-side
+  // guard rejects it anyway, but hiding the × upfront is cleaner UX).
+  const { user: currentAuth0User } = useAuth0()
+  const isViewingSelf = currentAuth0User?.sub === user.id
+
   // v25.7.0.24 — edit mode for displayName + bank. Only these two fields
-  // are admin-editable in 3FFFs; email/name/roles are owned by Auth0
-  // (overwritten by syncUser on every login). The displayName override is
-  // the durable way to give a user a name when Auth0 doesn't have one,
-  // and the bank reassignment lets admins move users between :Bank
-  // tenants without waiting for an email-domain change.
+  // are admin-editable in 3FFFs without Auth0 round-trip; roles need the
+  // Management API and have their own confirm-then-write flow below.
   const [editing, setEditing] = useState(false)
   const [formDisplayName, setFormDisplayName] = useState('')
   const [formBankId, setFormBankId] = useState('')
@@ -812,12 +816,20 @@ function UserDetailBody({ data, onClose, onApplyUpdate }) {
   const [saveErr, setSaveErr] = useState(null)
   const [toast, setToast] = useState(null)
 
+  // v25.7.0.25 — role grant/revoke state. Adjacent to editing but operates
+  // independently (always-available with confirms), since role changes
+  // round-trip to Auth0 and have higher stakes than display-only edits.
+  const [showAddRole, setShowAddRole] = useState(false)
+  const [roleBusy, setRoleBusy] = useState(false)
+  const ALL_ROLES = ['trainee', 'manager', 'admin']
+  const userRoles = user.roles || []
+  const missingRoles = ALL_ROLES.filter(r => !userRoles.includes(r))
+
   function startEdit() {
     setFormDisplayName(user.displayName || '')
     setFormBankId(bank?.id || '')
     setSaveErr(null)
     setEditing(true)
-    // Lazy-load banks list the first time edit mode opens
     if (!banks) {
       api.adminListBanks()
         .then(d => setBanks(d.banks || []))
@@ -833,14 +845,11 @@ function UserDetailBody({ data, onClose, onApplyUpdate }) {
   async function saveEdit() {
     setSaving(true)
     setSaveErr(null)
-    // Only send fields that actually changed. Sending undefined for an
-    // unchanged field means the server leaves it alone (the PATCH endpoint
-    // checks hasOwnProperty, not truthiness).
     const patch = {}
     const trimmedName = formDisplayName.trim()
     const currentDisplayName = user.displayName || ''
     if (trimmedName !== currentDisplayName) {
-      patch.displayName = trimmedName  // empty string → server removes the override
+      patch.displayName = trimmedName
     }
     const newBankId = formBankId || null
     const currentBankId = bank?.id || null
@@ -865,9 +874,43 @@ function UserDetailBody({ data, onClose, onApplyUpdate }) {
     }
   }
 
-  // The display-resolved name: explicit override > Auth0 name > placeholder.
-  // Showing the Auth0 name as faint context when an override is active makes
-  // the override semantics legible to admins ("you've overridden John Smith").
+  // v25.7.0.25 — role grant. Confirm-first because it's a privileged
+  // change to the Auth0 user, not just a 3FFFs display tweak. After
+  // success we re-fetch the user to refresh roles + audit fields, and
+  // call onApplyUpdate so the parent list view reflects the change.
+  async function handleGrantRole(role) {
+    if (!confirm(`Grant ${role} role to ${user.email}? This will be reflected in Auth0 immediately.`)) return
+    setRoleBusy(true)
+    setShowAddRole(false)
+    try {
+      await api.adminGrantRole(user.id, role)
+      const fresh = await api.adminGetUser(user.id)
+      onApplyUpdate({ user: fresh.user, bank: fresh.bank })
+      setToast(`Granted ${role}.`)
+      setTimeout(() => setToast(null), 2500)
+    } catch (e) {
+      setSaveErr(`Grant failed: ${e.message}`)
+    } finally {
+      setRoleBusy(false)
+    }
+  }
+
+  async function handleRevokeRole(role) {
+    if (!confirm(`Revoke ${role} role from ${user.email}? They'll lose ${role}-tier access on their next session.`)) return
+    setRoleBusy(true)
+    try {
+      await api.adminRevokeRole(user.id, role)
+      const fresh = await api.adminGetUser(user.id)
+      onApplyUpdate({ user: fresh.user, bank: fresh.bank })
+      setToast(`Revoked ${role}.`)
+      setTimeout(() => setToast(null), 2500)
+    } catch (e) {
+      setSaveErr(`Revoke failed: ${e.message}`)
+    } finally {
+      setRoleBusy(false)
+    }
+  }
+
   const resolvedName = user.displayName || user.name
   const hasOverride = !!user.displayName
 
@@ -951,9 +994,79 @@ function UserDetailBody({ data, onClose, onApplyUpdate }) {
           </div>
         </div>
 
-        {/* Metadata bar — bank becomes a select in edit mode */}
+        {/* Metadata bar — roles are always editable (with confirm), bank is editable only in edit mode */}
         <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div><RolePills roles={user.roles} /></div>
+          {/* v25.7.0.25 — editable role pills with × revoke and + grant affordances */}
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', position: 'relative' }}>
+            {userRoles.length === 0 ? (
+              <span style={{ color: 'var(--ink-faint)', fontSize: 12 }}>No roles</span>
+            ) : (
+              userRoles.map(r => {
+                const isProtectedSelfAdmin = isViewingSelf && r === 'admin'
+                return (
+                  <span key={r} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    fontFamily: 'var(--font-mono)', fontSize: 10, padding: '2px 4px 2px 8px',
+                    borderRadius: 4, background: 'var(--paper)', color: 'var(--ink-soft)',
+                    border: '1px solid var(--rule)', letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                  }}>
+                    {r}
+                    {!isProtectedSelfAdmin && (
+                      <button onClick={() => handleRevokeRole(r)} disabled={roleBusy}
+                              title={`Revoke ${r}`}
+                              style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--ink-faint)', cursor: 'pointer',
+                                fontSize: 12, padding: '0 4px', lineHeight: 1,
+                                fontFamily: 'inherit',
+                              }}>×</button>
+                    )}
+                    {isProtectedSelfAdmin && (
+                      <span title="Cannot revoke your own admin role" style={{
+                        color: 'var(--ink-faint)', fontSize: 9, padding: '0 4px',
+                        fontFamily: 'var(--font-mono)',
+                      }}>🔒</span>
+                    )}
+                  </span>
+                )
+              })
+            )}
+            {missingRoles.length > 0 && (
+              <button onClick={() => setShowAddRole(v => !v)} disabled={roleBusy}
+                      style={{
+                        ...extendBtn, padding: '2px 8px', fontSize: 10,
+                        fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+                        textTransform: 'uppercase',
+                      }}>+ Role</button>
+            )}
+            {showAddRole && (
+              <>
+                <div onClick={() => setShowAddRole(false)} style={{
+                  position: 'fixed', inset: 0, zIndex: 250, background: 'transparent',
+                }} />
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                  zIndex: 260, minWidth: 140,
+                  background: 'var(--paper-hi)', border: '1px solid var(--rule-strong)',
+                  borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                  padding: 4,
+                }}>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.10em',
+                    textTransform: 'uppercase', color: 'var(--ink-faint)',
+                    padding: '6px 8px 4px',
+                  }}>Grant role</div>
+                  {missingRoles.map(r => (
+                    <button key={r} onClick={() => handleGrantRole(r)} disabled={roleBusy}
+                            style={popoverItemStyle}>
+                      + {r}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           {editing ? (
             <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Bank:</span>
@@ -981,6 +1094,17 @@ function UserDetailBody({ data, onClose, onApplyUpdate }) {
           </div>
         </div>
 
+        {/* v25.7.0.25 — role-change audit trail. Subtle, only renders when present. */}
+        {user.lastRoleChangeAt && (
+          <div style={{
+            marginTop: 8, fontSize: 10.5, color: 'var(--ink-faint)',
+            fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+          }} title={`${fmtAbsolute(user.lastRoleChangeAt)}${user.roleChangedByEmail ? ` by ${user.roleChangedByEmail}` : ''}`}>
+            ↻ role last changed {fmtRelative(user.lastRoleChangeAt)}
+            {user.roleChangedByEmail && <span> by {user.roleChangedByEmail}</span>}
+          </div>
+        )}
+
         {/* Save error / toast */}
         {saveErr && (
           <div style={{
@@ -997,17 +1121,17 @@ function UserDetailBody({ data, onClose, onApplyUpdate }) {
           }}>✓ {toast}</div>
         )}
 
-        {/* Editorial nudge — only shown in edit mode, explains the "why this is read-only" */}
+        {/* Editorial nudge — explains scope of edit mode (v25.7.0.25 update: roles are now editable, just outside edit mode) */}
         {editing && (
           <div style={{
             marginTop: 14, padding: '10px 12px', fontSize: 12,
             color: 'var(--ink-soft)', background: 'var(--paper)',
             borderRadius: 6, border: '1px solid var(--rule)', lineHeight: 1.5,
           }}>
-            <strong>Email and roles are not editable here.</strong> Auth0 owns those fields and
-            overwrites them on every login. Email changes happen at the Auth0 user level; role
-            promote/demote will move into 3FFFs in a future release that wires the Auth0
-            Management API.
+            <strong>Email is not editable here.</strong> Auth0 owns email and overwrites
+            it on every login. Roles are editable via the × / + Role affordances next to
+            the role pills above — those changes round-trip to Auth0 and take effect
+            on the user's next session.
           </div>
         )}
       </div>
