@@ -198,7 +198,16 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
   // Internal navigation between techniques without closing the sidebar
   // (lets user click sibling/parent/child within the sidebar to explore
   // the network laterally)
+  //
+  // v25.7.0.20.2: paired with internalNavTick counter to force the
+  // re-fetch effect to fire even when navigating to the same techId
+  // a second time. Without the counter, React skips the state update
+  // (same-value), the [internalTechId] effect doesn't fire, and the
+  // navigation appears to do nothing. Symptom from v25.7.0.20.1: the
+  // "F1018" link inside F1018.001's sidebar worked the first time
+  // but not on repeat after closing and re-opening the sidebar.
   const [internalTechId, setInternalTechId] = useState(null)
+  const [internalNavTick, setInternalNavTick] = useState(0)
   // When a navigation happens internally, swap techniqueId. Outer prop
   // changes still take effect via the useEffect dependency.
   const effectiveTechId = internalTechId || techniqueId
@@ -248,6 +257,8 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
   }
 
   // Re-fetch when internal nav happens
+  // v25.7.0.20.2: dependency includes internalNavTick so re-navigating
+  // to the same techId still triggers a re-fetch.
   useEffect(() => {
     if (!open || !internalTechId) return
     let cancelled = false
@@ -274,12 +285,15 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
         setLoading(false)
       })
     return () => { cancelled = true }
-  }, [open, internalTechId])
+  }, [open, internalTechId, internalNavTick])
 
   // Reset internal nav when the parent prop changes (user opens sidebar
   // for a new technique from the grid)
   useEffect(() => {
     setInternalTechId(null)
+    // v25.7.0.20.2: reset tick alongside internalTechId so subsequent
+    // internal navs start fresh and aren't shifted by stale tick value
+    setInternalNavTick(0)
     // v25.7.0.9.2 + v25.7.0.9.3: reset all collapse state — each new
     // technique starts fresh with every section expanded
     setCollapsedSections(new Set())
@@ -294,6 +308,11 @@ export default function TechniqueDetailSidebar({ open, techniqueId, onClose }) {
 
   function navigateInternal(newId) {
     setInternalTechId(newId)
+    // v25.7.0.20.2: bump tick so the re-fetch effect fires even when
+    // newId equals the current internalTechId (same-value setState
+    // is a React no-op; the tick guarantees the effect dependency
+    // changes regardless).
+    setInternalNavTick(t => t + 1)
   }
 
   return (

@@ -171,6 +171,18 @@ function TechniqueParentCard({ node, role, isExpanded, onToggle, onTechniqueClic
     ...(isRelevant ? {} : styles.cardMuted),
   }
 
+  // v25.7.0.20.2: separate handlers for expand toggle vs open-detail.
+  // For parents that ALSO have animations of their own (e.g. F1018),
+  // both navigations are needed: expand to see sub-techniques, AND
+  // open the parent's sidebar.
+  //
+  // The ExpandableHeaderCard pattern: the main card click toggles
+  // expand. A secondary "Open parent detail →" button below the
+  // expand chevron opens the parent's sidebar. Both visible only
+  // when expandable=true.
+  //
+  // For atomic cards (no sub-techniques), the main card click opens
+  // the sidebar directly — same as before. No secondary button.
   const handleCardClick = () => {
     if (expandable) {
       onToggle()
@@ -179,10 +191,23 @@ function TechniqueParentCard({ node, role, isExpanded, onToggle, onTechniqueClic
     }
   }
 
+  const handleOpenDetail = (e) => {
+    // Stop bubbling so the card-click expand handler doesn't also fire
+    e.stopPropagation()
+    onTechniqueClick(effectiveTargetId)
+  }
+
   return (
     <div style={styles.parentWrap}>
-      <button
+      {/* v25.7.0.20.2: changed from <button> to <div role="button"> to
+          allow nesting the inner Open detail span-button without
+          producing invalid HTML (button-inside-button). Click + keydown
+          handlers preserve keyboard accessibility. */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={handleCardClick}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick() } }}
         style={cardStyle}
         onMouseEnter={(e) => {
           e.currentTarget.style.borderColor = 'var(--accent)'
@@ -220,6 +245,22 @@ function TechniqueParentCard({ node, role, isExpanded, onToggle, onTechniqueClic
               transform: isExpanded ? 'rotate(90deg)' : 'none',
             }}>→</span>
             <span>{isExpanded ? 'Hide' : 'Show'} sub-techniques</span>
+            {/* v25.7.0.20.2: secondary affordance to open the parent's
+                own sidebar. Required for parents that have their own
+                animation (e.g. F1018) — without this, the parent card
+                click toggles expand and there's no path to open the
+                parent's content. The button stops propagation so the
+                card's expand handler doesn't also fire. Real <button>
+                inside a div parent (parent is role=button) — valid HTML. */}
+            <button
+              type="button"
+              onClick={handleOpenDetail}
+              style={styles.openDetailInline}
+              aria-label={`Open ${effectiveTargetId} detail`}
+            >
+              <span style={styles.openIcon}>↗</span>
+              <span>Open {effectiveTargetId} detail</span>
+            </button>
           </div>
         )}
         {!expandable && (
@@ -228,7 +269,7 @@ function TechniqueParentCard({ node, role, isExpanded, onToggle, onTechniqueClic
             <span>Open detail</span>
           </div>
         )}
-      </button>
+      </div>
 
       {/* Sub-technique cards — rendered below the parent when expanded */}
       {isExpanded && expandable && (
@@ -421,6 +462,26 @@ const styles = {
   },
   openIcon: {
     fontSize: 13,
+  },
+  // v25.7.0.20.2: inline secondary "Open <id> detail" button for parent
+  // cards that also have their own animation (e.g. F1018). Sits to the
+  // right of the expand chevron in the same hint row. Visually distinct
+  // from the expand text via spacing + accent border on hover.
+  openDetailInline: {
+    marginLeft: 'auto',
+    background: 'transparent',
+    border: '1px solid var(--rule)',
+    color: 'var(--accent)',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    letterSpacing: '0.08em',
+    fontWeight: 600,
+    padding: '4px 8px',
+    borderRadius: 4,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
   },
 
   subGrid: {
