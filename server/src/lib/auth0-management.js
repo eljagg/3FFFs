@@ -50,12 +50,43 @@ let cachedToken = null
 let cachedExpiresAt = 0
 const REFRESH_BUFFER_MS = 5 * 60 * 1000  // refresh 5 min before actual expiry
 
+// v25.7.0.25.1 — defensive env var reads. Hosting providers' secret-input UIs
+// (Railway, Vercel, etc.) preserve clipboard whitespace verbatim, so a
+// trailing space on a paste produces an Auth0 `access_denied` with no
+// indication of which credential is wrong. Trimming at read time makes the
+// system robust to this entire class of paste-whitespace bugs.
+function readEnv(name) {
+  const raw = process.env[name]
+  if (raw == null) return null
+  return raw.trim()
+}
+
+export function getEnvDomain()       { return readEnv('AUTH0_DOMAIN') }
+export function getEnvClientId()     { return readEnv('AUTH0_M2M_CLIENT_ID') }
+export function getEnvClientSecret() { return readEnv('AUTH0_M2M_CLIENT_SECRET') }
+
+// v25.7.0.25.1 — diagnostic helper for /api/admin/debug/auth0-status.
+// Reports presence, length, first/last char, and trimmed-vs-raw length so
+// admins can spot whitespace bugs from a single endpoint hit. Does NOT
+// expose the actual values — only metadata.
+export function describeEnvVar(name) {
+  const raw = process.env[name]
+  if (raw == null) {
+    return { present: false }
+  }
+  const trimmed = raw.trim()
+  return {
+    present: true,
+    rawLength: raw.length,
+    trimmedLength: trimmed.length,
+    hadWhitespace: raw.length !== trimmed.length,
+    firstChar: trimmed.charAt(0),
+    lastChar: trimmed.charAt(trimmed.length - 1),
+  }
+}
+
 export function isAuth0Configured() {
-  return !!(
-    process.env.AUTH0_DOMAIN &&
-    process.env.AUTH0_M2M_CLIENT_ID &&
-    process.env.AUTH0_M2M_CLIENT_SECRET
-  )
+  return !!(getEnvDomain() && getEnvClientId() && getEnvClientSecret())
 }
 
 function configError() {
@@ -77,13 +108,17 @@ async function getManagementToken() {
     return cachedToken
   }
 
-  const domain = process.env.AUTH0_DOMAIN
+  // v25.7.0.25.1 — read via trimmed helpers; see readEnv() comment above.
+  const domain       = getEnvDomain()
+  const clientId     = getEnvClientId()
+  const clientSecret = getEnvClientSecret()
+
   const resp = await fetch(`https://${domain}/oauth/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      client_id:     process.env.AUTH0_M2M_CLIENT_ID,
-      client_secret: process.env.AUTH0_M2M_CLIENT_SECRET,
+      client_id:     clientId,
+      client_secret: clientSecret,
       audience:      `https://${domain}/api/v2/`,
       grant_type:    'client_credentials',
     }),
@@ -110,7 +145,7 @@ async function getManagementToken() {
 async function managementRequest(path, init = {}) {
   if (!isAuth0Configured()) throw configError()
 
-  const domain = process.env.AUTH0_DOMAIN
+  const domain = getEnvDomain()
   const url = `https://${domain}/api/v2${path}`
 
   async function attempt(token) {

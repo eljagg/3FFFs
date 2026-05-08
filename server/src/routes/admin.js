@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import { runQuery } from '../lib/neo4j.js'
 import { requireRole, getUser } from '../lib/auth.js'
-import { assignRoleToUser, removeRoleFromUser, isAuth0Configured, VALID_ROLES } from '../lib/auth0-management.js'
+import { assignRoleToUser, removeRoleFromUser, isAuth0Configured, VALID_ROLES, describeEnvVar, getEnvDomain, getEnvClientId, getEnvClientSecret } from '../lib/auth0-management.js'
 
 /* -------------------------------------------------------------------------
    /api/admin/* — admin-only user and invite management
@@ -49,6 +49,78 @@ const router = Router()
 
 // Admin-only. Runs AFTER requireAuth + syncUser (mounted at /api).
 router.use(requireRole('admin'))
+
+// ------------------------------------------------------------------
+// GET /api/admin/debug/auth0-status                          (v25.7.0.25.1)
+// ------------------------------------------------------------------
+// Diagnostic endpoint. Reports the status of the Auth0 Management API
+// configuration WITHOUT exposing actual secret values. Returns:
+//   - whether each env var is present
+//   - its raw length, trimmed length, first/last char
+//   - whether trimming changed it (catches paste-whitespace bugs)
+//   - a live token-endpoint test result with the raw Auth0 response
+//
+// Use this when role grant/revoke fails with `access_denied` and you
+// need to know whether the env vars are actually correct or whether
+// Auth0 is rejecting the credentials. Admin-only by router-level guard.
+//
+// Safe to leave in production: no actual secret values in the response,
+// only their metadata. The first/last char of a 64-char Client Secret
+// is not enough to reconstruct it.
+router.get('/debug/auth0-status', async (_req, res, next) => {
+  try {
+    const env = {
+      AUTH0_DOMAIN:            describeEnvVar('AUTH0_DOMAIN'),
+      AUTH0_M2M_CLIENT_ID:     describeEnvVar('AUTH0_M2M_CLIENT_ID'),
+      AUTH0_M2M_CLIENT_SECRET: describeEnvVar('AUTH0_M2M_CLIENT_SECRET'),
+    }
+
+    let tokenTest = { attempted: false, reason: 'env vars not configured' }
+    if (isAuth0Configured()) {
+      tokenTest = { attempted: true }
+      const domain = getEnvDomain()
+      try {
+        const resp = await fetch(`https://${domain}/oauth/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            client_id:     getEnvClientId(),
+            client_secret: getEnvClientSecret(),
+            audience:      `https://${domain}/api/v2/`,
+            grant_type:    'client_credentials',
+          }),
+        })
+        const body = await resp.text().catch(() => '')
+        let parsedBody = body
+        try { parsedBody = JSON.parse(body) } catch { /* keep as text */ }
+        tokenTest.status = resp.status
+        tokenTest.success = resp.ok
+        // For success, redact the actual access_token to avoid logging it,
+        // but include the scope field (the actually useful confirmation)
+        if (resp.ok && parsedBody && typeof parsedBody === 'object') {
+          tokenTest.body = {
+            access_token: parsedBody.access_token ? `${parsedBody.access_token.slice(0, 12)}...REDACTED` : null,
+            scope:        parsedBody.scope,
+            expires_in:   parsedBody.expires_in,
+            token_type:   parsedBody.token_type,
+          }
+        } else {
+          tokenTest.body = parsedBody
+        }
+      } catch (e) {
+        tokenTest.success = false
+        tokenTest.error = e.message
+      }
+    }
+
+    res.json({
+      configured: isAuth0Configured(),
+      env,
+      tokenTest,
+      hint: 'If hadWhitespace is true on any env var, that env var was pasted with leading/trailing whitespace. v25.7.0.25.1 trims at read time so the system tolerates this; updating the Railway env var to remove the whitespace is still recommended for cleanliness.',
+    })
+  } catch (e) { next(e) }
+})
 
 // ------------------------------------------------------------------
 // GET /api/admin/users
