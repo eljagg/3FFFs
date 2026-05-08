@@ -136,6 +136,10 @@ function UsersTab() {
   const [error, setError] = useState(null)
   const [sortBy, setSortBy] = useState('lastSeenAt')
   const [filter, setFilter] = useState('')
+  // v25.7.0.23 — drill-down modal state. We open by id and let the modal
+  // fetch its own detail payload — cleaner than passing the row in and
+  // getting stale data if the list refreshes underneath.
+  const [selectedUserId, setSelectedUserId] = useState(null)
 
   useEffect(() => {
     api.adminListUsers()
@@ -208,7 +212,10 @@ function UsersTab() {
           </thead>
           <tbody>
             {sorted.map(u => (
-              <tr key={u.id} style={rowStyle}>
+              <tr key={u.id} onClick={() => setSelectedUserId(u.id)}
+                  style={{ ...rowStyle, cursor: 'pointer' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--paper)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                 <Td>{u.email || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
                 <Td>{u.name || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
                 <Td><code style={codeStyle}>{u.domain || '—'}</code></Td>
@@ -225,6 +232,16 @@ function UsersTab() {
           </tbody>
         </table>
       </div>
+
+      {/* v25.7.0.23 — per-user drill-down modal */}
+      <AnimatePresence>
+        {selectedUserId && (
+          <UserDetailModal
+            userId={selectedUserId}
+            onClose={() => setSelectedUserId(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -681,6 +698,397 @@ function ExtendPopover({ invite, anchor, onPick, onClose }) {
       </motion.div>
     </>
   )
+}
+
+// ============================================================================
+// User detail drill-down modal — v25.7.0.23
+//
+// Opened by clicking a row on the Users tab. Fetches the comprehensive
+// per-user payload from GET /api/admin/users/:id (one round-trip), then
+// renders progress totals, manager assignments (both directions), invite
+// history if applicable, completed scenarios, and recent activity.
+//
+// Sections render conditionally based on what the user actually has —
+// e.g. an auto-allowlisted user with no :Invite hides the invite section
+// entirely rather than showing an empty placeholder. A user without the
+// manager role hides the "Manages" section. Keeps the modal compact for
+// low-data users and expansive for power users.
+// ============================================================================
+function UserDetailModal({ userId, onClose }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    api.adminGetUser(userId)
+      .then(d => { if (!cancelled) { setData(d); setLoading(false) } })
+      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false) } })
+    return () => { cancelled = true }
+  }, [userId])
+
+  // ESC closes the modal — small affordance, expected behavior on a wide modal
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        zIndex: 200, backdropFilter: 'blur(4px)',
+        overflowY: 'auto', padding: '60px 20px',
+      }}>
+      <motion.div
+        onClick={e => e.stopPropagation()}
+        initial={{ scale: 0.97, opacity: 0, y: -8 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.97, opacity: 0, y: -8 }}
+        transition={{ duration: 0.18 }}
+        style={{
+          background: 'var(--paper-hi)', borderRadius: 12,
+          maxWidth: 780, width: '100%',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+          border: '1px solid var(--rule)', overflow: 'hidden',
+        }}>
+        {loading && (
+          <div style={{ padding: 60, textAlign: 'center', color: 'var(--ink-faint)' }}>
+            Loading user detail…
+          </div>
+        )}
+        {error && (
+          <div style={{ padding: 30 }}><ErrorBox message={error} /></div>
+        )}
+        {data && (
+          <UserDetailBody data={data} onClose={onClose} />
+        )}
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function UserDetailBody({ data, onClose }) {
+  const { user, bank, managers, manages, invite, progress } = data
+  const isManager = (user.roles || []).includes('manager')
+  const totals = progress.totals
+
+  return (
+    <>
+      {/* Header */}
+      <div style={{ padding: '28px 32px 20px', borderBottom: '1px solid var(--rule)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
+              textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 8,
+            }}>User detail</div>
+            <h2 style={{
+              fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 500,
+              lineHeight: 1.2, letterSpacing: '-0.01em', marginBottom: 6,
+              wordBreak: 'break-word',
+            }}>
+              {user.name || <span style={{ color: 'var(--ink-faint)' }}>(no name)</span>}
+            </h2>
+            <div style={{ fontSize: 14, color: 'var(--ink-soft)', wordBreak: 'break-word' }}>
+              {user.email || <span style={{ color: 'var(--ink-faint)' }}>(no email)</span>}
+              {user.domain && (
+                <>{' · '}<code style={codeStyle}>{user.domain}</code></>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none', color: 'var(--ink-faint)',
+            fontSize: 22, cursor: 'pointer', padding: '4px 10px', lineHeight: 1,
+            fontFamily: 'inherit',
+          }} title="Close (Esc)">×</button>
+        </div>
+        <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div><RolePills roles={user.roles} /></div>
+          {bank && (
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+              Bank: <strong>{bank.displayName || bank.id}</strong>
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: 'var(--ink-faint)' }} title={fmtAbsolute(user.firstSeenAt)}>
+            First seen {fmtRelative(user.firstSeenAt)}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-faint)' }} title={fmtAbsolute(user.lastSeenAt)}>
+            Last seen {fmtRelative(user.lastSeenAt)}
+          </div>
+        </div>
+      </div>
+
+      {/* Progress totals */}
+      <DetailSection title="Progress">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <StatBox label="Scenarios completed" value={totals.scenariosCompleted || 0} />
+          <StatBox label="Stages attempted"    value={totals.stagesAttempted    || 0} />
+          <StatBox label="Quizzes answered"    value={totals.quizzesAnswered    || 0} />
+          <StatBox
+            label="Quiz accuracy"
+            value={totals.quizzesAnswered
+              ? `${Math.round(100 * (totals.correctAnswers || 0) / totals.quizzesAnswered)}%`
+              : '—'}
+            sub={totals.quizzesAnswered
+              ? `${totals.correctAnswers || 0} of ${totals.quizzesAnswered} correct`
+              : 'no answers yet'}
+          />
+        </div>
+      </DetailSection>
+
+      {/* Manager assignments — both directions */}
+      <DetailSection title="Manager assignments">
+        <div style={{ marginBottom: managers.length || isManager ? 14 : 0 }}>
+          <div style={subLabelStyle}>Managed by</div>
+          {managers.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--ink-faint)' }}>No manager assigned.</div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {managers.map(m => (
+                <span key={m.id} style={personPill}
+                      title={m.assignedAt ? `Assigned ${fmtAbsolute(m.assignedAt)}` : ''}>
+                  {m.name || m.email}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {isManager && (
+          <div>
+            <div style={subLabelStyle}>Manages</div>
+            {manages.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--ink-faint)' }}>
+                Has manager role but no direct reports assigned yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {manages.map(r => (
+                  <span key={r.id} style={personPill}
+                        title={r.assignedAt ? `Assigned ${fmtAbsolute(r.assignedAt)}` : ''}>
+                    {r.name || r.email}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </DetailSection>
+
+      {/* Invite history — only if user came in via invite */}
+      {invite && (
+        <DetailSection title="Invite history">
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px', fontSize: 13 }}>
+            <span style={fieldLabelStyle}>Invited</span>
+            <span title={fmtAbsolute(invite.invitedAt)}>
+              {fmtRelative(invite.invitedAt)}
+              {invite.invitedByEmail && <span style={{ color: 'var(--ink-faint)' }}> by {invite.invitedByEmail}</span>}
+            </span>
+            <span style={fieldLabelStyle}>Roles granted</span>
+            <span><RolePills roles={invite.roles} /></span>
+            <span style={fieldLabelStyle}>Expires</span>
+            <span title={invite.expiresAt ? fmtAbsolute(invite.expiresAt) : 'No expiration'}>
+              {invite.expiresAt ? fmtRelative(invite.expiresAt) : <span style={{ color: 'var(--ink-faint)' }}>Never</span>}
+            </span>
+            <span style={fieldLabelStyle}>Logins</span>
+            <span>
+              {invite.useCount || 0}
+              {invite.lastUsedAt && (
+                <span style={{ color: 'var(--ink-faint)' }}> · last {fmtRelative(invite.lastUsedAt)}</span>
+              )}
+            </span>
+            {invite.consumedAt && (
+              <>
+                <span style={fieldLabelStyle}>First login</span>
+                <span title={fmtAbsolute(invite.consumedAt)}>{fmtRelative(invite.consumedAt)}</span>
+              </>
+            )}
+            {invite.lastExtendedAt && (
+              <>
+                <span style={fieldLabelStyle}>Extended</span>
+                <span title={fmtAbsolute(invite.lastExtendedAt)}>
+                  {fmtRelative(invite.lastExtendedAt)}
+                  {invite.extendedByEmail && <span style={{ color: 'var(--ink-faint)' }}> by {invite.extendedByEmail}</span>}
+                </span>
+              </>
+            )}
+            {invite.revokedAt && (
+              <>
+                <span style={fieldLabelStyle}>Revoked</span>
+                <span style={{ color: 'var(--danger)' }} title={fmtAbsolute(invite.revokedAt)}>
+                  {fmtRelative(invite.revokedAt)}
+                </span>
+              </>
+            )}
+            {invite.notes && (
+              <>
+                <span style={fieldLabelStyle}>Notes</span>
+                <span style={{ color: 'var(--ink-soft)', fontStyle: 'italic' }}>{invite.notes}</span>
+              </>
+            )}
+          </div>
+        </DetailSection>
+      )}
+
+      {/* Completed scenarios */}
+      {progress.completed.length > 0 && (
+        <DetailSection title={`Completed scenarios (${progress.completed.length})`}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {progress.completed.map(s => (
+              <div key={s.scenarioId} style={listRowStyle}>
+                <div style={{ fontWeight: 500 }}>{s.title || s.scenarioId}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-faint)' }} title={fmtAbsolute(s.completedAt)}>
+                  {fmtRelative(s.completedAt)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
+
+      {/* Recent stage attempts */}
+      {progress.attempts.length > 0 && (
+        <DetailSection title={`Recent stage attempts (${progress.attempts.length})`}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 320, overflowY: 'auto' }}>
+            {progress.attempts.map((a, i) => (
+              <div key={`${a.stageId}-${a.answeredAt}-${i}`} style={listRowStyle}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', minWidth: 0, flex: 1 }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11,
+                    color: a.correct ? 'var(--success)' : 'var(--danger)',
+                    flexShrink: 0,
+                  }}>{a.correct ? '✓' : '✗'}</span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {a.heading || a.stageId}
+                    </div>
+                    {a.scenarioTitle && (
+                      <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{a.scenarioTitle}</div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-faint)', flexShrink: 0 }}
+                     title={fmtAbsolute(a.answeredAt)}>
+                  {fmtRelative(a.answeredAt)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
+
+      {/* Recent quiz answers */}
+      {progress.quizAnswers.length > 0 && (
+        <DetailSection title={`Recent quiz answers (${progress.quizAnswers.length})`}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 280, overflowY: 'auto' }}>
+            {progress.quizAnswers.map((q, i) => (
+              <div key={`${q.quizId}-${q.answeredAt}-${i}`} style={listRowStyle}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', minWidth: 0, flex: 1 }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11,
+                    color: q.correct ? 'var(--success)' : 'var(--danger)',
+                    flexShrink: 0,
+                  }}>{q.correct ? '✓' : '✗'}</span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {q.question || q.quizId}
+                    </div>
+                    {q.tacticId && (
+                      <div style={{ fontSize: 11, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
+                        {q.tacticId}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-faint)', flexShrink: 0 }}
+                     title={fmtAbsolute(q.answeredAt)}>
+                  {fmtRelative(q.answeredAt)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
+
+      {/* Empty-state footer for users with literally no engagement yet */}
+      {progress.completed.length === 0
+       && progress.attempts.length === 0
+       && progress.quizAnswers.length === 0 && (
+        <div style={{
+          padding: '20px 32px 28px', fontSize: 13,
+          color: 'var(--ink-faint)', fontStyle: 'italic',
+        }}>
+          No engagement yet — this user has logged in but not attempted any
+          scenarios, quiz questions, or stages.
+        </div>
+      )}
+    </>
+  )
+}
+
+function DetailSection({ title, children }) {
+  return (
+    <div style={{ padding: '20px 32px', borderBottom: '1px solid var(--rule)' }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+        textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 12,
+        fontWeight: 500,
+      }}>{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function StatBox({ label, value, sub }) {
+  return (
+    <div style={{
+      padding: '12px 14px', background: 'var(--paper)',
+      border: '1px solid var(--rule)', borderRadius: 6,
+    }}>
+      <div style={{
+        fontSize: 22, fontWeight: 500, color: 'var(--ink)',
+        fontFamily: 'var(--font-display)', lineHeight: 1.1,
+      }}>{value}</div>
+      <div style={{
+        fontSize: 10.5, color: 'var(--ink-faint)', marginTop: 4,
+        fontFamily: 'var(--font-mono)', letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+      }}>{label}</div>
+      {sub && (
+        <div style={{ fontSize: 10.5, color: 'var(--ink-faint)', marginTop: 2 }}>{sub}</div>
+      )}
+    </div>
+  )
+}
+
+const subLabelStyle = {
+  fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.10em',
+  textTransform: 'uppercase', color: 'var(--ink-faint)',
+  marginBottom: 6, fontWeight: 500,
+}
+
+const fieldLabelStyle = {
+  fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
+  textTransform: 'uppercase', color: 'var(--ink-faint)',
+  paddingTop: 2, fontWeight: 500,
+}
+
+const personPill = {
+  display: 'inline-block', padding: '4px 10px', fontSize: 12,
+  background: 'var(--paper)', color: 'var(--ink-soft)',
+  border: '1px solid var(--rule)', borderRadius: 12,
+}
+
+const listRowStyle = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  gap: 12, padding: '8px 10px', background: 'var(--paper)',
+  border: '1px solid var(--rule)', borderRadius: 6,
 }
 
 // ============================================================================

@@ -140,6 +140,8 @@ export const api = {
 
   // Admin users + invites (v23)
   adminListUsers:      ()        => request('/api/admin/users'),
+  // v25.7.0.23 — full per-user drill-down for the Users tab modal
+  adminGetUser:        (id)      => request(`/api/admin/users/${id}`),
   adminListInvites:    ()        => request('/api/admin/invites'),
   adminCreateInvite:   (body)    => request('/api/admin/invites',        { method: 'POST',   body: JSON.stringify(body) }),
   adminRevokeInvite:   (id)      => request(`/api/admin/invites/${id}`,  { method: 'DELETE' }),

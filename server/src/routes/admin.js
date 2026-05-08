@@ -11,6 +11,9 @@ import { requireRole, getUser } from '../lib/auth.js'
 
    Endpoints:
      GET    /users              — list all :User nodes with progress rollups
+     GET    /users/:id          — full per-user drill-down: bank, managers,
+                                  invite history, recent attempts, quiz answers,
+                                  completed scenarios. v25.7.0.23.
      GET    /invites            — list all :Invite nodes (active, revoked, expired)
      POST   /invites            — create or upsert an invite by email
      POST   /invites/:id/extend — extend expiry (and clear revokedAt if set);
@@ -70,6 +73,130 @@ router.get('/users', async (_req, res, next) => {
       ORDER BY u.lastSeenAt DESC
     `)
     res.json({ users: rows })
+  } catch (e) { next(e) }
+})
+
+// ------------------------------------------------------------------
+// GET /api/admin/users/:id                                  (v25.7.0.23)
+// ------------------------------------------------------------------
+// Full per-user drill-down for the Users tab modal. Six parallel queries
+// composed into a single response so the modal opens with one round-trip.
+//
+// Sections returned:
+//   user                 — base node fields
+//   bank                 — { id, displayName } via :MEMBER_OF, or null
+//   managers             — people who :MANAGES this user (the "managed by")
+//   manages              — people this user :MANAGES (only meaningful if
+//                          this user has the manager role)
+//   invite               — :Invite by matching email, or null. Includes the
+//                          extend audit fields added in v25.7.0.22.
+//   progress.totals      — same rollups as in GET /users, repeated here so
+//                          the modal doesn't need to re-fetch the list row
+//   progress.completed   — completed scenarios with timestamps
+//   progress.attempts    — last 50 stage attempts (correct/incorrect, scenario)
+//   progress.quizAnswers — last 30 quiz answers (correct/incorrect, prompt)
+//
+// All sub-queries are read-only; no MERGE, no SET, so OBS-021 N/A.
+router.get('/users/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params
+
+    const [
+      userRows, bankRows, managersRows, managesRows,
+      inviteRows, totalsRows, completedRows, attemptsRows, quizRows,
+    ] = await Promise.all([
+      runQuery(`
+        MATCH (u:User {id: $id})
+        RETURN u.id AS id, u.email AS email, u.name AS name,
+               u.domain AS domain, u.roles AS roles,
+               u.firstSeenAt AS firstSeenAt, u.lastSeenAt AS lastSeenAt
+      `, { id }),
+      runQuery(`
+        MATCH (u:User {id: $id})-[:MEMBER_OF]->(b:Bank)
+        RETURN b.id AS id, b.displayName AS displayName
+      `, { id }),
+      runQuery(`
+        MATCH (mgr:User)-[edge:MANAGES]->(u:User {id: $id})
+        RETURN mgr.id AS id, mgr.email AS email, mgr.name AS name,
+               edge.assignedAt AS assignedAt, edge.assignedBy AS assignedBy
+        ORDER BY mgr.email
+      `, { id }),
+      runQuery(`
+        MATCH (u:User {id: $id})-[edge:MANAGES]->(report:User)
+        RETURN report.id AS id, report.email AS email, report.name AS name,
+               edge.assignedAt AS assignedAt
+        ORDER BY report.email
+      `, { id }),
+      runQuery(`
+        MATCH (u:User {id: $id})
+        OPTIONAL MATCH (i:Invite {email: u.email})
+        OPTIONAL MATCH (inviter:User {id: i.invitedBy})
+        OPTIONAL MATCH (extender:User {id: i.extendedBy})
+        WITH i, inviter, extender WHERE i IS NOT NULL
+        RETURN i.id AS id, i.email AS email, i.roles AS roles, i.notes AS notes,
+               i.invitedBy AS invitedBy, inviter.email AS invitedByEmail,
+               i.invitedAt AS invitedAt, i.expiresAt AS expiresAt,
+               i.revokedAt AS revokedAt, i.consumedAt AS consumedAt,
+               i.lastUsedAt AS lastUsedAt, i.useCount AS useCount,
+               i.lastExtendedAt AS lastExtendedAt,
+               i.extendedBy AS extendedBy, extender.email AS extendedByEmail
+      `, { id }),
+      runQuery(`
+        MATCH (u:User {id: $id})
+        OPTIONAL MATCH (u)-[c:COMPLETED]->(sc:Scenario)
+        OPTIONAL MATCH (u)-[a:ANSWERED]->(q:Quiz)
+        OPTIONAL MATCH (u)-[att:ATTEMPTED_STAGE]->(st:Stage)
+        RETURN
+          count(DISTINCT sc) AS scenariosCompleted,
+          count(DISTINCT q)  AS quizzesAnswered,
+          sum(CASE WHEN a.correct THEN 1 ELSE 0 END) AS correctAnswers,
+          count(DISTINCT st) AS stagesAttempted
+      `, { id }),
+      runQuery(`
+        MATCH (u:User {id: $id})-[c:COMPLETED]->(sc:Scenario)
+        RETURN sc.id AS scenarioId, sc.title AS title,
+               c.completedAt AS completedAt, c.lastAt AS lastAt
+        ORDER BY c.completedAt DESC
+      `, { id }),
+      runQuery(`
+        MATCH (u:User {id: $id})-[a:ATTEMPTED_STAGE]->(st:Stage)
+        OPTIONAL MATCH (sc:Scenario)-[:HAS_STAGE]->(st)
+        RETURN st.id AS stageId, st.heading AS heading,
+               sc.id AS scenarioId, sc.title AS scenarioTitle,
+               a.optionIndex AS optionIndex, a.correct AS correct,
+               a.answeredAt AS answeredAt
+        ORDER BY a.answeredAt DESC
+        LIMIT 50
+      `, { id }),
+      runQuery(`
+        MATCH (u:User {id: $id})-[a:ANSWERED]->(q:Quiz)
+        RETURN q.id AS quizId, q.question AS question, q.tacticId AS tacticId,
+               a.correct AS correct, a.answeredAt AS answeredAt
+        ORDER BY a.answeredAt DESC
+        LIMIT 30
+      `, { id }),
+    ])
+
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' })
+    }
+
+    res.json({
+      user: userRows[0],
+      bank: bankRows[0] || null,
+      managers: managersRows,
+      manages: managesRows,
+      invite: inviteRows[0] || null,
+      progress: {
+        totals: totalsRows[0] || {
+          scenariosCompleted: 0, quizzesAnswered: 0,
+          correctAnswers: 0, stagesAttempted: 0,
+        },
+        completed: completedRows,
+        attempts: attemptsRows,
+        quizAnswers: quizRows,
+      },
+    })
   } catch (e) { next(e) }
 })
 
