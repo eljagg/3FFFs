@@ -14,6 +14,10 @@ import { requireRole, getUser } from '../lib/auth.js'
      GET    /users/:id          — full per-user drill-down: bank, managers,
                                   invite history, recent attempts, quiz answers,
                                   completed scenarios. v25.7.0.23.
+     PATCH  /users/:id          — admin edit: displayName override and/or
+                                  bank reassignment. v25.7.0.24.
+     GET    /banks              — list all :Bank nodes (for the bank-reassign
+                                  dropdown in the user detail modal). v25.7.0.24.
      GET    /invites            — list all :Invite nodes (active, revoked, expired)
      POST   /invites            — create or upsert an invite by email
      POST   /invites/:id/extend — extend expiry (and clear revokedAt if set);
@@ -62,6 +66,7 @@ router.get('/users', async (_req, res, next) => {
         u.id           AS id,
         u.email        AS email,
         u.name         AS name,
+        u.displayName  AS displayName,
         u.domain       AS domain,
         u.roles        AS roles,
         u.firstSeenAt  AS firstSeenAt,
@@ -108,6 +113,7 @@ router.get('/users/:id', async (req, res, next) => {
       runQuery(`
         MATCH (u:User {id: $id})
         RETURN u.id AS id, u.email AS email, u.name AS name,
+               u.displayName AS displayName,
                u.domain AS domain, u.roles AS roles,
                u.firstSeenAt AS firstSeenAt, u.lastSeenAt AS lastSeenAt
       `, { id }),
@@ -197,6 +203,137 @@ router.get('/users/:id', async (req, res, next) => {
         quizAnswers: quizRows,
       },
     })
+  } catch (e) { next(e) }
+})
+
+// ------------------------------------------------------------------
+// PATCH /api/admin/users/:id                                (v25.7.0.24)
+// ------------------------------------------------------------------
+// Body: { displayName?, bankId? }
+//   displayName: string  → set User.displayName (override Auth0's name)
+//                ''/null → remove the override; UI falls back to Auth0 name
+//                undefined → leave displayName untouched
+//   bankId:      string  → reassign user to that :Bank (must exist)
+//                ''/null → unassign (delete all :MEMBER_OF edges)
+//                undefined → leave bank assignment untouched
+//
+// Architectural note: we do NOT touch User.name or User.roles here. Those
+// are owned by Auth0 and overwritten by syncUser() on every login. A
+// separate User.displayName property — which syncUser does NOT set —
+// gives admins a durable override for the rare case where Auth0's name
+// is blank or wrong. Bank reassignment works because we tweaked syncUser
+// in the same release to skip the auto-domain link when ANY MEMBER_OF
+// edge already exists, so admin overrides survive subsequent logins.
+//
+// Role changes still route through the Auth0 dashboard for now; a
+// future release wires the Auth0 Management API to bring role
+// promote/demote into 3FFFs as well.
+router.patch('/users/:id', async (req, res, next) => {
+  try {
+    const me = getUser(req)
+    const { id } = req.params
+    const body = req.body || {}
+
+    // Verify the user exists before applying edits
+    const exists = await runQuery(
+      `MATCH (u:User {id: $id}) RETURN u.id AS id`,
+      { id }
+    )
+    if (exists.length === 0) {
+      return res.status(404).json({ error: 'User not found.' })
+    }
+
+    // ---- displayName edit (only when the field was explicitly sent) ----
+    if (Object.prototype.hasOwnProperty.call(body, 'displayName')) {
+      const raw = body.displayName
+      const trimmed = typeof raw === 'string' ? raw.trim() : null
+      if (trimmed) {
+        await runQuery(
+          `MATCH (u:User {id: $id})
+           SET u.displayName = $displayName,
+               u.displayNameSetAt = timestamp(),
+               u.displayNameSetBy = $me`,
+          { id, displayName: trimmed, me: me.id }
+        )
+      } else {
+        // Empty/null → remove the override entirely
+        await runQuery(
+          `MATCH (u:User {id: $id})
+           REMOVE u.displayName, u.displayNameSetAt, u.displayNameSetBy`,
+          { id }
+        )
+      }
+    }
+
+    // ---- bankId edit (only when the field was explicitly sent) ----
+    if (Object.prototype.hasOwnProperty.call(body, 'bankId')) {
+      const raw = body.bankId
+      const newBankId = typeof raw === 'string' && raw.trim() ? raw.trim() : null
+
+      // Always clear existing MEMBER_OF first — admin override replaces, not appends.
+      // syncUser's auto-domain link will NOT re-add an edge on next login because
+      // (in v25.7.0.24) it only fires when zero MEMBER_OF edges exist, and we'll
+      // have created exactly one below if newBankId is provided.
+      await runQuery(
+        `MATCH (u:User {id: $id})-[r:MEMBER_OF]->(:Bank)
+         DELETE r`,
+        { id }
+      )
+
+      if (newBankId) {
+        // Verify bank exists; reject the edit cleanly if not (avoids creating
+        // a phantom MEMBER_OF to a missing Bank node)
+        const bankExists = await runQuery(
+          `MATCH (b:Bank {id: $bankId}) RETURN b.id AS id`,
+          { bankId: newBankId }
+        )
+        if (bankExists.length === 0) {
+          return res.status(400).json({ error: `Bank ${newBankId} not found.` })
+        }
+        await runQuery(
+          `MATCH (u:User {id: $id})
+           MATCH (b:Bank {id: $bankId})
+           MERGE (u)-[r:MEMBER_OF]->(b)
+             ON CREATE SET r.linkedAt   = timestamp(),
+                           r.method     = 'admin-override',
+                           r.assignedBy = $me`,
+          { id, bankId: newBankId, me: me.id }
+        )
+      }
+      // newBankId === null → user is now unassigned (no MEMBER_OF edges).
+      // That's a valid terminal state; the modal will show no Bank line.
+    }
+
+    // Return the updated user payload so the client can refresh without a second fetch
+    const refreshed = await runQuery(
+      `MATCH (u:User {id: $id})
+       OPTIONAL MATCH (u)-[:MEMBER_OF]->(b:Bank)
+       RETURN u.id AS id, u.email AS email, u.name AS name,
+              u.displayName AS displayName,
+              u.domain AS domain, u.roles AS roles,
+              u.firstSeenAt AS firstSeenAt, u.lastSeenAt AS lastSeenAt,
+              b { .id, .displayName } AS bank`,
+      { id }
+    )
+    res.json({ user: refreshed[0], bank: refreshed[0]?.bank || null })
+  } catch (e) { next(e) }
+})
+
+// ------------------------------------------------------------------
+// GET /api/admin/banks                                       (v25.7.0.24)
+// ------------------------------------------------------------------
+// All :Bank nodes, for the bank-reassign dropdown in the user detail
+// modal. Lightweight — id + displayName + domains, no membership counts
+// (those are queried per-bank elsewhere when needed).
+router.get('/banks', async (req, res, next) => {
+  try {
+    const rows = await runQuery(`
+      MATCH (b:Bank)
+      RETURN b.id AS id, b.displayName AS displayName,
+             b.name AS name, b.domains AS domains
+      ORDER BY b.displayName
+    `)
+    res.json({ banks: rows })
   } catch (e) { next(e) }
 })
 

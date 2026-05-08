@@ -103,11 +103,20 @@ export async function syncUser(req, res, next) {
     // v25.7.0: auto-link user to Bank by domain match. Best-effort —
     // OPTIONAL MATCH means no error if no Bank node matches the domain
     // (could be a new domain, or the migration hasn't run yet).
+    //
+    // v25.7.0.24: auto-link only fires when the user has zero existing
+    // MEMBER_OF edges. This makes the auto-domain link a "set the default
+    // for new users" operation rather than something that fights with
+    // admin overrides. Once an admin has explicitly assigned a user to a
+    // bank via PATCH /api/admin/users/:id, that assignment survives every
+    // subsequent login regardless of what the email domain implies.
     if (domain) {
       await runQuery(
         `MATCH (user:User {id: $id})
+         OPTIONAL MATCH (user)-[existing:MEMBER_OF]->(:Bank)
+         WITH user, count(existing) AS existingCount
          OPTIONAL MATCH (b:Bank) WHERE $domain IN b.domains
-         FOREACH (_ IN CASE WHEN b IS NULL THEN [] ELSE [1] END |
+         FOREACH (_ IN CASE WHEN b IS NULL OR existingCount > 0 THEN [] ELSE [1] END |
            MERGE (user)-[r:MEMBER_OF]->(b)
            ON CREATE SET r.linkedAt = timestamp(), r.method = 'auto-domain'
          )`,

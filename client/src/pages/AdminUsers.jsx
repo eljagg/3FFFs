@@ -141,21 +141,25 @@ function UsersTab() {
   // getting stale data if the list refreshes underneath.
   const [selectedUserId, setSelectedUserId] = useState(null)
 
-  useEffect(() => {
-    api.adminListUsers()
+  // v25.7.0.24 — extracted so the modal can trigger a refresh after edit
+  function loadUsers() {
+    return api.adminListUsers()
       .then(d => setUsers(d.users || []))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadUsers() }, [])
 
   const sorted = useMemo(() => {
     const f = filter.trim().toLowerCase()
     let rows = users
     if (f) {
       rows = rows.filter(u =>
-        (u.email || '').toLowerCase().includes(f) ||
-        (u.name  || '').toLowerCase().includes(f) ||
-        (u.domain|| '').toLowerCase().includes(f)
+        (u.email       || '').toLowerCase().includes(f) ||
+        (u.name        || '').toLowerCase().includes(f) ||
+        (u.displayName || '').toLowerCase().includes(f) ||
+        (u.domain      || '').toLowerCase().includes(f)
       )
     }
     rows = [...rows].sort((a, b) => {
@@ -217,7 +221,7 @@ function UsersTab() {
                   onMouseEnter={(e) => e.currentTarget.style.background = 'var(--paper)'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                 <Td>{u.email || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
-                <Td>{u.name || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
+                <Td>{(u.displayName || u.name) || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
                 <Td><code style={codeStyle}>{u.domain || '—'}</code></Td>
                 <Td><RolePills roles={u.roles} /></Td>
                 <Td align="right">{u.scenariosCompleted || 0}</Td>
@@ -239,6 +243,7 @@ function UsersTab() {
           <UserDetailModal
             userId={selectedUserId}
             onClose={() => setSelectedUserId(null)}
+            onUpdate={loadUsers}
           />
         )}
       </AnimatePresence>
@@ -714,7 +719,7 @@ function ExtendPopover({ invite, anchor, onPick, onClose }) {
 // manager role hides the "Manages" section. Keeps the modal compact for
 // low-data users and expansive for power users.
 // ============================================================================
-function UserDetailModal({ userId, onClose }) {
+function UserDetailModal({ userId, onClose, onUpdate }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
@@ -735,6 +740,20 @@ function UserDetailModal({ userId, onClose }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // v25.7.0.24 — local refresh after a successful PATCH. The endpoint
+  // returns the updated { user, bank } payload so we splice it into the
+  // existing detail bundle rather than re-fetching everything (engagement
+  // data hasn't changed). The list view also refreshes via onUpdate so
+  // the row's name reflects the new displayName immediately.
+  function applyUpdate(patchResponse) {
+    setData(prev => prev && {
+      ...prev,
+      user: { ...prev.user, ...patchResponse.user },
+      bank: patchResponse.bank,
+    })
+    if (onUpdate) onUpdate()
+  }
 
   return (
     <motion.div
@@ -767,35 +786,139 @@ function UserDetailModal({ userId, onClose }) {
           <div style={{ padding: 30 }}><ErrorBox message={error} /></div>
         )}
         {data && (
-          <UserDetailBody data={data} onClose={onClose} />
+          <UserDetailBody data={data} onClose={onClose} onApplyUpdate={applyUpdate} />
         )}
       </motion.div>
     </motion.div>
   )
 }
 
-function UserDetailBody({ data, onClose }) {
+function UserDetailBody({ data, onClose, onApplyUpdate }) {
   const { user, bank, managers, manages, invite, progress } = data
   const isManager = (user.roles || []).includes('manager')
   const totals = progress.totals
+
+  // v25.7.0.24 — edit mode for displayName + bank. Only these two fields
+  // are admin-editable in 3FFFs; email/name/roles are owned by Auth0
+  // (overwritten by syncUser on every login). The displayName override is
+  // the durable way to give a user a name when Auth0 doesn't have one,
+  // and the bank reassignment lets admins move users between :Bank
+  // tenants without waiting for an email-domain change.
+  const [editing, setEditing] = useState(false)
+  const [formDisplayName, setFormDisplayName] = useState('')
+  const [formBankId, setFormBankId] = useState('')
+  const [banks, setBanks] = useState(null)        // null = not yet loaded
+  const [saving, setSaving] = useState(false)
+  const [saveErr, setSaveErr] = useState(null)
+  const [toast, setToast] = useState(null)
+
+  function startEdit() {
+    setFormDisplayName(user.displayName || '')
+    setFormBankId(bank?.id || '')
+    setSaveErr(null)
+    setEditing(true)
+    // Lazy-load banks list the first time edit mode opens
+    if (!banks) {
+      api.adminListBanks()
+        .then(d => setBanks(d.banks || []))
+        .catch(e => setSaveErr(`Couldn't load banks: ${e.message}`))
+    }
+  }
+
+  function cancelEdit() {
+    setEditing(false)
+    setSaveErr(null)
+  }
+
+  async function saveEdit() {
+    setSaving(true)
+    setSaveErr(null)
+    // Only send fields that actually changed. Sending undefined for an
+    // unchanged field means the server leaves it alone (the PATCH endpoint
+    // checks hasOwnProperty, not truthiness).
+    const patch = {}
+    const trimmedName = formDisplayName.trim()
+    const currentDisplayName = user.displayName || ''
+    if (trimmedName !== currentDisplayName) {
+      patch.displayName = trimmedName  // empty string → server removes the override
+    }
+    const newBankId = formBankId || null
+    const currentBankId = bank?.id || null
+    if (newBankId !== currentBankId) {
+      patch.bankId = newBankId
+    }
+    if (Object.keys(patch).length === 0) {
+      setEditing(false)
+      setSaving(false)
+      return
+    }
+    try {
+      const resp = await api.adminUpdateUser(user.id, patch)
+      onApplyUpdate(resp)
+      setEditing(false)
+      setToast('Saved.')
+      setTimeout(() => setToast(null), 2500)
+    } catch (e) {
+      setSaveErr(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // The display-resolved name: explicit override > Auth0 name > placeholder.
+  // Showing the Auth0 name as faint context when an override is active makes
+  // the override semantics legible to admins ("you've overridden John Smith").
+  const resolvedName = user.displayName || user.name
+  const hasOverride = !!user.displayName
 
   return (
     <>
       {/* Header */}
       <div style={{ padding: '28px 32px 20px', borderBottom: '1px solid var(--rule)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
               textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 8,
             }}>User detail</div>
-            <h2 style={{
-              fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 500,
-              lineHeight: 1.2, letterSpacing: '-0.01em', marginBottom: 6,
-              wordBreak: 'break-word',
-            }}>
-              {user.name || <span style={{ color: 'var(--ink-faint)' }}>(no name)</span>}
-            </h2>
+            {editing ? (
+              <div>
+                <input
+                  type="text"
+                  value={formDisplayName}
+                  onChange={e => setFormDisplayName(e.target.value)}
+                  placeholder={user.name || 'Display name (e.g. Omar McLeod)'}
+                  autoFocus
+                  maxLength={120}
+                  style={{
+                    ...inputStyle,
+                    fontSize: 22, fontFamily: 'var(--font-display)', fontWeight: 500,
+                    padding: '8px 10px', marginBottom: 6,
+                  }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>
+                  Display name overrides Auth0's name in the UI. Leave blank to clear the override
+                  {user.name ? <> and fall back to <strong>{user.name}</strong>.</> : '.'}
+                </div>
+              </div>
+            ) : (
+              <h2 style={{
+                fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 500,
+                lineHeight: 1.2, letterSpacing: '-0.01em', marginBottom: 6,
+                wordBreak: 'break-word',
+              }}>
+                {resolvedName || <span style={{ color: 'var(--ink-faint)' }}>(no name)</span>}
+                {hasOverride && user.name && user.name !== user.displayName && (
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 400,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: 'var(--ink-faint)', marginLeft: 10, verticalAlign: 'middle',
+                  }} title={`Auth0 name: ${user.name}`}>
+                    override
+                  </span>
+                )}
+              </h2>
+            )}
             <div style={{ fontSize: 14, color: 'var(--ink-soft)', wordBreak: 'break-word' }}>
               {user.email || <span style={{ color: 'var(--ink-faint)' }}>(no email)</span>}
               {user.domain && (
@@ -803,18 +926,52 @@ function UserDetailBody({ data, onClose }) {
               )}
             </div>
           </div>
-          <button onClick={onClose} style={{
-            background: 'transparent', border: 'none', color: 'var(--ink-faint)',
-            fontSize: 22, cursor: 'pointer', padding: '4px 10px', lineHeight: 1,
-            fontFamily: 'inherit',
-          }} title="Close (Esc)">×</button>
+
+          {/* Top-right action cluster */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
+            <button onClick={onClose} style={{
+              background: 'transparent', border: 'none', color: 'var(--ink-faint)',
+              fontSize: 22, cursor: 'pointer', padding: '4px 10px', lineHeight: 1,
+              fontFamily: 'inherit',
+            }} title="Close (Esc)">×</button>
+            {editing ? (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={cancelEdit} disabled={saving}
+                        style={{ ...secondaryBtn, padding: '6px 12px', fontSize: 12 }}>
+                  Cancel
+                </button>
+                <button onClick={saveEdit} disabled={saving}
+                        style={{ ...primaryBtn, padding: '6px 14px', fontSize: 12 }}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            ) : (
+              <button onClick={startEdit} style={extendBtn}>Edit ✎</button>
+            )}
+          </div>
         </div>
+
+        {/* Metadata bar — bank becomes a select in edit mode */}
         <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
           <div><RolePills roles={user.roles} /></div>
-          {bank && (
-            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-              Bank: <strong>{bank.displayName || bank.id}</strong>
+          {editing ? (
+            <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Bank:</span>
+              <select value={formBankId} onChange={e => setFormBankId(e.target.value)}
+                      disabled={banks === null}
+                      style={{ ...selectStyle, padding: '4px 10px', fontSize: 12 }}>
+                <option value="">{banks === null ? 'Loading…' : 'Unassigned'}</option>
+                {(banks || []).map(b => (
+                  <option key={b.id} value={b.id}>{b.displayName || b.name || b.id}</option>
+                ))}
+              </select>
             </div>
+          ) : (
+            bank && (
+              <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                Bank: <strong>{bank.displayName || bank.id}</strong>
+              </div>
+            )
           )}
           <div style={{ fontSize: 12, color: 'var(--ink-faint)' }} title={fmtAbsolute(user.firstSeenAt)}>
             First seen {fmtRelative(user.firstSeenAt)}
@@ -823,6 +980,36 @@ function UserDetailBody({ data, onClose }) {
             Last seen {fmtRelative(user.lastSeenAt)}
           </div>
         </div>
+
+        {/* Save error / toast */}
+        {saveErr && (
+          <div style={{
+            marginTop: 12, padding: '8px 12px', fontSize: 12,
+            color: 'var(--danger)', background: 'rgba(220,38,38,0.08)',
+            borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)',
+          }}>{saveErr}</div>
+        )}
+        {toast && (
+          <div style={{
+            marginTop: 12, padding: '6px 12px', fontSize: 12,
+            color: 'var(--success)', fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.06em',
+          }}>✓ {toast}</div>
+        )}
+
+        {/* Editorial nudge — only shown in edit mode, explains the "why this is read-only" */}
+        {editing && (
+          <div style={{
+            marginTop: 14, padding: '10px 12px', fontSize: 12,
+            color: 'var(--ink-soft)', background: 'var(--paper)',
+            borderRadius: 6, border: '1px solid var(--rule)', lineHeight: 1.5,
+          }}>
+            <strong>Email and roles are not editable here.</strong> Auth0 owns those fields and
+            overwrites them on every login. Email changes happen at the Auth0 user level; role
+            promote/demote will move into 3FFFs in a future release that wires the Auth0
+            Management API.
+          </div>
+        )}
       </div>
 
       {/* Progress totals */}
