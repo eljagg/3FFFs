@@ -129,14 +129,8 @@ export const SILENT_ALARM_ACTORS = [
   },
   {
     id: 'cibc',
-    name: 'CIBC Web Banking',
-    role: 'Bank · login + settings + transfers',
-    initialState: 'silent',
-  },
-  {
-    id: 'notif',
-    name: 'CIBC Notification Subsystem',
-    role: 'Email + SMS + push delivery · DID fire · went to wrong destination',
+    name: 'CIBC FirstCaribbean',
+    role: 'Bank · login + settings + transfers + notification dispatch',
     initialState: 'silent',
   },
   {
@@ -257,11 +251,11 @@ export const SILENT_ALARM_STAGES = [
     durationMs: 8500,
     messages: [
       { id: 'sa-m2-1', fromActor: 'fraudster', toActor: 'cibc', kind: 'http', label: 'POST /login · karen.ferguson · password OK · IP: Lagos, NG · 02:14 AM', suspicious: true },
-      { id: 'sa-m2-2', fromActor: 'cibc', toActor: 'notif', kind: 'system', label: 'Trigger login-notification email · destination: karen.ferguson@gmail.com' },
-      { id: 'sa-m2-3', fromActor: 'notif', toActor: 'karen', kind: 'sms', label: 'Email: "New login · Lagos · 02:14 AM" · Karen asleep',
+      { id: 'sa-m2-2', fromActor: 'cibc', toActor: 'cibc', kind: 'system', label: 'Login-notification email triggered · destination: karen.ferguson@gmail.com' },
+      { id: 'sa-m2-3', fromActor: 'cibc', toActor: 'karen', kind: 'sms', label: 'Email: "New login · Lagos · 02:14 AM" · Karen asleep',
         audio: { text: 'Login alert sent to gmail. Karen is asleep.', profile: 'narrator' } },
     ],
-    actorStateChanges: { 'cibc': 'active', 'notif': 'active' },
+    actorStateChanges: { 'cibc': 'active' },
     revealedSignalIds: [],
   },
 
@@ -312,8 +306,8 @@ export const SILENT_ALARM_STAGES = [
         audio: { text: 'Coral Reef Imports. One point eight million.', profile: 'fraudster' } },
       { id: 'sa-m5-3', fromActor: 'fraudster', toActor: 'cibc', kind: 'http', label: 'Add "Blue Mountain Trading" · transfer J$1.8M', suspicious: true,
         audio: { text: 'Blue Mountain Trading. Another one point eight.', profile: 'fraudster' } },
-      { id: 'sa-m5-4', fromActor: 'cibc', toActor: 'notif', kind: 'system', label: 'Trigger 2 transfer-confirmation emails' },
-      { id: 'sa-m5-5', fromActor: 'notif', toActor: 'fraudster', kind: 'sms', label: 'Confirmations delivered to kfergusononline@protonmail.com', suspicious: true,
+      { id: 'sa-m5-4', fromActor: 'cibc', toActor: 'cibc', kind: 'system', label: 'Notification subsystem fires · 2 transfer-confirmation emails dispatched' },
+      { id: 'sa-m5-5', fromActor: 'cibc', toActor: 'fraudster', kind: 'sms', label: 'Confirmations delivered to kfergusononline@protonmail.com · Karen receives nothing', suspicious: true,
         audio: { text: 'Confirmations to protonmail. Karen sees nothing.', profile: 'narrator' } },
       { id: 'sa-m5-6', fromActor: 'cibc', toActor: 'mule', kind: 'http', label: 'J$3.6M cleared · 13:12 · layering begins' },
     ],
