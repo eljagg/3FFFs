@@ -43,6 +43,7 @@ import passwordResetScenes from './animations/passwordResetScenes.jsx'
 import mfaFatigueScenes from './animations/mfaFatigueScenes.jsx'
 import insiderAccessScenes from './animations/insiderAccessScenes.jsx'
 import accountTakeoverScenes from './animations/accountTakeoverScenes.jsx'
+import mfaInterceptionScenes from './animations/mfaInterceptionScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -92,10 +93,25 @@ const ANIMATION_MAP = {
                                                 //   Cookie Theft, MBJ airport WiFi). Pedagogical job: teach DEFENDER
                                                 //   perspective (variant diagnostic protocol, per-variant tracking,
                                                 //   why variant resolution matters more than parent-category
-                                                //   resolution). Distinct from .001-specific kill-chain animation;
-                                                //   complements rather than duplicates.
-  // Future per ANIMATION-TRIAGE.md Phase 1 sequence:
-  //   'T1111': mfaInterceptionScenes (MFA Interception, Initial Access) — v25.7.0.21
+                                                //   resolution).
+  'T1111': mfaInterceptionScenes,               // MFA Interception (T1111) under Initial Access (TA0001) — v25.7.0.21
+                                                //   Ricardo Powell (NCB business customer, Kingston pharma sales,
+                                                //   age 41). Composite case grounded in Zimperium 2024 mobile
+                                                //   banking trojan reporting (SharkBot Caribbean targeting), Group-IB
+                                                //   2025 malware atlas, and BOJ 2024-2025 internet-banking fraud
+                                                //   reporting. Side-loaded "free PDF reader" APK from WhatsApp link
+                                                //   forwards SMS OTP to C2 in Bulgaria; attacker has correct
+                                                //   credentials + correct OTP; login completes; J$1.4M out in
+                                                //   4 minutes. Closes Phase 1 Initial Access animation set.
+  // Phase 1 Initial Access — COMPLETE (v25.7.0.12 through v25.7.0.21):
+  //   F1081 Phishing (v25.7.0.12), F1088 Vishing (v25.7.0.13),
+  //   T1451 SIM Swap (v25.7.0.14), F1018.001 Password Reset (v25.7.0.16),
+  //   T1621 MFA Fatigue (v25.7.0.18 + .18.1 grid surfacing),
+  //   F1072 Insider Access (v25.7.0.19), F1018 ATO parent triage (v25.7.0.20),
+  //   T1111 MFA Interception (v25.7.0.21).
+  //
+  // Forward to Phase 2 (Positioning FA0001) per ANIMATION-TRIAGE.md:
+  //   FA0001/F1008.001 Silent Alarm, F1043 Card Testing, F1042 Card Dump
 }
 
 const ENGINE_MAP = {
