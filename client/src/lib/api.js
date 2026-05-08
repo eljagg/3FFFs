@@ -151,6 +151,9 @@ export const api = {
   adminRevokeRole:     (id, role)=> request(`/api/admin/users/${id}/roles/${encodeURIComponent(role)}`,
                                             { method: 'DELETE' }),
   adminListInvites:    ()        => request('/api/admin/invites'),
+  // v25.7.0.26 — bulk invite from parsed file rows
+  adminBulkInvite:     (invites) => request('/api/admin/invites/bulk',
+                                            { method: 'POST',   body: JSON.stringify({ invites }) }),
   adminCreateInvite:   (body)    => request('/api/admin/invites',        { method: 'POST',   body: JSON.stringify(body) }),
   adminRevokeInvite:   (id)      => request(`/api/admin/invites/${id}`,  { method: 'DELETE' }),
   // v25.7.0.22 — extend invite expiry (and clear revokedAt if set, which doubles as "restore")

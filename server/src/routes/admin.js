@@ -26,6 +26,10 @@ import { assignRoleToUser, removeRoleFromUser, isAuth0Configured, VALID_ROLES, d
                                   dropdown in the user detail modal). v25.7.0.24.
      GET    /invites            — list all :Invite nodes (active, revoked, expired)
      POST   /invites            — create or upsert an invite by email
+     POST   /invites/bulk       — create or upsert many invites in one
+                                  request. Per-row outcomes returned;
+                                  individual row failures don't block the
+                                  rest. v25.7.0.26.
      POST   /invites/:id/extend — extend expiry (and clear revokedAt if set);
                                   v25.7.0.22, single-attribute lifecycle change
                                   separated from the heavyweight upsert
@@ -653,6 +657,149 @@ router.post('/invites', async (req, res, next) => {
     })
 
     res.json({ invite: row })
+  } catch (e) { next(e) }
+})
+
+// ------------------------------------------------------------------
+// POST /api/admin/invites/bulk                              (v25.7.0.26)
+// ------------------------------------------------------------------
+// Body: { invites: [{ email, roles, notes?, expirationHours? }, ...] }
+//
+// Bulk equivalent of POST /invites. Same MERGE-by-email upsert semantics
+// per row — re-uploading an existing email refreshes its roles/notes
+// and clears revokedAt. Per-row results returned; one bad row does not
+// fail the batch. Capped at 500 rows per request to prevent runaway
+// uploads from holding the server.
+//
+// Response: {
+//   results: [
+//     { email, status: 'created' | 'updated' | 'error', error?, invite? },
+//     ...
+//   ],
+//   summary: { total, created, updated, errors }
+// }
+//
+// Architectural note: this is implemented as a sequential loop of
+// individual MERGE queries rather than a single Cypher UNWIND. UNWIND
+// would be ~5x faster on the server side, but produces all-or-nothing
+// transaction semantics — one bad row would roll back the entire batch.
+// Per-row independence is more important than throughput at this scale
+// (admin uploads of 50-500 users, not 50,000), so we trade a few seconds
+// for clean error reporting per row.
+router.post('/invites/bulk', async (req, res, next) => {
+  try {
+    const me = getUser(req)
+    const invites = Array.isArray(req.body?.invites) ? req.body.invites : null
+
+    if (!invites) {
+      return res.status(400).json({ error: 'Body must contain an "invites" array.' })
+    }
+    if (invites.length === 0) {
+      return res.status(400).json({ error: 'No invites in the upload.' })
+    }
+    if (invites.length > 500) {
+      return res.status(400).json({
+        error: `Too many invites (${invites.length}). Max is 500 per upload — split the file and upload in batches.`,
+      })
+    }
+
+    const validRoles = ['trainee', 'manager', 'admin']
+    const results = []
+    let createdCount = 0
+    let updatedCount = 0
+    let errorCount = 0
+
+    for (const row of invites) {
+      const email = String(row?.email || '').toLowerCase().trim()
+      const roles = Array.isArray(row?.roles) ? row.roles : []
+      const notes = row?.notes ? String(row.notes).slice(0, 500) : null
+      const expirationHours = row?.expirationHours
+
+      // Per-row validation — same checks as the single-row endpoint
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        results.push({ email: row?.email || null, status: 'error', error: 'Invalid email format.' })
+        errorCount++
+        continue
+      }
+      const cleanRoles = roles.filter(r => validRoles.includes(r))
+      if (cleanRoles.length === 0) {
+        results.push({ email, status: 'error', error: `At least one valid role required (one of: ${validRoles.join(', ')}).` })
+        errorCount++
+        continue
+      }
+      let expiresAt = null
+      if (expirationHours !== null && expirationHours !== undefined && expirationHours !== '') {
+        const hours = Number(expirationHours)
+        if (!Number.isFinite(hours) || hours <= 0) {
+          results.push({ email, status: 'error', error: 'expirationHours must be a positive number or null.' })
+          errorCount++
+          continue
+        }
+        expiresAt = Date.now() + Math.round(hours * 3_600_000)
+      }
+
+      try {
+        // First: detect whether this is a create or update so we can report
+        // it accurately. A single MERGE doesn't tell us which side it took.
+        const [existing] = await runQuery(
+          `MATCH (i:Invite {email: $email}) RETURN i.id AS id`,
+          { email }
+        )
+        const isUpdate = !!existing
+
+        // Same MERGE pattern as POST /invites — preserves invitedAt on
+        // re-invite, clears revokedAt, refreshes mutable fields.
+        const [invite] = await runQuery(`
+          MERGE (i:Invite {email: $email})
+          ON CREATE SET
+            i.id         = $newId,
+            i.invitedAt  = timestamp(),
+            i.useCount   = 0
+          SET
+            i.roles      = $roles,
+            i.notes      = $notes,
+            i.invitedBy  = $invitedBy,
+            i.expiresAt  = $expiresAt,
+            i.revokedAt  = null,
+            i.invitedAt  = CASE WHEN i.invitedAt IS NULL THEN timestamp() ELSE i.invitedAt END
+          RETURN
+            i.id        AS id,
+            i.email     AS email,
+            i.roles     AS roles,
+            i.notes     AS notes,
+            i.expiresAt AS expiresAt,
+            i.invitedAt AS invitedAt
+        `, {
+          email,
+          newId: randomUUID(),
+          roles: cleanRoles,
+          notes,
+          invitedBy: me.id,
+          expiresAt,
+        })
+
+        if (isUpdate) {
+          updatedCount++
+          results.push({ email, status: 'updated', invite })
+        } else {
+          createdCount++
+          results.push({ email, status: 'created', invite })
+        }
+      } catch (e) {
+        errorCount++
+        results.push({ email, status: 'error', error: e.message })
+      }
+    }
+
+    res.json({
+      results,
+      summary: {
+        total:   invites.length,
+        created: createdCount,
+        updated: updatedCount,
+        errors:  errorCount,
+      },
+    })
   } catch (e) { next(e) }
 })
 

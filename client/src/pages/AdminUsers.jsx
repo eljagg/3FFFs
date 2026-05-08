@@ -260,6 +260,7 @@ function InvitesTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [showBulkModal, setShowBulkModal] = useState(false)
   const [toast, setToast] = useState(null)
   // v25.7.0.22: extend/restore popover state. `extending` is the invite
   // whose popover is open; `extendAnchor` is the {x,y} of the trigger
@@ -364,6 +365,7 @@ function InvitesTab() {
     <div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
         <button onClick={() => setShowModal(true)} style={primaryBtn}>+ Invite user</button>
+        <button onClick={() => setShowBulkModal(true)} style={secondaryBtn}>+ Bulk import…</button>
         <button onClick={copySignupUrl} style={secondaryBtn}>Copy signup URL</button>
         <div style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-faint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
           {invites.length} {invites.length === 1 ? 'invite' : 'invites'}
@@ -473,6 +475,15 @@ function InvitesTab() {
 
       <AnimatePresence>
         {showModal && <InviteModal onClose={() => setShowModal(false)} onSubmit={handleCreate} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showBulkModal && (
+          <BulkInviteModal
+            onClose={() => setShowBulkModal(false)}
+            onComplete={() => { setShowBulkModal(false); load() }}
+          />
+        )}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -612,6 +623,540 @@ function InviteModal({ onClose, onSubmit }) {
       </motion.form>
     </motion.div>
   )
+}
+
+// ============================================================================
+// Bulk invite modal — v25.7.0.26
+//
+// Four-phase flow: upload → preview → submitting → results. Each phase is a
+// distinct render with phase-appropriate UI and no surprise transitions; the
+// admin always knows where they are and what comes next.
+//
+// File parsing happens entirely client-side via SheetJS (xlsx). The lib is
+// dynamic-imported on first parse so the ~600KB bundle doesn't load for
+// admins who never use this feature. Both .xlsx and .csv go through the
+// same XLSX.read() entry point — SheetJS infers the format from the file
+// header bytes.
+//
+// Server contract: POST /api/admin/invites/bulk with { invites: [...] }
+// returns { results: [...], summary: {...} }. Per-row failures don't block
+// the rest. See server admin.js for the full spec.
+//
+// Required CSV columns: email, roles
+// Optional columns: notes, expirationHours
+// Roles can be a single value ("trainee") or comma-separated ("manager,admin").
+// Header matching is case-insensitive.
+// ============================================================================
+function BulkInviteModal({ onClose, onComplete }) {
+  // phase: 'upload' | 'preview' | 'submitting' | 'results'
+  const [phase, setPhase]         = useState('upload')
+  const [fileName, setFileName]   = useState(null)
+  const [parsedRows, setParsed]   = useState([])
+  const [parseError, setParseErr] = useState(null)
+  const [parsing, setParsing]     = useState(false)
+  const [submitErr, setSubmitErr] = useState(null)
+  const [results, setResults]     = useState(null)
+  const [dragOver, setDragOver]   = useState(false)
+
+  // ESC closes the modal (but only when not actively submitting, to avoid
+  // mid-flight cancellation)
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape' && phase !== 'submitting') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, phase])
+
+  async function handleFile(file) {
+    if (!file) return
+    setFileName(file.name)
+    setParseErr(null)
+    setParsing(true)
+    try {
+      // Lazy-load SheetJS only when actually needed — keeps the Admin
+      // page bundle small for admins who never use bulk import
+      const XLSX = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const workbook = XLSX.read(buffer, { type: 'array' })
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+      if (!firstSheet) {
+        throw new Error('No worksheets found in the file.')
+      }
+      // sheet_to_json with header:1 gives us [["col1","col2"], ["v1","v2"], ...]
+      // which lets us normalize headers to lowercase before mapping rows
+      const aoa = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' })
+      if (aoa.length === 0) {
+        throw new Error('File is empty.')
+      }
+      const headers = aoa[0].map(h => String(h || '').trim().toLowerCase())
+      // Header validation — required columns
+      if (!headers.includes('email')) {
+        throw new Error('Missing required column "email".')
+      }
+      if (!headers.includes('roles')) {
+        throw new Error('Missing required column "roles".')
+      }
+      const emailIdx       = headers.indexOf('email')
+      const rolesIdx       = headers.indexOf('roles')
+      const notesIdx       = headers.indexOf('notes')
+      const expirationIdx  = headers.indexOf('expirationhours')
+
+      const validRoles = ['trainee', 'manager', 'admin']
+      const rows = []
+      for (let i = 1; i < aoa.length; i++) {
+        const r = aoa[i]
+        // Skip wholly-empty rows (Excel often pads with blanks)
+        if (!r || r.every(c => c === '' || c == null)) continue
+
+        const rawEmail      = String(r[emailIdx] || '').trim()
+        const rawRoles      = String(r[rolesIdx] || '').trim()
+        const rawNotes      = notesIdx      >= 0 ? String(r[notesIdx]      || '').trim() : ''
+        const rawExpiration = expirationIdx >= 0 ? String(r[expirationIdx] || '').trim() : ''
+
+        // Normalize email (lowercase) — same as server validation
+        const email = rawEmail.toLowerCase()
+
+        // Parse roles — split on comma, trim, lowercase, dedupe
+        const roles = [...new Set(
+          rawRoles.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+        )]
+
+        // Per-row validation (mirrors server validation exactly)
+        const errors = []
+        if (!email) {
+          errors.push('Email is required.')
+        } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+          errors.push('Email format invalid.')
+        }
+        if (roles.length === 0) {
+          errors.push('At least one role required.')
+        } else {
+          const badRoles = roles.filter(r => !validRoles.includes(r))
+          if (badRoles.length > 0) {
+            errors.push(`Unknown role(s): ${badRoles.join(', ')}. Must be one of: ${validRoles.join(', ')}.`)
+          }
+        }
+        let expirationHours = null
+        if (rawExpiration !== '') {
+          const n = Number(rawExpiration)
+          if (!Number.isFinite(n) || n <= 0) {
+            errors.push('expirationHours must be a positive number (or blank for default).')
+          } else {
+            expirationHours = n
+          }
+        }
+
+        rows.push({
+          rowNum: i + 1,           // 1-indexed line number, includes header
+          email,
+          roles: roles.filter(r => validRoles.includes(r)),
+          notes: rawNotes ? rawNotes.slice(0, 500) : null,
+          expirationHours,
+          errors,
+          rawEmail, rawRoles, rawNotes, rawExpiration,  // for the preview display
+        })
+      }
+
+      // Check for in-file duplicates — first occurrence wins, others get an error
+      const seenEmails = new Set()
+      for (const row of rows) {
+        if (row.email && seenEmails.has(row.email)) {
+          row.errors.push(`Duplicate of an earlier row in this file.`)
+        } else if (row.email) {
+          seenEmails.add(row.email)
+        }
+      }
+
+      if (rows.length === 0) {
+        throw new Error('No data rows found in the file (only the header row was present).')
+      }
+      if (rows.length > 500) {
+        throw new Error(`Too many rows (${rows.length}). Max is 500 per upload — split the file and upload in batches.`)
+      }
+
+      setParsed(rows)
+      setPhase('preview')
+    } catch (e) {
+      setParseErr(e.message)
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  async function handleSubmit() {
+    setPhase('submitting')
+    setSubmitErr(null)
+    // Only send rows without errors — error rows are discarded server-side
+    // anyway, but pre-filtering makes the per-row results cleaner
+    const payload = parsedRows
+      .filter(r => r.errors.length === 0)
+      .map(r => ({
+        email: r.email,
+        roles: r.roles,
+        notes: r.notes,
+        expirationHours: r.expirationHours,
+      }))
+    try {
+      const resp = await api.adminBulkInvite(payload)
+      setResults(resp)
+      setPhase('results')
+    } catch (e) {
+      setSubmitErr(e.message)
+      setPhase('preview')   // bounce back so they can see the upload again
+    }
+  }
+
+  function downloadTemplate() {
+    const csv = [
+      'email,roles,notes,expirationHours',
+      'reviewer1@partner.com,trainee,Q3 reviewer cohort,168',
+      'auditor@external.com,"manager,admin",Audit access through Q4,720',
+      'partner@gmail.com,trainee,,',
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    triggerDownload(blob, '3fffs-invite-template.csv')
+  }
+
+  function downloadErrors() {
+    if (!results) return
+    const errorRows = results.results.filter(r => r.status === 'error')
+    if (errorRows.length === 0) return
+    const csv = [
+      'email,error',
+      ...errorRows.map(r => `${csvCell(r.email)},${csvCell(r.error)}`),
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    triggerDownload(blob, '3fffs-invite-errors.csv')
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={() => phase !== 'submitting' && onClose()}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        zIndex: 200, backdropFilter: 'blur(4px)',
+        overflowY: 'auto', padding: '60px 20px',
+      }}>
+      <motion.div
+        onClick={e => e.stopPropagation()}
+        initial={{ scale: 0.97, opacity: 0, y: -8 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.97, opacity: 0, y: -8 }}
+        transition={{ duration: 0.18 }}
+        style={{
+          background: 'var(--paper-hi)', borderRadius: 12,
+          maxWidth: 820, width: '100%',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+          border: '1px solid var(--rule)',
+          overflow: 'hidden',
+        }}>
+        {/* Header — common to all phases */}
+        <div style={{ padding: '24px 32px 16px', borderBottom: '1px solid var(--rule)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+            <div>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
+                textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 8,
+              }}>Bulk import — {phase}</div>
+              <h2 style={{
+                fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500,
+                lineHeight: 1.2, letterSpacing: '-0.01em',
+              }}>
+                {phase === 'upload'     && 'Upload an Excel or CSV file of invites'}
+                {phase === 'preview'    && `Preview — ${parsedRows.length} rows parsed`}
+                {phase === 'submitting' && 'Creating invites…'}
+                {phase === 'results'    && 'Done'}
+              </h2>
+            </div>
+            {phase !== 'submitting' && (
+              <button onClick={onClose} style={{
+                background: 'transparent', border: 'none', color: 'var(--ink-faint)',
+                fontSize: 22, cursor: 'pointer', padding: '4px 10px', lineHeight: 1,
+                fontFamily: 'inherit',
+              }} title="Close (Esc)">×</button>
+            )}
+          </div>
+        </div>
+
+        {/* PHASE 1 — Upload */}
+        {phase === 'upload' && (
+          <div style={{ padding: '24px 32px 28px' }}>
+            <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', lineHeight: 1.55, marginBottom: 16 }}>
+              Upload a <strong>.xlsx</strong> or <strong>.csv</strong> file with one row per invite.
+              Required columns: <code style={codeStyle}>email</code>, <code style={codeStyle}>roles</code>.
+              Optional: <code style={codeStyle}>notes</code>, <code style={codeStyle}>expirationHours</code>.
+              Roles can be a single value (<code style={codeStyle}>trainee</code>) or comma-separated
+              (<code style={codeStyle}>manager,admin</code>). Max 500 rows per upload.
+            </p>
+
+            <button onClick={downloadTemplate} style={{
+              ...secondaryBtn, fontSize: 12, padding: '6px 12px', marginBottom: 16,
+            }}>↓ Download CSV template</button>
+
+            <label
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragOver(false)
+                if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0])
+              }}
+              style={{
+                display: 'block', padding: '40px 20px', textAlign: 'center',
+                border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--rule-strong)'}`,
+                borderRadius: 8, background: dragOver ? 'var(--paper)' : 'transparent',
+                cursor: 'pointer', transition: 'all var(--dur) ease',
+              }}>
+              <input type="file" accept=".xlsx,.xls,.csv"
+                     onChange={(e) => handleFile(e.target.files[0])}
+                     style={{ display: 'none' }} />
+              <div style={{ fontSize: 14, color: 'var(--ink)', marginBottom: 6 }}>
+                {parsing ? 'Parsing…' : 'Drop a file here, or click to browse'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>
+                .xlsx, .xls, or .csv — up to 500 rows
+              </div>
+              {fileName && !parseError && !parsing && (
+                <div style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 10, fontFamily: 'var(--font-mono)' }}>
+                  Last attempted: {fileName}
+                </div>
+              )}
+            </label>
+
+            {parseError && (
+              <div style={{
+                marginTop: 16, padding: 14, fontSize: 13,
+                color: 'var(--danger)', background: 'rgba(220,38,38,0.06)',
+                border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6,
+              }}>
+                <strong>Couldn't parse the file:</strong> {parseError}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PHASE 2 — Preview */}
+        {phase === 'preview' && (
+          <BulkPreviewBody
+            rows={parsedRows}
+            submitErr={submitErr}
+            onBack={() => { setPhase('upload'); setParsed([]); setSubmitErr(null) }}
+            onSubmit={handleSubmit}
+          />
+        )}
+
+        {/* PHASE 3 — Submitting */}
+        {phase === 'submitting' && (
+          <div style={{ padding: '60px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 14, color: 'var(--ink-soft)', marginBottom: 14 }}>
+              Creating {parsedRows.filter(r => r.errors.length === 0).length} invites…
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>
+              Don't close this window
+            </div>
+          </div>
+        )}
+
+        {/* PHASE 4 — Results */}
+        {phase === 'results' && results && (
+          <BulkResultsBody
+            results={results}
+            onDownloadErrors={downloadErrors}
+            onDone={onComplete}
+            onUploadAnother={() => {
+              setPhase('upload')
+              setParsed([])
+              setResults(null)
+              setFileName(null)
+            }}
+          />
+        )}
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function BulkPreviewBody({ rows, submitErr, onBack, onSubmit }) {
+  const validCount   = rows.filter(r => r.errors.length === 0).length
+  const errorCount   = rows.length - validCount
+  const canSubmit    = validCount > 0
+  const allErrors    = validCount === 0
+
+  return (
+    <>
+      <div style={{ padding: '16px 32px', borderBottom: '1px solid var(--rule)' }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 13 }}>
+          <span style={{ color: 'var(--success)' }}>✓ {validCount} valid</span>
+          {errorCount > 0 && (
+            <span style={{ color: 'var(--danger)' }}>✗ {errorCount} with errors</span>
+          )}
+          {allErrors && (
+            <span style={{ color: 'var(--ink-faint)', fontStyle: 'italic' }}>
+              — fix the errors and re-upload, or go back and try a different file
+            </span>
+          )}
+        </div>
+        {submitErr && (
+          <div style={{
+            marginTop: 12, padding: '8px 12px', fontSize: 12,
+            color: 'var(--danger)', background: 'rgba(220,38,38,0.08)',
+            borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)',
+          }}>
+            Submit failed: {submitErr}
+          </div>
+        )}
+      </div>
+
+      <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={{ background: 'var(--paper)', position: 'sticky', top: 0, zIndex: 1 }}>
+              <Th>Row</Th>
+              <Th>Email</Th>
+              <Th>Roles</Th>
+              <Th>Notes</Th>
+              <Th>Expires (h)</Th>
+              <Th>Status</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const ok = r.errors.length === 0
+              return (
+                <tr key={r.rowNum} style={{
+                  ...rowStyle,
+                  background: ok ? 'transparent' : 'rgba(220,38,38,0.04)',
+                }}>
+                  <Td><span style={{ color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{r.rowNum}</span></Td>
+                  <Td>{r.rawEmail || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
+                  <Td>{r.rawRoles || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
+                  <Td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.rawNotes}>
+                    {r.rawNotes || <span style={{ color: 'var(--ink-faint)' }}>—</span>}
+                  </Td>
+                  <Td>{r.rawExpiration || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
+                  <Td>
+                    {ok ? (
+                      <span style={{ color: 'var(--success)', fontSize: 12 }}>✓ ready</span>
+                    ) : (
+                      <span style={{ color: 'var(--danger)', fontSize: 11 }}>
+                        ✗ {r.errors.join(' · ')}
+                      </span>
+                    )}
+                  </Td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{
+        padding: '16px 32px', borderTop: '1px solid var(--rule)',
+        display: 'flex', gap: 10, justifyContent: 'flex-end',
+      }}>
+        <button onClick={onBack} style={secondaryBtn}>← Back</button>
+        <button onClick={onSubmit} disabled={!canSubmit} style={{
+          ...primaryBtn,
+          opacity: canSubmit ? 1 : 0.4,
+          cursor: canSubmit ? 'pointer' : 'not-allowed',
+        }}>
+          {validCount === rows.length
+            ? `Create ${validCount} invites`
+            : `Create ${validCount} valid invites (skip ${errorCount} errors)`}
+        </button>
+      </div>
+    </>
+  )
+}
+
+function BulkResultsBody({ results, onDownloadErrors, onDone, onUploadAnother }) {
+  const { summary } = results
+  const hasErrors = summary.errors > 0
+  return (
+    <>
+      <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--rule)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <StatBox label="Total"   value={summary.total} />
+          <StatBox label="Created" value={summary.created} />
+          <StatBox label="Updated" value={summary.updated} />
+          <StatBox label="Errors"  value={summary.errors} />
+        </div>
+        {summary.updated > 0 && (
+          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--ink-faint)' }}>
+            "Updated" rows are emails that already had an invite — their roles, notes, and
+            expiry were refreshed; the existing invite id and useCount were preserved.
+          </div>
+        )}
+      </div>
+      <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={{ background: 'var(--paper)', position: 'sticky', top: 0, zIndex: 1 }}>
+              <Th>Email</Th>
+              <Th>Status</Th>
+              <Th>Detail</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.results.map((r, i) => (
+              <tr key={i} style={rowStyle}>
+                <Td>{r.email || <span style={{ color: 'var(--ink-faint)' }}>—</span>}</Td>
+                <Td>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11,
+                    color: r.status === 'error' ? 'var(--danger)'
+                         : r.status === 'created' ? 'var(--success)'
+                         : 'var(--ink-soft)',
+                  }}>
+                    {r.status === 'error' ? '✗' : '✓'} {r.status}
+                  </span>
+                </Td>
+                <Td style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                  {r.error || (r.invite ? `Roles: ${(r.invite.roles || []).join(', ')}` : '—')}
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{
+        padding: '16px 32px', borderTop: '1px solid var(--rule)',
+        display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center',
+      }}>
+        {hasErrors && (
+          <button onClick={onDownloadErrors} style={{ ...secondaryBtn, marginRight: 'auto' }}>
+            ↓ Download error rows as CSV
+          </button>
+        )}
+        <button onClick={onUploadAnother} style={secondaryBtn}>Upload another file</button>
+        <button onClick={onDone} style={primaryBtn}>Done</button>
+      </div>
+    </>
+  )
+}
+
+// CSV-cell escaping for the error-download path. Wraps in quotes if the value
+// contains a comma, quote, or newline; doubles internal quotes per RFC 4180.
+function csvCell(v) {
+  const s = String(v == null ? '' : v)
+  if (/[",\n\r]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`
+  }
+  return s
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 // ============================================================================
