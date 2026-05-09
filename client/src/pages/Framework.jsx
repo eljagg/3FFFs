@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
 import { useUser } from '../lib/user.jsx'
+import { VisualizationRenderer } from '../components/visualizations/index.js'
 // v25.7.0.5: Scenario storyboard view (Design C). Renders as a collapsible
 // section between the search results and the tactic list. Page-level peer
 // of the tactics list, NOT a per-tactic visualization — scenarios cross
@@ -13,7 +14,6 @@ import ScenarioStoryboard from '../components/scenarios/ScenarioStoryboard.jsx'
 // any technique card is clicked.
 import TechniquesTree from '../components/framework/TechniquesTree.jsx'
 import TechniqueDetailSidebar from '../components/framework/TechniqueDetailSidebar.jsx'
-import TacticVisualizationSidebar from '../components/framework/TacticVisualizationSidebar.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    Executive takeaways — one per F3 tactic, keyed by the real F3 tactic ID.
@@ -75,6 +75,32 @@ export default function Framework() {
     })
   }
 
+  // v25.7.0.4.8: per-visualization expand/collapse state. Set holds the
+  // viz IDs whose state is the OPPOSITE of their default. Defaults are
+  // determined per visualization kind:
+  //   - positioning_timeline, kill_chain_grid → expanded by default
+  //     (these are the primary teaching visualizations for their tactics)
+  //   - two_views → collapsed by default (it's a deep-dive companion;
+  //     the user expands it after engaging with the timeline)
+  // Storing "deviations from default" rather than absolute open/closed
+  // means new visualizations get sensible defaults without backfill.
+  const VIZ_DEFAULTS = { two_views: 'collapsed' } // anything else → 'expanded'
+  const isVizDefaultExpanded = (kind) => VIZ_DEFAULTS[kind] !== 'collapsed'
+  const [vizToggleOverrides, setVizToggleOverrides] = useState(() => new Set())
+  const isVizExpanded = (viz) => {
+    const overridden = vizToggleOverrides.has(viz.id)
+    const defaultExpanded = isVizDefaultExpanded(viz.kind)
+    return overridden ? !defaultExpanded : defaultExpanded
+  }
+  const toggleViz = (vizId) => {
+    setVizToggleOverrides(prev => {
+      const next = new Set(prev)
+      if (next.has(vizId)) next.delete(vizId)
+      else next.add(vizId)
+      return next
+    })
+  }
+
   // v25.7.0.5: scenario storyboard section is collapsed by default. The
   // storyboard is a peer of the tactic list — page-level scenario index,
   // not nested inside a tactic. Toggle is independent of all other
@@ -87,17 +113,6 @@ export default function Framework() {
   const [techSidebar, setTechSidebar] = useState({ open: false, techniqueId: null })
   const openTechSidebar = (techId) => setTechSidebar({ open: true, techniqueId: techId })
   const closeTechSidebar = () => setTechSidebar(s => ({ ...s, open: false }))
-
-  // v25.7.0.27.1: tactic-level visualization sidebar state. Mirrors the
-  // technique sidebar pattern but renders tactic-attached visualizations
-  // (PositioningTimeline, PositioningTwoViews, kill-chain grid, etc.)
-  // through VisualizationRenderer inside a slide-over panel. Replaces the
-  // previous inline collapsible cards on the tactic page so that ALL
-  // detail content on the Framework page opens via the same right-side
-  // slide-out interaction.
-  const [vizSidebar, setVizSidebar] = useState({ open: false, viz: null })
-  const openVizSidebar = (viz) => setVizSidebar({ open: true, viz })
-  const closeVizSidebar = () => setVizSidebar(s => ({ ...s, open: false }))
 
   useEffect(() => {
     api.getTactics()
@@ -822,34 +837,41 @@ export default function Framework() {
                       ) : null}
                     </div>
 
-                    {/* All visualizations — render as click-to-open slide-out
-                        trigger cards. v25.7.0.27.1: removed inline collapsible
-                        expand/collapse behavior; now every visualization opens
-                        via TacticVisualizationSidebar (right-side slide-over),
-                        unifying the detail-content interaction model with
-                        technique animations. */}
+                    {/* All visualizations — render full page-content-width,
+                        stacked vertically. Each one has its own click-to-
+                        toggle header. Defaults vary by viz kind:
+                        timeline+kill-chain expanded; two-views collapsed. */}
                     {visibleViz.length > 0 && (
                       <div style={styles.tacticBodyWideViz}>
-                        {visibleViz.map(viz => (
-                          <div key={viz.id} style={styles.wideVizCard}>
-                            <button
-                              onClick={() => openVizSidebar(viz)}
-                              style={styles.vizCollapseToggle}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-                            >
-                              <div style={{ flex: 1, textAlign: 'left' }}>
-                                <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
-                                {viz.subtitle && (
-                                  <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
-                                )}
-                              </div>
-                              <span style={{
-                                ...styles.vizCollapseChevron,
-                              }}>→</span>
-                            </button>
-                          </div>
-                        ))}
+                        {visibleViz.map(viz => {
+                          const expanded = isVizExpanded(viz)
+                          return (
+                            <div key={viz.id} style={styles.wideVizCard}>
+                              <button
+                                onClick={() => toggleViz(viz.id)}
+                                style={styles.vizCollapseToggle}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                              >
+                                <div style={{ flex: 1, textAlign: 'left' }}>
+                                  <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
+                                  {viz.subtitle && (
+                                    <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
+                                  )}
+                                </div>
+                                <span style={{
+                                  ...styles.vizCollapseChevron,
+                                  transform: expanded ? 'rotate(90deg)' : 'none',
+                                }}>→</span>
+                              </button>
+                              {expanded && (
+                                <div style={styles.vizCollapseBody}>
+                                  <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
 
@@ -885,18 +907,6 @@ export default function Framework() {
       open={techSidebar.open}
       techniqueId={techSidebar.techniqueId}
       onClose={closeTechSidebar}
-    />
-
-    {/* v25.7.0.27.1: page-level tactic-visualization sidebar. Renders as
-        a fixed slide-over when a tactic-level visualization card (e.g.
-        "How attackers wait", "The disguise") is clicked. Same right-side
-        slide-out treatment as the technique sidebar; replaces the previous
-        inline collapsible expand/collapse pattern. */}
-    <TacticVisualizationSidebar
-      open={vizSidebar.open}
-      viz={vizSidebar.viz}
-      effectiveRole={effectiveRole}
-      onClose={closeVizSidebar}
     />
     </>
   )
