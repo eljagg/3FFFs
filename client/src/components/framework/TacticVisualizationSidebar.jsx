@@ -193,18 +193,31 @@ export default function TacticVisualizationSidebar({ open, viz, effectiveRole, o
                 <RoleChips roles={viz.roles} />
               </Section>
 
-              {/* How this visualization works — analogue of the technique
-                  sidebar's "How this technique works" Section. Collapsible
-                  default-expanded so the trainee sees the visualization on
-                  open without an extra click. */}
-              <Section
-                title="How this visualization works"
-                collapsible
-                expanded={isExpanded('visualization')}
-                onToggleExpand={() => toggleSection('visualization')}
-              >
+              {/* v25.7.0.27.5: VisualizationRenderer rendered DIRECTLY in
+                  the body, NOT wrapped in a Section. Reason: visualizations
+                  with internal drag/scrubber interactions (PositioningTimeline,
+                  PositioningTwoViews) need an unconstrained layout context to
+                  function correctly. Wrapping them in a Section's marginBottom
+                  + collapsible button + content div was breaking pointer-event
+                  scoping and causing the visualizations to render statically
+                  (visible but non-interactive). The kill-chain grid worked
+                  because it uses simple click-to-toggle, but the timeline
+                  scrubber and two-views split-screen interactions require the
+                  full-width direct rendering pattern they had when inline.
+                  Section pattern preserved for Description and Roles above —
+                  those are static content where Section wrapping is correct. */}
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11.5,
+                letterSpacing: '0.16em', textTransform: 'uppercase',
+                color: 'var(--ink-faint)', fontWeight: 600,
+                marginBottom: 10,
+                paddingBottom: 6, borderBottom: '1px solid var(--rule)',
+              }}>
+                How this visualization works
+              </div>
+              <div style={{ position: 'relative' }}>
                 <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
-              </Section>
+              </div>
             </div>
           </motion.div>
         </>
