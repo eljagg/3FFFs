@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { engineStyles } from './ProcessAnimation.jsx'
 import { useNarration } from './audioNarration.js'
 import { StageCoachOverlay, CoachToggleButton, useCoachToggle } from './StageCoachOverlay.jsx'
+import MasterDetailControls from './MasterDetailControls.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    MultiActorSequenceAnimation — v25.7.0.12
@@ -386,31 +387,15 @@ export default function MultiActorSequenceAnimation({ scenes, externalPauseSigna
         finalHeadline={currentStage.finalHeadline}
       />
 
-      {/* Detection controls */}
-      <div style={engineStyles.controlsSection}>
-        <div style={engineStyles.controlsHeader}>
-          <span style={engineStyles.controlsHeaderLabel}>Detection controls</span>
-          <span style={engineStyles.controlsHeaderHint}>
-            Toggle to reveal hidden signals at this stage
-          </span>
-        </div>
-        <div style={engineStyles.controlsGrid}>
-          {controls.map(c => {
-            const hasActiveSignal = revealedSignals.some(s => s.revealedBy === c.id)
-            return (
-              <ControlToggle
-                key={c.id}
-                control={c}
-                active={activeControls.has(c.id)}
-                onToggle={() => toggleControl(c.id)}
-                hasActiveSignalAtCurrentStage={hasActiveSignal}
-                stageLabels={stages.map(s => s.label)}
-                derivedRevealsAtStages={derivedRevealsAtStagesByControl[c.id]}
-              />
-            )
-          })}
-        </div>
-      </div>
+      {/* Detection controls — v25.7.0.31 master-detail layout */}
+      <MasterDetailControls
+        controls={controls}
+        activeControls={activeControls}
+        onToggle={toggleControl}
+        revealedSignals={revealedSignals}
+        stageLabels={stages.map(s => s.label)}
+        derivedRevealsAtStagesByControl={derivedRevealsAtStagesByControl}
+      />
     </div>
   )
 }
