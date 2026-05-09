@@ -45,6 +45,7 @@ import insiderAccessScenes from './animations/insiderAccessScenes.jsx'
 import accountTakeoverScenes from './animations/accountTakeoverScenes.jsx'
 import mfaInterceptionScenes from './animations/mfaInterceptionScenes.jsx'
 import silentAlarmScenes from './animations/silentAlarmScenes.jsx'
+import cardTestingScenes from './animations/cardTestingScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -120,6 +121,23 @@ const ANIMATION_MAP = {
                                                 //   Opens Phase 2 Positioning animation set; first non-Phase-1
                                                 //   animation; CIBC FirstCaribbean is the 4th institution
                                                 //   represented (balancing prior NCB×3 / JNCB×4 / Scotia×1).
+  'F1043': cardTestingScenes,                   // Card Testing (F1043) under Positioning (FA0001) — v25.7.0.28
+                                                //   Anthony Spencer (Sagicor Visa cardholder, graphic designer,
+                                                //   Spanish Town JM, age 36). Composite case grounded in Caribbean
+                                                //   retail breach patterns (TT/JM/BB e-commerce 2023-2025), Visa /
+                                                //   Mastercard / Aite-Novarica reporting on testing-bot
+                                                //   infrastructure ($0.99-$4.99 amount band, low-friction merchant
+                                                //   targeting), and FFIEC velocity-rule tuning gap documentation.
+                                                //   Day 7 post-breach 1,847-card lot validation pass → 50 cards in
+                                                //   14 min on one merchant → first-wave detection that does not
+                                                //   happen → distributed pivot across 7 merchants → 33% live rate
+                                                //   confirmed → 612 validated cards listed at $4.50 each → Anthony's
+                                                //   card used for $1,247 fraud at Day +28 (blocked by standard
+                                                //   velocity rules at the full-fraud layer, not at the testing
+                                                //   layer where prevention was actually possible). Pedagogical
+                                                //   insight: the $0.99 charge IS the fraud signal. Sagicor is the
+                                                //   5th institution represented (after NCB×3, JNCB×4, Scotia×1,
+                                                //   CIBC×1).
   // Phase 1 Initial Access — COMPLETE (v25.7.0.12 through v25.7.0.21):
   //   F1081 Phishing (v25.7.0.12), F1088 Vishing (v25.7.0.13),
   //   T1451 SIM Swap (v25.7.0.14), F1018.001 Password Reset (v25.7.0.16),
@@ -128,9 +146,10 @@ const ANIMATION_MAP = {
   //   T1111 MFA Interception (v25.7.0.21).
   //
   // Phase 2 Positioning (FA0001) — IN PROGRESS:
-  //   F1008.001 Silent Alarm (v25.7.0.27, this release).
-  //   Next: F1043 Card Testing + F1042 Card Dump (card-data
-  //   supply-chain mini-arc).
+  //   F1008.001 Silent Alarm (v25.7.0.27),
+  //   F1043 Card Testing (v25.7.0.28, this release).
+  //   Next: F1042 Card Dump Capture — closes the card-data
+  //   supply-chain mini-arc.
 }
 
 const ENGINE_MAP = {
