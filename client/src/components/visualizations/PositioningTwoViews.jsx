@@ -64,7 +64,53 @@ export default function PositioningTwoViews({ viz, effectiveRole, onEvent, scena
 
   const [activeControls, setActiveControls] = useState(() => new Set())
 
+  // v25.7.0.27.6: playback state. PositioningTwoViews has no time axis
+  // (it's a "what bank sees vs. what's actually happening" reveal), so
+  // playback means progressively activating the detection controls in
+  // sequence — each activation surfaces the hidden signal that control
+  // catches, letting the trainee watch the disguise unravel one
+  // detection at a time. Cadence: 1500ms per control (~3 controls × 1.5s
+  // = ~4.5s per full play-through, plus an initial reveal pause).
+  // Existing manual control toggling preserved — Play just automates it.
+  const PLAYBACK_INTERVAL_MS = 1500
+  const [isPlaying, setIsPlaying] = useState(false)
+  const totalControls = (example?.controls || []).length
+  const isAtEnd = activeControls.size >= totalControls && totalControls > 0
+
+  useEffect(() => {
+    if (!isPlaying) return
+    if (isAtEnd) { setIsPlaying(false); return }
+    if (totalControls === 0) { setIsPlaying(false); return }
+    const handle = setInterval(() => {
+      setActiveControls(prev => {
+        // Activate the next control in declaration order. Stop when all
+        // are active.
+        const remaining = (example.controls || []).filter(c => !prev.has(c.id))
+        if (remaining.length === 0) return prev
+        const next = new Set(prev)
+        next.add(remaining[0].id)
+        return next
+      })
+    }, PLAYBACK_INTERVAL_MS)
+    return () => clearInterval(handle)
+  }, [isPlaying, isAtEnd, totalControls, example])
+
+  function togglePlay() {
+    if (isAtEnd) {
+      setActiveControls(new Set())
+      setIsPlaying(true)
+      onEvent?.('viz_replayed')
+      return
+    }
+    setIsPlaying(p => !p)
+    onEvent?.(isPlaying ? 'viz_paused' : 'viz_played')
+  }
+
   const toggleControl = useCallback((id) => {
+    // v25.7.0.27.6: manual control toggle pauses playback so the trainee
+    // can take direct control without the auto-activation continuing
+    // underneath them.
+    setIsPlaying(false)
     setActiveControls(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -78,6 +124,7 @@ export default function PositioningTwoViews({ viz, effectiveRole, onEvent, scena
     if (idx === exampleIdx) return
     setExampleIdx(idx)
     setActiveControls(new Set())
+    setIsPlaying(false)
     onEvent?.('viz_scenario_picked')
   }, [exampleIdx, onEvent])
 
@@ -122,6 +169,46 @@ export default function PositioningTwoViews({ viz, effectiveRole, onEvent, scena
           onPick={pickExample}
         />
       )}
+
+      {/* v25.7.0.27.6: playback control row. Play / Pause / Replay button
+          on the left, controls-activated counter on the right. Same
+          affordance pattern as PositioningTimeline and the technique
+          animation engines. Trainee hits Play to watch the disguise
+          unravel — each control auto-activates in sequence (1.5s apart),
+          surfacing its hidden signal in the bank-side view. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, marginBottom: 14,
+      }}>
+        <button
+          type="button"
+          onClick={togglePlay}
+          title={isAtEnd ? 'Replay from start' : (isPlaying ? 'Pause' : 'Play')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '8px 14px',
+            background: isPlaying ? BANK.warning : BANK.paperHi,
+            color: isPlaying ? BANK.paper : BANK.ink,
+            border: '1px solid ' + (isPlaying ? BANK.warning : BANK.ruleStrong),
+            borderRadius: 6,
+            fontFamily: 'var(--font-mono)', fontSize: 12,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: totalControls === 0 ? 'not-allowed' : 'pointer',
+            opacity: totalControls === 0 ? 0.5 : 1,
+            fontWeight: 600,
+            transition: 'background 120ms ease, color 120ms ease, border-color 120ms ease',
+          }}
+          disabled={totalControls === 0}
+        >
+          {isAtEnd ? '↻ Replay' : (isPlaying ? '❚❚ Pause' : '▶ Play')}
+        </button>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 12,
+          color: BANK.inkFaint, letterSpacing: '0.04em',
+        }}>
+          {activeControls.size} of {totalControls} controls active
+        </div>
+      </div>
 
       <div style={S.grid}>
         <LeftCol

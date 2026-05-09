@@ -55,8 +55,49 @@ export default function PositioningTimeline({ viz, effectiveRole, onEvent, scena
   // Which controls is the user toggling on as "we have this in production"?
   const [activeControls, setActiveControls] = useState(new Set())
 
+  // v25.7.0.27.6: playback state. When isPlaying is true, day auto-advances
+  // at PLAYBACK_INTERVAL_MS until reaching totalDays. The trainee can hit
+  // Play to watch the 30-day Positioning attack unfold without having to
+  // drag the scrubber manually. Existing manual scrub still works — the
+  // moment the user drags, playback pauses (handled by scrubTo).
+  // Cadence: 30 days × 333ms ≈ 10 seconds for a full play-through. Fast
+  // enough to feel like a story, slow enough that the trainee can absorb
+  // each day's reveals as they appear in the lanes.
+  const PLAYBACK_INTERVAL_MS = 333
+  const [isPlaying, setIsPlaying] = useState(false)
+  const isAtEnd = day >= totalDays
+
+  useEffect(() => {
+    if (!isPlaying) return
+    if (isAtEnd) { setIsPlaying(false); return }
+    const handle = setInterval(() => {
+      setDay(prev => {
+        const next = prev + 1
+        if (next >= totalDays) {
+          // Stop at the last day so the trainee sees the final state.
+          // Replay is one click away via the same button.
+          return totalDays
+        }
+        return next
+      })
+    }, PLAYBACK_INTERVAL_MS)
+    return () => clearInterval(handle)
+  }, [isPlaying, isAtEnd, totalDays])
+
+  function togglePlay() {
+    if (isAtEnd) {
+      // Replay from start: reset day to 0 then start playing.
+      setDay(0)
+      setIsPlaying(true)
+      onEvent?.('viz_replayed')
+      return
+    }
+    setIsPlaying(p => !p)
+    onEvent?.(isPlaying ? 'viz_paused' : 'viz_played')
+  }
+
   // Reset scrubber + controls when the user picks a different example.
-  useEffect(() => { setDay(0); setActiveControls(new Set()) }, [exampleIdx])
+  useEffect(() => { setDay(0); setActiveControls(new Set()); setIsPlaying(false) }, [exampleIdx])
 
   if (!example) {
     return (
@@ -118,6 +159,10 @@ export default function PositioningTimeline({ viz, effectiveRole, onEvent, scena
 
   function scrubTo(d) {
     setDay(d)
+    // v25.7.0.27.6: manual scrub pauses playback. The trainee may want
+    // to jump back to inspect a moment they passed too quickly — pausing
+    // on scrub lets them do that without the day cursor running off.
+    setIsPlaying(false)
     onEvent?.('viz_scrubbed_to_day')
   }
 
@@ -139,6 +184,43 @@ export default function PositioningTimeline({ viz, effectiveRole, onEvent, scena
           onPick={pickExample}
         />
       )}
+
+      {/* v25.7.0.27.6: playback control row. Play / Pause / Replay button
+          on the left, day-counter on the right. Same affordance pattern
+          as the technique animation engines (MultiActorSequenceAnimation,
+          ProcessAnimation) — trainee hits Play to watch the 30-day
+          Positioning attack unfold, hits Pause to stop, hits Replay
+          when at the end to start over from day 0. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, marginTop: 14, marginBottom: 6,
+      }}>
+        <button
+          type="button"
+          onClick={togglePlay}
+          title={isAtEnd ? 'Replay from start' : (isPlaying ? 'Pause' : 'Play')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '8px 14px',
+            background: isPlaying ? 'var(--accent)' : 'var(--paper)',
+            color: isPlaying ? 'var(--paper)' : 'var(--ink)',
+            border: '1px solid ' + (isPlaying ? 'var(--accent)' : 'var(--rule-strong)'),
+            borderRadius: 'var(--radius-md)',
+            fontFamily: 'var(--font-mono)', fontSize: 12,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: 'pointer', fontWeight: 600,
+            transition: 'background 120ms ease, color 120ms ease, border-color 120ms ease',
+          }}
+        >
+          {isAtEnd ? '↻ Replay' : (isPlaying ? '❚❚ Pause' : '▶ Play')}
+        </button>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 12,
+          color: 'var(--ink-faint)', letterSpacing: '0.04em',
+        }}>
+          Day {day} of {totalDays}
+        </div>
+      </div>
 
       <Scrubber
         day={day}
