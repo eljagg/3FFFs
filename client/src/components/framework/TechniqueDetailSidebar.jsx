@@ -46,6 +46,9 @@ import accountTakeoverScenes from './animations/accountTakeoverScenes.jsx'
 import mfaInterceptionScenes from './animations/mfaInterceptionScenes.jsx'
 import silentAlarmScenes from './animations/silentAlarmScenes.jsx'
 import cardTestingScenes from './animations/cardTestingScenes.jsx'
+import accountLinkingJointScenes from './animations/accountLinkingJointScenes.jsx'
+import accountLinkingProfileScenes from './animations/accountLinkingProfileScenes.jsx'
+import accountLinkingExternalScenes from './animations/accountLinkingExternalScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -138,6 +141,52 @@ const ANIMATION_MAP = {
                                                 //   insight: the $0.99 charge IS the fraud signal. Sagicor is the
                                                 //   5th institution represented (after NCB×3, JNCB×4, Scotia×1,
                                                 //   CIBC×1).
+  'F1007.001': accountLinkingJointScenes,       // Account Linking: Joint Signatory Add (F1007.001) under Positioning (FA0001) — v25.7.0.29
+                                                //   Renee Patterson (NCB Liguanea customer, IT manager, age 41,
+                                                //   14-year customer). Composite case grounded in publicly
+                                                //   disclosed Caribbean banking ombudsman case patterns
+                                                //   (JM 2022-2024) referencing improper joint-add
+                                                //   authorizations, plus FFIEC/ABA published guidance on
+                                                //   customer-not-present authorization adds. Call-centre
+                                                //   social engineering with OSINT-harvested KBA → joint
+                                                //   "Andre Patterson" provisioned without callback or branch
+                                                //   presence → Renee resets password → joint profile drains
+                                                //   USD account 14 days later in three sub-threshold transfers.
+                                                //   Pedagogical lever: out-of-band callback to registered
+                                                //   phone on file is the single highest-leverage call-centre
+                                                //   control. NCB depth at 4 (Beverly, Ricardo, Janelle, Renee).
+  'F1007.002': accountLinkingProfileScenes,     // Account Linking: Linked Profile Add (F1007.002) under Positioning (FA0001) — v25.7.0.29
+                                                //   Tariq Mohammed (Republic Bank Trinidad customer, freelance
+                                                //   graphic designer, Port of Spain, age 33, 8-year customer).
+                                                //   Composite case grounded in Caribbean digital banking
+                                                //   platform documentation (linked-profile features at Republic
+                                                //   Bank, RBC, NCB, JNCB, Sagicor) and FFIEC/ABA guidance on
+                                                //   step-up authentication for security-sensitive in-session
+                                                //   changes. SIM-swap → recovered session → secondary profile
+                                                //   "Tariq M (work)" registered with adversary device + biometric
+                                                //   → Tariq resets primary password and disables visible device
+                                                //   (secondary profile invisible in Active Devices UI) → 21-day
+                                                //   dormancy → biometric login on secondary profile drains
+                                                //   account. Pedagogical lever: Active Devices UI parity
+                                                //   between primary and secondary profiles is the diagnostic
+                                                //   protocol fix. First Trinidad-based scenario in animations.
+  'F1007.003': accountLinkingExternalScenes,    // Account Linking: External Account Link (F1007.003) under Positioning (FA0001) — v25.7.0.29
+                                                //   Marlon Grant (JN Bank Half-Way-Tree customer, primary-school
+                                                //   principal, Kingston, age 47, 19-year customer). Composite
+                                                //   case grounded in regional regulatory reports (BoJ, FSC, CBTT
+                                                //   2022-2025), Telegram mule-recruitment ad patterns, and
+                                                //   FFIEC guidance on external-account linking cool-off periods.
+                                                //   Vishing aftermath → external link to adversary-controlled
+                                                //   Sagicor mule account, micro-deposit verification completed
+                                                //   in minutes → Marlon resets password (no link audit prompted)
+                                                //   → 28-day dormancy → three sub-threshold structured transfers
+                                                //   to Sagicor link, mule withdraws cash over 4 days. Pedagogical
+                                                //   lever: 7-day cool-off on newly-linked external accounts is
+                                                //   the institutional control point. JN Bank depth at 5 (highest
+                                                //   in roster); Sagicor depth at 2 (Anthony Spencer victim +
+                                                //   F1007.003 mule destination). Cross-bank scenario establishes
+                                                //   the inter-institutional intelligence-sharing gap that
+                                                //   exists in the region but has not been deployed at scale.
   // Phase 1 Initial Access — COMPLETE (v25.7.0.12 through v25.7.0.21):
   //   F1081 Phishing (v25.7.0.12), F1088 Vishing (v25.7.0.13),
   //   T1451 SIM Swap (v25.7.0.14), F1018.001 Password Reset (v25.7.0.16),
@@ -147,7 +196,10 @@ const ANIMATION_MAP = {
   //
   // Phase 2 Positioning (FA0001) — IN PROGRESS:
   //   F1008.001 Silent Alarm (v25.7.0.27),
-  //   F1043 Card Testing (v25.7.0.28, this release).
+  //   F1043 Card Testing (v25.7.0.28),
+  //   F1007 Account Linking (v25.7.0.29, this release): F1007.001
+  //   joint-signatory add, F1007.002 linked-profile add, F1007.003
+  //   external-account link.
   //   Next: F1042 Card Dump Capture — closes the card-data
   //   supply-chain mini-arc.
 }
