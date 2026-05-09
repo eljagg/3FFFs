@@ -49,6 +49,7 @@ import cardTestingScenes from './animations/cardTestingScenes.jsx'
 import accountLinkingJointScenes from './animations/accountLinkingJointScenes.jsx'
 import accountLinkingProfileScenes from './animations/accountLinkingProfileScenes.jsx'
 import accountLinkingExternalScenes from './animations/accountLinkingExternalScenes.jsx'
+import cardDumpCaptureScenes from './animations/cardDumpCaptureScenes.jsx'
 
 const ANIMATION_MAP = {
   'F1073': ivrDiscoveryScenes,                  // IVR Discovery (F1073) under Reconnaissance (TA0043) — v25.7.0.9
@@ -187,6 +188,33 @@ const ANIMATION_MAP = {
                                                 //   F1007.003 mule destination). Cross-bank scenario establishes
                                                 //   the inter-institutional intelligence-sharing gap that
                                                 //   exists in the region but has not been deployed at scale.
+  'F1042': cardDumpCaptureScenes,               // Card Dump Capture (F1042) under Positioning (FA0001) — v25.7.0.30
+                                                //   Damian Roberts (IslandShop owner, Bridgetown BB, Republic Bank
+                                                //   Barbados business customer, age 42, 8-year merchant). Composite
+                                                //   case grounded in publicly disclosed Caribbean retailer breach
+                                                //   reporting (JM, TT, BB 2022-2025) following the Magecart pattern,
+                                                //   Visa/Mastercard/Aite-Novarica reporting on Caribbean acquirer-
+                                                //   side breach patterns, PCI Council documentation on the merchant-
+                                                //   side detection gap, and card-brand CPP investigation methodology.
+                                                //   Adversary scans Caribbean e-commerce for vulnerable platforms →
+                                                //   exploits plugin XSS-via-options vulnerability in WooCommerce
+                                                //   payment integration v3.2.1 → injects Magecart-style web skimmer
+                                                //   into checkout flow → 47-day capture window yields ~1,847 cards
+                                                //   exfiltrated to attacker C2 → adversary exits cleanly + packages
+                                                //   dump as "Caribbean Visa premium fresh · IslandShop CPP-grade"
+                                                //   → downstream F1043 testing cycle validates 612 cards (Anthony
+                                                //   Spencer's Sagicor card among them) → Day 78: Visa CPP clustering
+                                                //   identifies IslandShop as common point of compromise → acquirer
+                                                //   notification → PCI forensic review + breach disclosure to 1,847
+                                                //   cardholders. Pedagogical lever: the merchant is the entry point
+                                                //   to the customer's bank account; defence lives in tokenization
+                                                //   at the payment processor (merchant never touches the card
+                                                //   number), hosted payment forms, and CSP+SRI on checkout pages.
+                                                //   Republic Bank Barbados is the second Republic Bank scenario in
+                                                //   animations (after Tariq Mohammed · Republic Bank Trinidad
+                                                //   F1007.002); first Bridgetown / Barbadian-set scenario. Closes
+                                                //   the card-data supply-chain narrative arc F1042 → F1043 →
+                                                //   Execution.
   // Phase 1 Initial Access — COMPLETE (v25.7.0.12 through v25.7.0.21):
   //   F1081 Phishing (v25.7.0.12), F1088 Vishing (v25.7.0.13),
   //   T1451 SIM Swap (v25.7.0.14), F1018.001 Password Reset (v25.7.0.16),
@@ -197,11 +225,14 @@ const ANIMATION_MAP = {
   // Phase 2 Positioning (FA0001) — IN PROGRESS:
   //   F1008.001 Silent Alarm (v25.7.0.27),
   //   F1043 Card Testing (v25.7.0.28),
-  //   F1007 Account Linking (v25.7.0.29, this release): F1007.001
+  //   F1007 Account Linking (v25.7.0.29 + .29.1 hotfix): F1007.001
   //   joint-signatory add, F1007.002 linked-profile add, F1007.003
   //   external-account link.
-  //   Next: F1042 Card Dump Capture — closes the card-data
-  //   supply-chain mini-arc.
+  //   F1042 Card Dump Capture (v25.7.0.30, this release): closes
+  //   the card-data supply-chain mini-arc F1042 → F1043 → Execution.
+  //   Phase 2 animated technique count: 6 (F1008.001 + F1043 + F1007.001
+  //   + F1007.002 + F1007.003 + F1042).
+  //   Next: Phase 3 Execution candidates.
 }
 
 const ENGINE_MAP = {

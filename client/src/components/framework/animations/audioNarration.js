@@ -1,8 +1,8 @@
 /**
- * audioNarration.js — v25.7.0.29
+ * audioNarration.js — v25.7.0.30
  *
  * VERSION CHECK: open browser console and look for
- * "[3FFFs audio v25.7.0.29 — muted by default]" log on first
+ * "[3FFFs audio v25.7.0.30 — muted by default]" log on first
  * animation play.
  *
  * STATUS as of v25.7.0.15.5:
@@ -175,7 +175,7 @@ function pickVoice(voices, profile) {
  * decides whether to call speakMessage at all. Keeps the mute logic
  * close to the toggle UI.
  */
-export const AUDIO_NARRATION_VERSION = 'v25.7.0.29'
+export const AUDIO_NARRATION_VERSION = 'v25.7.0.30'
 
 export function useNarration() {
   const voicesRef = useRef([])
