@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 
 /* ─────────────────────────────────────────────────────────────────────────
  * PositioningTwoViews — v25.7.0.4 (FA0001, second visualization)
