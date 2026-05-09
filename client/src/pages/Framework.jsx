@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import Page from '../components/Page.jsx'
 import { api } from '../lib/api.js'
 import { useUser } from '../lib/user.jsx'
-import { VisualizationRenderer } from '../components/visualizations/index.js'
 // v25.7.0.5: Scenario storyboard view (Design C). Renders as a collapsible
 // section between the search results and the tactic list. Page-level peer
 // of the tactics list, NOT a per-tactic visualization — scenarios cross
@@ -14,6 +13,7 @@ import ScenarioStoryboard from '../components/scenarios/ScenarioStoryboard.jsx'
 // any technique card is clicked.
 import TechniquesTree from '../components/framework/TechniquesTree.jsx'
 import TechniqueDetailSidebar from '../components/framework/TechniqueDetailSidebar.jsx'
+import TacticVisualizationSidebar from '../components/framework/TacticVisualizationSidebar.jsx'
 
 /* ─────────────────────────────────────────────────────────────────────────
    Executive takeaways — one per F3 tactic, keyed by the real F3 tactic ID.
@@ -76,30 +76,16 @@ export default function Framework() {
   }
 
   // v25.7.0.4.8: per-visualization expand/collapse state. Set holds the
-  // viz IDs whose state is the OPPOSITE of their default. Defaults are
-  // determined per visualization kind:
-  //   - positioning_timeline, kill_chain_grid → expanded by default
-  //     (these are the primary teaching visualizations for their tactics)
-  //   - two_views → collapsed by default (it's a deep-dive companion;
-  //     the user expands it after engaging with the timeline)
-  // Storing "deviations from default" rather than absolute open/closed
-  // means new visualizations get sensible defaults without backfill.
-  const VIZ_DEFAULTS = { two_views: 'collapsed' } // anything else → 'expanded'
-  const isVizDefaultExpanded = (kind) => VIZ_DEFAULTS[kind] !== 'collapsed'
-  const [vizToggleOverrides, setVizToggleOverrides] = useState(() => new Set())
-  const isVizExpanded = (viz) => {
-    const overridden = vizToggleOverrides.has(viz.id)
-    const defaultExpanded = isVizDefaultExpanded(viz.kind)
-    return overridden ? !defaultExpanded : defaultExpanded
-  }
-  const toggleViz = (vizId) => {
-    setVizToggleOverrides(prev => {
-      const next = new Set(prev)
-      if (next.has(vizId)) next.delete(vizId)
-      else next.add(vizId)
-      return next
-    })
-  }
+  // v25.7.0.27.4: tactic-level visualization sidebar state. All
+  // tactic-attached visualizations now open via this slide-over,
+  // matching the technique-detail slide-out pattern. Inline rendering
+  // on the tactic page is gone — the tactic page is clean (header +
+  // executive takeaway + toggle, identical shape to Initial Access).
+  // Visualization cards live INSIDE the toggle-expanded techniques
+  // area as triggers; click → slide-out from right.
+  const [vizSidebar, setVizSidebar] = useState({ open: false, viz: null })
+  const openVizSidebar = (viz) => setVizSidebar({ open: true, viz })
+  const closeVizSidebar = () => setVizSidebar(s => ({ ...s, open: false }))
 
   // v25.7.0.5: scenario storyboard section is collapsed by default. The
   // storyboard is a peer of the tactic list — page-level scenario index,
@@ -689,7 +675,39 @@ export default function Framework() {
                           // /api/framework/tactics/:id/techniques-tree
                           // endpoint. Card click → opens the page-level
                           // TechniqueDetailSidebar (state owned by this page).
+                          //
+                          // v25.7.0.27.4: tactic-level visualization cards
+                          // are now rendered ABOVE the TechniquesTree inside
+                          // this same toggle-expanded block. They live behind
+                          // the toggle so the tactic page itself stays clean
+                          // (header + executive takeaway + toggle, identical
+                          // shape to Initial Access). Click → opens the
+                          // page-level TacticVisualizationSidebar slide-out.
                           <div style={{ marginTop: 14 }}>
+                            {visibleViz.length > 0 && (
+                              <div style={{
+                                display: 'flex', flexDirection: 'column', gap: 12,
+                                marginBottom: 18,
+                              }}>
+                                {visibleViz.map(viz => (
+                                  <button
+                                    key={viz.id}
+                                    onClick={() => openVizSidebar(viz)}
+                                    style={styles.vizCollapseToggle}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                                  >
+                                    <div style={{ flex: 1, textAlign: 'left' }}>
+                                      <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
+                                      {viz.subtitle && (
+                                        <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
+                                      )}
+                                    </div>
+                                    <span style={styles.vizCollapseChevron}>→</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                             <TechniquesTree
                               tacticId={t.id}
                               role={effectiveRole}
@@ -748,10 +766,14 @@ export default function Framework() {
                     )
                   }
 
-                  // Viz exists for OTHER roles — header section, then a
-                  // full-width "available for other roles" affordance card,
-                  // then techniques. Same shape as a tactic with viz, but
-                  // the viz slot is replaced by the affordance.
+                  // v25.7.0.27.4: viz exists for OTHER roles only — render
+                  // identical to the no-viz fallback. The "Interactive
+                  // content for other roles" affordance card is removed.
+                  // For users excluded from a tactic's visualizations, the
+                  // tactic page renders clean (header + executive takeaway +
+                  // toggle, identical shape to Initial Access). The user
+                  // can still access role-tuned content via the technique
+                  // cards inside the toggle.
                   return (
                     <>
                       <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', animation: 'fadeUp 0.25s ease' }}>
@@ -765,31 +787,6 @@ export default function Framework() {
                             </div>
                           </div>
                         ) : null}
-                      </div>
-                      <div style={styles.tacticBodyWideViz}>
-                        <div style={styles.tacticBodyOtherRoleCard}>
-                          <div style={styles.otherRoleCardLabel}>
-                            Interactive content for other roles
-                          </div>
-                          {hiddenViz.map(v => (
-                            <div key={v.id} style={styles.otherRoleCardEntry}>
-                              <div style={styles.otherRoleCardTitle}>{v.title}</div>
-                              <div style={styles.otherRoleCardBody}>
-                                This tactic has interactive content tuned for other roles.
-                                A version tuned for your role is on the v25.7.1 backlog —
-                                until then, the technique cards below cover the reference content.
-                              </div>
-                              <div style={styles.otherRoleCardChips}>
-                                <span style={styles.otherRoleCardChipsLabel}>Available for:</span>
-                                {(v.roles || []).map(r => (
-                                  <span key={r} style={styles.otherRoleCardChip}>
-                                    {r === 'soc' ? 'SOC' : r.charAt(0).toUpperCase() + r.slice(1)}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
                       </div>
                       <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', paddingTop: 24 }}>
                         {techniquesBlock}
@@ -837,43 +834,14 @@ export default function Framework() {
                       ) : null}
                     </div>
 
-                    {/* All visualizations — render full page-content-width,
-                        stacked vertically. Each one has its own click-to-
-                        toggle header. Defaults vary by viz kind:
-                        timeline+kill-chain expanded; two-views collapsed. */}
-                    {visibleViz.length > 0 && (
-                      <div style={styles.tacticBodyWideViz}>
-                        {visibleViz.map(viz => {
-                          const expanded = isVizExpanded(viz)
-                          return (
-                            <div key={viz.id} style={styles.wideVizCard}>
-                              <button
-                                onClick={() => toggleViz(viz.id)}
-                                style={styles.vizCollapseToggle}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper-hi)' }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-                              >
-                                <div style={{ flex: 1, textAlign: 'left' }}>
-                                  <div style={styles.tacticBodyVizTitle}>{viz.title}</div>
-                                  {viz.subtitle && (
-                                    <div style={styles.tacticBodyVizSubtitle}>{viz.subtitle}</div>
-                                  )}
-                                </div>
-                                <span style={{
-                                  ...styles.vizCollapseChevron,
-                                  transform: expanded ? 'rotate(90deg)' : 'none',
-                                }}>→</span>
-                              </button>
-                              {expanded && (
-                                <div style={styles.vizCollapseBody}>
-                                  <VisualizationRenderer viz={viz} effectiveRole={effectiveRole} />
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                    {/* v25.7.0.27.4: inline visualization rendering removed.
+                        Tactic-attached visualizations are now rendered as
+                        clickable trigger cards INSIDE the toggle-expanded
+                        techniques area (see techniquesBlock) — keeping the
+                        tactic page clean above the toggle (header +
+                        executive takeaway, then toggle, identical shape to
+                        Initial Access). Click → opens the page-level
+                        TacticVisualizationSidebar slide-out from the right. */}
 
                     {/* Techniques — collapsed by default, click to expand. */}
                     <div style={{ ...styles.tacticBody, background: 'var(--paper-hi)', paddingTop: 24 }}>
@@ -907,6 +875,17 @@ export default function Framework() {
       open={techSidebar.open}
       techniqueId={techSidebar.techniqueId}
       onClose={closeTechSidebar}
+    />
+
+    {/* v25.7.0.27.4: page-level tactic-visualization sidebar. Renders as
+        a fixed slide-over when a tactic-attached visualization card
+        (rendered inside the toggle-expanded techniques area) is clicked.
+        Same right-side slide-out treatment as the technique sidebar. */}
+    <TacticVisualizationSidebar
+      open={vizSidebar.open}
+      viz={vizSidebar.viz}
+      effectiveRole={effectiveRole}
+      onClose={closeVizSidebar}
     />
     </>
   )
